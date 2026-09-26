@@ -13,6 +13,8 @@
     <AssemblyName>MobTracker</AssemblyName>
     <RootNamespace>MobTracker</RootNamespace>
     <Version>0.2.0</Version>
+    <!-- The file properties' copyright, as in LICENSE; the README's Credits say who made what. -->
+    <Copyright>Copyright (c) 2026 DoomMachine</Copyright>
     <!-- Emits SecurityPermission(SkipVerification) and UnverifiableCode, as the publicizer package did: part of
          how the plugin reaches private game members at run time (IgnoresAccessChecksTo.cs). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

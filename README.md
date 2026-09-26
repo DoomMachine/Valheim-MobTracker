@@ -49,6 +49,15 @@ dependencies, nothing to install on a server.
   starts existing near you (spawned or walked into range - the same thing to a client). Tamed
   creatures never alert. Watched types are listed at the bottom of the window; click one to remove it.
 
+## Installing
+
+MobTracker needs BepInEx 5 for Valheim (the BepInExPack for Valheim, for example). Download
+`MobTracker-<version>.zip` from this repository's Releases, remove any older `MobTracker.dll` from
+`BepInEx/plugins/`, and put the `MobTracker.dll` from the zip there; the zip also holds this README and the
+licence. The settings in `BepInEx/config/com.mobtracker.plugin.cfg` are kept from one version to the next, and
+a new version adds its own with their defaults. When the game starts, `BepInEx/LogOutput.log` says
+`MobTracker <version> loaded`. To remove it, delete `MobTracker.dll`, and the .cfg too to forget the settings.
+
 ## Configuration (`BepInEx/config/com.mobtracker.plugin.cfg`)
 
 | Setting | Default | |
@@ -70,8 +79,10 @@ dependencies, nothing to install on a server.
 Valheim update - and `tools/deploy.ps1` installs one, moving the DLL it replaces into `retired/` in this folder
 (`-KeepDir` to choose another). The tools find the game the way the build does: `-ValheimDir`, else the
 `VALHEIM` environment variable. `tools/mutants.ps1` plants the defects preflight is there to catch, one at a
-time in a copy under `build/`, and checks that each one fails it. `tests/` holds the rules that need no game
-(`dotnet run` there).
+time in a copy under `build/`, and checks that each one fails it. `tools/package.ps1` makes a release's zip
+from a clean checkout. Run in Windows PowerShell 5.1 with the same .NET SDK, against the same Valheim and
+BepInEx files, the same commit gives the same bytes, so a downloaded zip can be checked against its tag; each
+release's notes name the versions used. `tests/` holds the rules that need no game (`dotnet run` there).
 
 ## Credits
 
