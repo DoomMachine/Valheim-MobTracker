@@ -25,15 +25,17 @@ dependencies, nothing to install on a server.
   your world's progress: a rule that waits for a boss (a world key such as `defeated_bonemass`)
   counts only once your world has that key, and a rule for an event (the Jotun invasion) is left
   out, since it spawns only inside the event's area. The five nearest areas (at least 400 m apart)
-  get map pins, the arrow points at the nearest (until a watched creature's alert takes it over), and
-  the HUD message says which rule placed it ("Swamp, 2000-8000m from centre, day+night"). Only the
-  zone you are standing in rolls for spawns, so walk *through* the area rather than waiting beside it.
+  get map pins, the arrow points at the nearest (until a watched creature's alert takes it over, with
+  Auto-track on), and the HUD message says which rule placed it ("Swamp, 2000-8000m from centre,
+  day+night"). Only the zone you are standing in rolls for spawns, so walk *through* the area rather
+  than waiting beside it.
   Creatures that only come from spawners, raids, summons or breeding have no rule to find.
 - **Find area's pins** are yours alone: they are never saved with your map or shared through a
   Cartography Table. Adding them turns the map's filter for that pin icon back on if you had it off.
   They go with **Clear pins** in the window (which also drops the area arrow), the next Find area, or
-  leaving the world; the map's own delete (right click, long press, the gamepad button) removes an area
-  pin in reach rather than a pin of yours next to it.
+  leaving the world. The map's own delete (right click or the gamepad button) removes an area pin in
+  reach rather than a pin of yours next to it; a touch long press does so only while a saved pin shown on
+  the map (yours or a shared one) is also in reach, since the game starts it only near one.
 - **Find area's limits**: sub-biomes (Bat Swamp, Goblin Plains and the like) have spawn lists of their
   own, which it does not read - Bat_Swamp, TentaRoot_wild, Skeleton_Poison and Skeleton_Mountains are
   reported as having no rule - nor does it know which creatures a sub-biome keeps out, so a Lox area
@@ -41,7 +43,8 @@ dependencies, nothing to install on a server.
   corners of its zone; Find area asks the seed at a few points, so at a biome border it can miss a zone
   that would do, and now and then pin one that will not. Terrain it cannot see from the seed (slope,
   lava, player bases, water depth) is not checked, so an area is "can spawn here", not "will".
-- **Guide: 3D arrow / ground path** switches the tracking guide without touching the config file.
+- **Guide: 3D arrow / ground path** switches the tracking guide from the window (the choice is saved
+  as `Tracking.GuideMode`).
 - **Watch** alerts on that creature *type*: a centre-screen message and a ding whenever one
   starts existing near you (spawned or walked into range - the same thing to a client). Tamed
   creatures never alert. Watched types are listed at the bottom of the window; click one to remove it.
@@ -51,10 +54,10 @@ dependencies, nothing to install on a server.
 | Setting | Default | |
 |---|---|---|
 | `General.ListKey` | `F7` | Toggle the list |
-| `General.ListStarFilter` | `All` | The list's star filter: `All`, `NoStars`, `OneStar`, `TwoStars` or `TwoOrMoreStars`, typed exactly (also the **List:** row) |
+| `General.ListStarFilter` | `All` | The list's star filter: `All`, `NoStars`, `OneStar`, `TwoStars` or `TwoOrMoreStars` (any case), or a number of stars: 0-3, 3 = two or more, 4 = All (also the **List:** row) |
 | `Tracking.GuideMode` | `Arrow` | `Arrow` or `GroundPath` |
 | `Tracking.ArrowSize` / `ArrowHeight` | `0.6` / `2.6` | Metres |
-| `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type; a hand edit of the file takes effect at the next start |
+| `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows, Guide, Auto-track) rewrites the file |
 | `Alerts.AlertRadius` | `0` | Only alert within this many metres; 0 = anywhere loaded |
 | `Alerts.AlertVolume` | `0.8` | Ding volume |
 | `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking |

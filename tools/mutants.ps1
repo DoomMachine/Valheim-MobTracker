@@ -9,14 +9,24 @@
   unmutated copy is built and must PASS, so a failure below is the mutant's and not the copy's. Exits 1 if the
   clean copy fails, a mutant cannot be planted or built, or any mutant passes preflight.
 
+  The game folder is -ValheimDir, else the VALHEIM environment variable, else the default - as for the build and
+  the other tools; it reaches the copy's build and preflight through VALHEIM.
+
 .EXAMPLE
   .\tools\mutants.ps1
   .\tools\mutants.ps1 -Only F1,F2
 #>
 param(
-    [string[]]$Only = @()
+    [string[]]$Only = @(),
+    [string]$ValheimDir = ""
 )
 $ErrorActionPreference = "Stop"
+# -ValheimDir reaches the copy's MobTracker.csproj and tools\preflight.ps1 through VALHEIM; the caller's value
+# comes back when this script ends, however it ends.
+$callersValheim = $env:VALHEIM
+function Finish([int]$code) { $env:VALHEIM = $callersValheim; exit $code }
+trap { $env:VALHEIM = $callersValheim; break }
+if ($ValheimDir) { $env:VALHEIM = $ValheimDir }
 $Only = @($Only | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 $repo = Split-Path $PSScriptRoot -Parent
 $work = Join-Path $repo "build\mutants"
@@ -81,7 +91,7 @@ $bad = 0
 Write-Output "=== unmutated copy"
 $r = Build-And-Check
 $r.Lines
-if ($r.Code -ne 0) { Write-Output "    the unmutated copy does not build or pass preflight - fix that first"; exit 1 }
+if ($r.Code -ne 0) { Write-Output "    the unmutated copy does not build or pass preflight - fix that first"; Finish 1 }
 Write-Output "    PASSED, as it should"
 
 foreach ($m in $mutants) {
@@ -102,6 +112,6 @@ foreach ($m in $mutants) {
 }
 
 Write-Output ""
-if ($bad -eq 0) { Write-Output "MUTANTS: every planted defect fails preflight."; exit 0 }
+if ($bad -eq 0) { Write-Output "MUTANTS: every planted defect fails preflight."; Finish 0 }
 Write-Output "MUTANTS: $bad mutant(s) not planted, not built or not caught."
-exit 1
+Finish 1

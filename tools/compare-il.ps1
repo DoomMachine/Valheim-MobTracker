@@ -3,8 +3,9 @@
   Compares two builds of a plugin member by member and instruction by instruction (Mono.Cecil).
 
 .DESCRIPTION
-  Used to prove that source recovered from a DLL compiles back to the same code: every type (nested ones
-  too), its attributes, base type, interfaces and custom attributes; every field (type, flags, constant);
+  Tells whether two builds compile to the same code - used to show that this repository's build of the author's
+  source matches the author's own build. It compares every type (nested ones too), its attributes, base type,
+  interfaces and custom attributes; every field (type, flags, constant);
   every method (signature, flags, parameters, custom attributes, locals, exception handlers and each IL
   instruction with its operand - branch targets as instruction indices, floats by their bits); properties and
   events; the assembly references and assembly-level attributes. Prints the first difference in each method
