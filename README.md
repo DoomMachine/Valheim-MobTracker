@@ -15,17 +15,32 @@ dependencies, nothing to install on a server.
   Trolls. Stars are shown as asterisks: `Deer` has none, `Deer *` one.
 - **Track** follows that one creature: a 3D arrow over your head, or with `GuideMode = GroundPath`
   a walkable line on the ground. The path builds over a few seconds on long distances; while it
-  is missing or incomplete (flying/swimming targets, cliffs) the arrow shows as well.
+  is missing or incomplete (flying/swimming targets, cliffs) the arrow shows as well. Beyond 250 m
+  only the arrow shows.
 - **View: nearby / all types** switches the list to every creature type the game has (including
   other mods' creatures), so you can Watch something that is not around. Search works there too.
 - **Find area** (in the all-types view) works out where that creature's world-spawn rule can be met -
   biome, biome interior/edge, distance from the world centre, altitude, forest - straight from the
-  world seed, so it covers unexplored and unloaded land and works on dedicated servers. The five
-  nearest areas (at least 400 m apart) get map pins, the arrow points at the nearest, and the HUD
-  message says what the rule is ("Swamp, 5000-8000m from centre, day+night"). Only the zone you
-  are standing in rolls for spawns, so walk *through* the area rather than waiting beside it.
-  Creatures that only come from spawners, raids or summons have no rule to find. The pins are yours
-  alone: they are never saved with your map or shared through a Cartography Table.
+  world seed, so it covers unexplored and unloaded land and works on dedicated servers. It follows
+  your world's progress: a rule that waits for a boss (a world key such as `defeated_bonemass`)
+  counts only once your world has that key, and a rule for an event (the Jotun invasion) is left
+  out, since it spawns only inside the event's area. The five nearest areas (at least 400 m apart)
+  get map pins, the arrow points at the nearest (until a watched creature's alert takes it over), and
+  the HUD message says which rule placed it ("Swamp, 2000-8000m from centre, day+night"). Only the
+  zone you are standing in rolls for spawns, so walk *through* the area rather than waiting beside it.
+  Creatures that only come from spawners, raids, summons or breeding have no rule to find.
+- **Find area's pins** are yours alone: they are never saved with your map or shared through a
+  Cartography Table. Adding them turns the map's filter for that pin icon back on if you had it off.
+  They go with **Clear pins** in the window (which also drops the area arrow), the next Find area, or
+  leaving the world; the map's own delete (right click, long press, the gamepad button) removes an area
+  pin in reach rather than a pin of yours next to it.
+- **Find area's limits**: sub-biomes (Bat Swamp, Goblin Plains and the like) have spawn lists of their
+  own, which it does not read - Bat_Swamp, TentaRoot_wild, Skeleton_Poison and Skeleton_Mountains are
+  reported as having no rule - nor does it know which creatures a sub-biome keeps out, so a Lox area
+  can be pinned inside Goblin Plains, where Lox never spawn. The game decides a spot's biome from the
+  corners of its zone; Find area asks the seed at a few points, so at a biome border it can miss a zone
+  that would do, and now and then pin one that will not. Terrain it cannot see from the seed (slope,
+  lava, player bases, water depth) is not checked, so an area is "can spawn here", not "will".
 - **Guide: 3D arrow / ground path** switches the tracking guide without touching the config file.
 - **Watch** alerts on that creature *type*: a centre-screen message and a ding whenever one
   starts existing near you (spawned or walked into range - the same thing to a client). Tamed
@@ -51,7 +66,9 @@ dependencies, nothing to install on a server.
 `MobTracker.csproj`). `tools/preflight.ps1` checks a build against the installed game - run it after every
 Valheim update - and `tools/deploy.ps1` installs one, moving the DLL it replaces into `retired/` in this folder
 (`-KeepDir` to choose another). The tools find the game the way the build does: `-ValheimDir`, else the
-`VALHEIM` environment variable. `tests/` holds the rules that need no game (`dotnet run` there).
+`VALHEIM` environment variable. `tools/mutants.ps1` plants the defects preflight is there to catch, one at a
+time in a copy under `build/`, and checks that each one fails it. `tests/` holds the rules that need no game
+(`dotnet run` there).
 
 ## Credits
 
@@ -62,6 +79,8 @@ commits are DoomMachine's, and Claude is credited here rather than as a co-autho
 
 ## History
 
-- **0.2.0** - star filters for the list and for watch alerts.
-- **0.1.0** - the original MobTracker by null: creature list, watch alerts, tracking arrow and ground path,
-  and Find area.
+- **0.2.0** - star filters for the list and for watch alerts. Find area follows boss progression and
+  events, names the rule that placed the nearest pin, and its pins can be cleared; a right click on one
+  used to delete the nearest pin of yours instead.
+- **0.1.0** - the original MobTracker by null: creature list, watch alerts, tracking arrow and ground path
+  (up to 250 m), and Find area.

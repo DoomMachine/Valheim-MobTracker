@@ -4,12 +4,15 @@
 
 .DESCRIPTION
   1. identity: BepInPlugin GUID com.mobtracker.plugin, name MobTracker, the expected version
-  2. every [HarmonyPatch] target type and method still exists in the game
+  2. every [HarmonyPatch] target type and method (the overload, when one is named) still exists in the game,
+     every patch parameter is a target parameter or a Harmony injection, and Awake applies every patch class
   3. every type and member the plugin uses in the game, Unity, BepInEx and Harmony resolves with its exact
      signature - including the private members it reaches (the ground-path guide's Pathfinding internals,
      Find area's SpawnSystem.m_instances), which it lists - and a deliberately
      wrong member fails to resolve, so the check cannot pass vacuously
-  4. every assembly the plugin references is in the game folder
+  4. the star filters read the right settings; Find area honours the spawn rules' key and event conditions,
+     takes the map's delete gesture for its own pins, and adds them local-only (save false, ownerID 0)
+  5. every assembly the plugin references is in the game folder
   Run it after every Valheim update. Exits 1 on any failure.
 
 .EXAMPLE
@@ -63,19 +66,53 @@ if ($hasLine) { Ok "Awake logs '$loadedLine'" } else { Fail "MobTrackerPlugin.Aw
 Write-Output "== Harmony patch targets =="
 $gameModules = @{}
 foreach ($f in @(Get-ChildItem $managed -Filter *.dll) + @(Get-ChildItem $core -Filter *.dll)) { try { $gameModules[$f.Name] = [Mono.Cecil.ModuleDefinition]::ReadModule($f.FullName) } catch { } }
-$patches = 0
+# Names Harmony fills in itself; any other patch parameter must be named (and typed) like a parameter of the target,
+# or Harmony refuses the patch when the game starts - after every build check has passed.
+$injected = @("__instance", "__result", "__state", "__runOriginal", "__originalMethod", "__args", "__exception")
+$patchClasses = @()
 foreach ($t in $plug.GetTypes()) {
     foreach ($ca in $t.CustomAttributes) {
         if ($ca.AttributeType.Name -ne "HarmonyPatch" -or $ca.ConstructorArguments.Count -lt 2) { continue }
-        $patches++; $checks++
+        $patchClasses += $t; $checks++
         $typeName = "$($ca.ConstructorArguments[0].Value)"; $method = "$($ca.ConstructorArguments[1].Value)"
-        $found = $false
-        foreach ($m in $gameModules.Values) { $gt = $m.GetType($typeName); if ($gt -and @($gt.Methods | Where-Object { $_.Name -eq $method }).Count -gt 0) { $found = $true; break } }
-        if ($found) { Ok ("{0} -> {1}.{2}" -f $t.Name, $typeName, $method) } else { Fail ("{0}: {1}.{2} not found in the game" -f $t.Name, $typeName, $method) }
+        $want = $null   # the argument types, when the attribute names an overload
+        if ($ca.ConstructorArguments.Count -ge 3) { $want = @($ca.ConstructorArguments[2].Value | ForEach-Object { $_.Value.FullName }) }
+        $target = $null
+        foreach ($m in $gameModules.Values) {
+            $gt = $m.GetType($typeName)
+            if (-not $gt) { continue }
+            foreach ($gm in $gt.Methods) {
+                if ($gm.Name -ne $method) { continue }
+                if ($null -ne $want -and (@($gm.Parameters | ForEach-Object { $_.ParameterType.FullName }) -join ",") -ne ($want -join ",")) { continue }
+                $target = $gm; break
+            }
+            if ($target) { break }
+        }
+        $shown = "{0}.{1}" -f $typeName, $method
+        if ($null -ne $want) { $shown += "(" + ($want -join ", ") + ")" }
+        if (-not $target) { Fail ("{0}: {1} not found in the game" -f $t.Name, $shown); continue }
+        $badParams = @()
+        foreach ($pm in $t.Methods | Where-Object { @("Prefix", "Postfix", "Finalizer") -contains $_.Name }) {
+            foreach ($p in $pm.Parameters) {
+                if ($injected -contains $p.Name -or $p.Name -like "___*") { continue }
+                $tp = $target.Parameters | Where-Object { $_.Name -eq $p.Name } | Select-Object -First 1
+                $pType = $p.ParameterType.FullName.TrimEnd('&')
+                if (-not $tp -or $tp.ParameterType.FullName -ne $pType) { $badParams += ("{0}({1} {2})" -f $pm.Name, $pType, $p.Name) }
+            }
+        }
+        if ($badParams.Count -eq 0) { Ok ("{0} -> {1}, its parameters match" -f $t.Name, $shown) }
+        else { Fail ("{0} -> {1}: no such target parameter or injection: {2}" -f $t.Name, $shown, ($badParams -join ", ")) }
     }
 }
 $checks++
-if ($patches -ge 1) { Ok "$patches Harmony patch(es) found" } else { Fail "no [HarmonyPatch] found - the scan would be vacuous" }
+if ($patchClasses.Count -ge 1) { Ok "$($patchClasses.Count) Harmony patch class(es) found" } else { Fail "no [HarmonyPatch] found - the scan would be vacuous" }
+# Awake patches one class at a time, so a patch class it does not name is never applied.
+$checks++
+$registered = @{}
+if ($awake) { foreach ($i in $awake.Body.Instructions) { if ($i.OpCode.Name -eq "ldtoken" -and $i.Operand -is [Mono.Cecil.TypeReference]) { $registered[$i.Operand.FullName] = $true } } }
+$unregistered = @($patchClasses | Where-Object { -not $registered.ContainsKey($_.FullName) } | ForEach-Object { $_.Name })
+if ($unregistered.Count -eq 0 -and $patchClasses.Count -ge 1) { Ok "MobTrackerPlugin.Awake applies every patch class" }
+else { Fail ("MobTrackerPlugin.Awake never applies: {0}" -f ($unregistered -join ", ")) }
 
 Write-Output "== game types and members the plugin uses =="
 $scopes = @("assembly_valheim", "assembly_utils", "assembly_guiutils", "BepInEx", "0Harmony")
@@ -137,8 +174,25 @@ function Get-Touches($m) {
             $out[$key] = $true
             if ($i.OpCode.Name -eq "stfld" -or $i.OpCode.Name -eq "stsfld") { $out["set " + $key] = $true }
         }
-        if ($op -is [Mono.Cecil.MethodReference]) { $out[$op.DeclaringType.Name + "::" + $op.Name] = $true }
+        if ($op -is [Mono.Cecil.MethodReference]) {
+            $key = $op.DeclaringType.Name + "::" + $op.Name
+            $out[$key] = $true
+            $out[$key + "(" + (@($op.Parameters | ForEach-Object { $_.ParameterType.FullName }) -join ",") + ")"] = $true   # which overload
+        }
     }
+    return $out
+}
+function Get-TouchesWithLambdas($typeName, $methodName) {
+    # A method's touches plus those of the lambdas written inside it, which the compiler moves into nested
+    # classes as methods named <methodName>b__...
+    $out = @{}
+    $m = Get-Method $typeName $methodName
+    if (-not $m) { return $null }
+    $bodies = @($m)
+    foreach ($t in $plug.GetTypes()) {
+        if ($t.FullName -like "$typeName/*") { $bodies += @($t.Methods | Where-Object { $_.HasBody -and $_.Name -like "<$methodName>*" }) }
+    }
+    foreach ($b in $bodies) { foreach ($k in (Get-Touches $b).Keys) { $out[$k] = $true } }
     return $out
 }
 $wiring = @(
@@ -185,6 +239,104 @@ if ($iList -ge 0 -and $iAlerts -gt $iList) {
         Fail ("EntityListWindow.DrawWindow: the List: row uses {0}; the Alerts: row uses {1}" -f (($listRow.Keys | Sort-Object) -join ", "), (($alertRow.Keys | Sort-Object) -join ", "))
     }
 } else { Fail "EntityListWindow.DrawWindow: the 'List:' and 'Alerts:' row labels were not found in that order" }
+
+Write-Output "== Find area =="
+# Which rules it searches: without the key and event conditions it pins a boss-locked rule's biome, often right
+# around the player. The lambdas that read the conditions are compiled into nested classes, so they are included.
+$checks++
+$sf = Get-TouchesWithLambdas "MobTracker.SpawnFinder" "StartFind"
+$needed = @("Rules::OpenRules", "SpawnData::m_requiredGlobalKey", "SpawnData::m_requiredPersistentEvent", "ZoneSystem::GetGlobalKey(System.String)")
+if ($null -eq $sf) { Fail "SpawnFinder.StartFind not found" }
+else {
+    $missing = @($needed | Where-Object { -not $sf.ContainsKey($_) })
+    if ($missing.Count -eq 0) { Ok ("SpawnFinder.StartFind uses {0}" -f ($needed -join ", ")) }
+    else { Fail ("SpawnFinder.StartFind (with its lambdas) does not use {0}" -f ($missing -join ", ")) }
+}
+$checks++
+$rp = Get-Touches (Get-Method "MobTracker.RemoveAreaPinPatch" "Prefix")
+if ($rp -and $rp.ContainsKey("SpawnFinder::RemovePinNear")) { Ok "RemoveAreaPinPatch.Prefix hands the delete gesture to SpawnFinder::RemovePinNear" }
+else { Fail "RemoveAreaPinPatch.Prefix does not call SpawnFinder::RemovePinNear" }
+
+# The pins are the player's alone: never written to the map data, never shared at a cartography table. That is
+# AddPin's save argument false and ownerID 0 - read from the IL, finding both parameters by name in the game's
+# own AddPin, so a new parameter in a game update cannot shift the check onto the wrong argument.
+function Test-LiteralZero($ins, [int]$at) {
+    # True when $ins[$at] pushes a literal 0 (false, 0, 0L), looking through a conv.i8.
+    if ($at -lt 0) { return $false }
+    $p = $ins[$at]
+    if ($p.OpCode.Name -eq "conv.i8") { if ($at -lt 1) { return $false }; $p = $ins[$at - 1] }
+    $n = $p.OpCode.Name
+    if ($n -eq "ldc.i4.0") { return $true }
+    if ($n -eq "ldc.i4.s" -or $n -eq "ldc.i4" -or $n -eq "ldc.i8") { return ([long]"$($p.Operand)" -eq 0) }
+    return $false
+}
+function Get-ArgumentSources($ins, [int]$callAt, $handlers = $null) {
+    # Replays the evaluation stack over the code before a call and returns, for each value the call consumes (the
+    # instance first), the index of the instruction that pushed it; $null if it does not add up. A branch or return
+    # starts a new statement (compiled C# has an empty stack there); a branch INSIDE the argument list (a ?:
+    # operand) leaves too few values, so it returns $null and the check fails. A catch or filter handler starts
+    # with the exception object on an otherwise empty stack, which the straight replay never pushed.
+    $stack = New-Object System.Collections.ArrayList
+    for ($k = 0; $k -lt $callAt; $k++) {
+        $i = $ins[$k]
+        if ($handlers) {
+            foreach ($h in $handlers) {
+                $ht = "$($h.HandlerType)"
+                if ((($ht -eq "Catch" -or $ht -eq "Filter") -and $h.HandlerStart -eq $i) -or ($ht -eq "Filter" -and $h.FilterStart -eq $i)) { $stack.Clear(); [void]$stack.Add($k) }
+                elseif (($ht -eq "Finally" -or $ht -eq "Fault") -and $h.HandlerStart -eq $i) { $stack.Clear() }
+            }
+        }
+        $pop = "$($i.OpCode.StackBehaviourPop)"; $push = "$($i.OpCode.StackBehaviourPush)"
+        $flow = "$($i.OpCode.FlowControl)"
+        if ($flow -eq "Branch" -or $flow -eq "Cond_Branch" -or $flow -eq "Return" -or $flow -eq "Throw") { $stack.Clear(); continue }
+        $nPop = 0
+        if ($pop -eq "Varpop") { $nPop = $i.Operand.Parameters.Count; if ($i.Operand.HasThis -and $i.OpCode.Name -ne "newobj") { $nPop++ } }
+        elseif ($pop -ne "Pop0") { $nPop = @($pop -split "_").Count }
+        if ($nPop -gt $stack.Count) { return $null }
+        $src = $k
+        if ($i.OpCode.Name -eq "conv.i8") { $src = $stack[$stack.Count - 1] }     # a widened literal is still that literal
+        if ($nPop -gt 0) { $stack.RemoveRange($stack.Count - $nPop, $nPop) }
+        $nPush = 1
+        if ($push -eq "Push0") { $nPush = 0 }
+        elseif ($push -eq "Push1_push1") { $nPush = 2 }
+        elseif ($push -eq "Varpush" -and $i.Operand.ReturnType.FullName -eq "System.Void") { $nPush = 0 }
+        for ($j = 0; $j -lt $nPush; $j++) { [void]$stack.Add($src) }
+    }
+    $c = $ins[$callAt].Operand; $n = $c.Parameters.Count; if ($c.HasThis) { $n++ }
+    if ($stack.Count -lt $n) { return $null }
+    return ,@($stack.GetRange($stack.Count - $n, $n))
+}
+$addPins = @(); $pinWrites = @()
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        $ins = @($m.Body.Instructions)
+        for ($k = 0; $k -lt $ins.Count; $k++) {
+            $op = $ins[$k].Operand
+            if ($op -is [Mono.Cecil.MethodReference] -and $op.Name -eq "AddPin" -and $op.DeclaringType.Name -eq "Minimap") { $addPins += ,@($m, $ins, $k) }
+            if ($op -is [Mono.Cecil.FieldReference] -and $op.DeclaringType.Name -eq "PinData" -and ($op.Name -eq "m_save" -or $op.Name -eq "m_ownerID") -and $ins[$k].OpCode.Name -ne "ldfld") {
+                $pinWrites += ("{0}.{1}: {2} {3}" -f $t.Name, $m.Name, $ins[$k].OpCode.Name, $op.Name)
+            }
+        }
+    }
+}
+$checks++
+if ($addPins.Count -ne 1) { Fail ("expected exactly one reference to Minimap.AddPin, found {0}" -f $addPins.Count) }
+else {
+    $m = $addPins[0][0]; $ins = $addPins[0][1]; $k = $addPins[0][2]
+    $def = $null
+    try { $def = $ins[$k].Operand.Resolve() } catch { }
+    $saveAt = -1; $ownerAt = -1
+    if ($def) { for ($p = 0; $p -lt $def.Parameters.Count; $p++) { if ($def.Parameters[$p].Name -eq "save") { $saveAt = $p }; if ($def.Parameters[$p].Name -eq "ownerID") { $ownerAt = $p } } }
+    $argSrc = $null
+    if ($ins[$k].OpCode.Name -eq "call" -or $ins[$k].OpCode.Name -eq "callvirt") { $argSrc = Get-ArgumentSources $ins $k $m.Body.ExceptionHandlers }
+    if ($saveAt -lt 0 -or $ownerAt -lt 0) { Fail "Minimap.AddPin has no 'save' or 'ownerID' parameter any more - read the game's AddPin again" }
+    elseif ($null -eq $argSrc) { Fail ("{0}.{1}: the AddPin call's arguments could not be traced (a delegate, or a branch inside the argument list)" -f $m.DeclaringType.Name, $m.Name) }
+    elseif ((Test-LiteralZero $ins $argSrc[$saveAt + 1]) -and (Test-LiteralZero $ins $argSrc[$ownerAt + 1])) { Ok ("{0}.{1}: AddPin with save false and ownerID 0 - the pins stay local" -f $m.DeclaringType.Name, $m.Name) }
+    else { Fail ("{0}.{1}: AddPin's save and ownerID are not both a literal 0 - the pins could be saved or shared" -f $m.DeclaringType.Name, $m.Name) }
+}
+$checks++
+if ($pinWrites.Count -eq 0) { Ok "nothing writes a pin's m_save or m_ownerID" } else { foreach ($w in $pinWrites) { Fail "a pin's save or owner is changed after AddPin: $w" } }
 
 Write-Output "== assembly references =="
 foreach ($ar in $plug.AssemblyReferences) {

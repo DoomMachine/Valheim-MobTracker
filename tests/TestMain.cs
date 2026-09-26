@@ -14,6 +14,7 @@ namespace MobTracker
             CaptionTests();
             RulesTests();
             SpacingTests();
+            OpenRuleTests();
             AlertGateTests();
             AlertStarFilterTests();
             Console.WriteLine(_failures == 0
@@ -114,6 +115,56 @@ namespace MobTracker
             Check("spacing: a point 400 m away is spaced at 400", Rules.IsSpaced(400f, 0f, taken, 400f, p => p[0], p => p[1]), "");
             Check("spacing: a point 399 m away is not", !Rules.IsSpaced(0f, 399f, taken, 400f, p => p[0], p => p[1]), "");
             Check("spacing: nothing taken yet is always spaced", Rules.IsSpaced(1f, 1f, new List<float[]>(), 400f, p => p[0], p => p[1]), "");
+        }
+
+        // A world-spawn rule as Find area sees it: biome, required global key, required persistent event.
+        private sealed class SpawnRule
+        {
+            public string Biome, Key, Event;
+            public SpawnRule(string biome, string key, string worldEvent) { Biome = biome; Key = key; Event = worldEvent; }
+        }
+
+        private static List<SpawnRule> Open(IEnumerable<SpawnRule> rules, Func<string, bool> worldHasKey, List<string> keys, List<string> events)
+        {
+            return Rules.OpenRules(rules, r => r.Key, r => r.Event, worldHasKey, keys, events);
+        }
+
+        // Which rules Find area searches with: SpawnSystem.UpdateSpawnList's key and event conditions.
+        private static void OpenRuleTests()
+        {
+            // The review's case, Charred_Archer: a key-gated rule for the other biomes and a plain Ashlands one.
+            var archer = new List<SpawnRule> { new SpawnRule("Meadows|BlackForest|...", "defeated_fader", ""), new SpawnRule("AshLands", "", "") };
+            var keys = new List<string>(); var events = new List<string>();
+            List<SpawnRule> open = Open(archer, k => false, keys, events);
+            Check("rules: with the boss key unset, only the unkeyed Ashlands rule is searched",
+                open.Count == 1 && open[0].Biome == "AshLands" && keys.Count == 1 && keys[0] == "defeated_fader" && events.Count == 0,
+                open.Count + " open, keys " + string.Join(",", keys));
+            keys.Clear();
+            open = Open(archer, k => k == "defeated_fader", keys, events);
+            Check("rules: once the world has the key, both rules are searched", open.Count == 2 && keys.Count == 0, open.Count + " open");
+
+            // The key is looked up only when a rule has one; null and "" both mean no condition.
+            var asked = new List<string>();
+            open = Open(new[] { new SpawnRule("Swamp", null, null), new SpawnRule("Swamp", "", "") }, k => { asked.Add(k); return false; }, keys, events);
+            Check("rules: a rule with no key or event is always open, and no key is looked up for it", open.Count == 2 && asked.Count == 0, asked.Count + " lookups");
+
+            // An event rule is left out even while its key is met; a rule gated both ways reports the key it waits for.
+            keys.Clear(); events.Clear();
+            var jotun = new List<SpawnRule> { new SpawnRule("DeepNorth", "jotun_killed", ""), new SpawnRule("All", "", "jotun_invasion"), new SpawnRule("All", "jotun_killed", "jotun_invasion") };
+            open = Open(jotun, k => false, keys, events);
+            Check("rules: event rules are never searched; each key and event is reported once",
+                open.Count == 0 && string.Join(",", keys) == "jotun_killed" && string.Join(",", events) == "jotun_invasion",
+                "keys " + string.Join(",", keys) + ", events " + string.Join(",", events));
+            Check("rules: the message names what the closed rules wait for",
+                Rules.NoOpenRule("Jotun Warrior", keys, events) == "Jotun Warrior spawns in the wild only once this world has jotun_killed, or during the jotun_invasion event",
+                Rules.NoOpenRule("Jotun Warrior", keys, events));
+            Check("rules: with no rule at all, the message says where else it may come from",
+                Rules.NoOpenRule("Boar", new List<string>(), new List<string>()).StartsWith("Boar has no rule in the main spawn lists")
+                && Rules.NoOpenRule("Boar", new List<string>(), new List<string>()).Contains("breeding"), "");
+            keys.Clear(); events.Clear();
+            open = Open(new[] { new SpawnRule("All", "", "jotun_invasion"), new SpawnRule("DeepNorth", "jotun_killed", "") }, k => true, keys, events);
+            Check("rules: an event rule does not hide an open keyed rule of the same creature",
+                open.Count == 1 && open[0].Biome == "DeepNorth" && events.Count == 1 && keys.Count == 0, open.Count + " open");
         }
 
         private static void AlertGateTests()

@@ -211,6 +211,10 @@ namespace MobTracker
             _query = GUILayout.TextField(_query);
             if (Tracker.IsTracking && GUILayout.Button("Stop tracking", GUILayout.Width(100f)))
                 Tracker.Stop();
+            // Called straight from here: nothing drawn after it depends on HasPins, so the layout and the
+            // events of this frame still see the same controls.
+            if (SpawnFinder.HasPins && GUILayout.Button("Clear pins", GUILayout.Width(80f)))
+                SpawnFinder.Clear();
             GUILayout.EndHorizontal();
 
             // Both buttons only flip a flag; the rows themselves are swapped in Update.
@@ -267,7 +271,9 @@ namespace MobTracker
                 {
                     GUILayout.Label(Mathf.RoundToInt(row.Distance) + "m", GUILayout.Width(50f));
 
-                    bool tracked = Tracker.IsTracking && Tracker.Target == row.Character;
+                    // Not just Target == Character: while a spawn area is tracked Target is null, and so, to
+                    // Unity's ==, is a creature destroyed since the last refresh.
+                    bool tracked = Tracker.IsTrackingCreature && row.Character != null && Tracker.Target == row.Character;
                     if (GUILayout.Button(tracked ? "Untrack" : "Track", GUILayout.Width(70f)))
                     {
                         if (tracked)

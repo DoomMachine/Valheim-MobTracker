@@ -53,6 +53,58 @@ namespace MobTracker
             sorted.Sort(StringComparer.OrdinalIgnoreCase);
             return string.Join(",", sorted);
         }
+
+        /// <summary>
+        /// The world-spawn rules that can fire in this world now, decided as SpawnSystem.UpdateSpawnList does: a rule
+        /// with a required global key (mostly "defeated_&lt;boss&gt;") waits until the world has that key, and a rule
+        /// tied to a persistent event (jotun_invasion) spawns only inside that event's area while it runs, which
+        /// Find area cannot map. What the left-out rules wait for is added to <paramref name="keys"/> and
+        /// <paramref name="events"/>, each once.
+        /// </summary>
+        public static List<T> OpenRules<T>(IEnumerable<T> rules, Func<T, string> requiredKey, Func<T, string> requiredEvent,
+            Func<string, bool> worldHasKey, List<string> keys, List<string> events)
+        {
+            var open = new List<T>();
+            foreach (T rule in rules)
+            {
+                string key = requiredKey(rule);
+                if (!string.IsNullOrEmpty(key) && !worldHasKey(key))
+                {
+                    AddOnce(keys, key);
+                    continue;
+                }
+
+                string worldEvent = requiredEvent(rule);
+                if (!string.IsNullOrEmpty(worldEvent))
+                {
+                    AddOnce(events, worldEvent);
+                    continue;
+                }
+
+                open.Add(rule);
+            }
+            return open;
+        }
+
+        private static void AddOnce(List<string> list, string value)
+        {
+            if (!list.Contains(value))
+                list.Add(value);
+        }
+
+        /// <summary>What Find area says when no rule is open: what the closed ones wait for, or where the creature comes from.</summary>
+        public static string NoOpenRule(string displayName, List<string> keys, List<string> events)
+        {
+            var waits = new List<string>();
+            if (keys.Count > 0)
+                waits.Add("once this world has " + string.Join(" or ", keys));
+            if (events.Count > 0)
+                waits.Add("during the " + string.Join(" or ", events) + " event");
+
+            return waits.Count > 0
+                ? displayName + " spawns in the wild only " + string.Join(", or ", waits)
+                : displayName + " has no rule in the main spawn lists - it comes from a sub-biome, spawners, raids, summons or breeding";
+        }
     }
 
     /// <summary>
