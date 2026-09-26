@@ -21,13 +21,16 @@
   .\tools\preflight.ps1                                  # the installed BepInEx\plugins\MobTracker.dll
   .\tools\preflight.ps1 -Plugin build\MobTracker.dll
 #>
+[CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Plugin = "",
     [string]$ExpectedVersion = "0.2.0",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" })
 )
 $ErrorActionPreference = "Stop"
-$ValheimDir = $ValheimDir.TrimEnd('\')
+# Drop a trailing \, and the " that powershell.exe -File leaves when a quoted path ending in
+# \ is the last argument (anywhere earlier it swallows the arguments after it: leave the \ off).
+$ValheimDir = $ValheimDir.TrimEnd('\', '"')
 $managed = Join-Path $ValheimDir "valheim_Data\Managed"
 $core = Join-Path $ValheimDir "BepInEx\core"
 if ($Plugin -eq "") { $Plugin = Join-Path $ValheimDir "BepInEx\plugins\MobTracker.dll" }

@@ -15,6 +15,7 @@
 .EXAMPLE
   .\compare-il.ps1 -Left <original.dll> -Right build\MobTracker.dll
 #>
+[CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [Parameter(Mandatory = $true)] [string]$Left,
     [Parameter(Mandatory = $true)] [string]$Right,
@@ -23,7 +24,9 @@ param(
     [int]$Context = 0     # lines of each method's description to show around its first difference
 )
 $ErrorActionPreference = "Stop"
-$ValheimDir = $ValheimDir.TrimEnd('\')
+# Drop a trailing \, and the " that powershell.exe -File leaves when a quoted path ending in
+# \ is the last argument (anywhere earlier it swallows the arguments after it: leave the \ off).
+$ValheimDir = $ValheimDir.TrimEnd('\', '"')
 Add-Type -LiteralPath (Join-Path $ValheimDir "BepInEx\core\Mono.Cecil.dll")
 
 function Read-Mod([string]$path) {

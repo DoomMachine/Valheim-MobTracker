@@ -17,6 +17,7 @@
   .\tools\mutants.ps1
   .\tools\mutants.ps1 -Only F1,F2
 #>
+[CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string[]]$Only = @(),
     [string]$ValheimDir = ""
@@ -29,11 +30,14 @@ function Finish([int]$code) { $env:VALHEIM = $callersValheim; exit $code }
 trap { $env:VALHEIM = $callersValheim; break }
 if ($ValheimDir) {
     # Resolved here, so a relative path means the same to the copy's build as to this shell.
+    # Drop a trailing \, and the " that powershell.exe -File leaves when a quoted path ending in
+    # \ is the last argument (anywhere earlier it swallows the arguments after it: leave the \ off).
+    $ValheimDir = $ValheimDir.TrimEnd('\', '"')
     if (-not (Test-Path -LiteralPath (Join-Path $ValheimDir "valheim_Data\Managed\assembly_valheim.dll"))) {
         Write-Output "No Valheim install at $ValheimDir (valheim_Data\Managed\assembly_valheim.dll not found)."
         Finish 1
     }
-    $env:VALHEIM = (Resolve-Path -LiteralPath $ValheimDir).Path.TrimEnd('\')
+    $env:VALHEIM = (Resolve-Path -LiteralPath $ValheimDir).ProviderPath.TrimEnd('\')
 }
 $Only = @($Only | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 $repo = Split-Path $PSScriptRoot -Parent

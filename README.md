@@ -1,7 +1,8 @@
 # MobTracker
 
 Client-side creature list, tracker and spawn alerts for Valheim. Plain BepInEx, no other
-dependencies, nothing to install on a server.
+dependencies, nothing to install on a server. Source, releases and issues:
+https://github.com/DoomMachine/Valheim-MobTracker
 
 - **F7** opens the list of every creature loaded around you - creatures further away do not exist on your
   client. How far that reaches follows the game's "Draw distance" graphics setting: roughly 130 to 290 m at
@@ -78,7 +79,9 @@ a new version adds its own with their defaults. When the game starts, `BepInEx/L
 `MobTracker.csproj`). `tools/preflight.ps1` checks a build against the installed game - run it after every
 Valheim update - and `tools/deploy.ps1` installs one, moving the DLL it replaces into `retired/` in this folder
 (`-KeepDir` to choose another). The tools find the game the way the build does: `-ValheimDir`, else the
-`VALHEIM` environment variable. `tools/mutants.ps1` plants the defects preflight is there to catch, one at a
+`VALHEIM` environment variable; they take named arguments only, and reject a misspelt one. From `cmd.exe`
+(`powershell -File ...`), write a quoted game path without a trailing backslash: `"...\Valheim\"` ends in an
+escaped quote there. `tools/mutants.ps1` plants the defects preflight is there to catch, one at a
 time in a copy under `build/`, and checks that each one fails it. `tools/package.ps1` makes a release's zip
 from a clean checkout. Run in Windows PowerShell 5.1 with the same .NET SDK, against the same Valheim and
 BepInEx files, the same commit gives the same bytes, so a downloaded zip can be checked against its tag; each

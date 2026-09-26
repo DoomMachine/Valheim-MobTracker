@@ -14,15 +14,23 @@
   .\tools\deploy.ps1                                          # build\MobTracker.dll
   .\tools\deploy.ps1 -KeepDir D:\Backups\MobTracker          # keep the replaced DLL somewhere else
 #>
+[CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
-    [string]$Dll = (Join-Path (Split-Path $PSScriptRoot -Parent) "build\MobTracker.dll"),
+    [string]$Dll = "",       # default: build\MobTracker.dll in this repository (set below)
     [string]$ExpectedVersion = "0.2.0",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
-    [string]$KeepDir = (Join-Path (Split-Path $PSScriptRoot -Parent) "retired")
+    [string]$KeepDir = ""    # default: retired\ in this repository (set below)
 )
 $ErrorActionPreference = "Stop"
-# A trailing backslash would end the quoted argument handed to preflight.ps1 in \", an escaped quote.
-$ValheimDir = $ValheimDir.TrimEnd('\')
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty in an advanced script's parameter defaults when the script is
+# started with powershell.exe -File; the body always has it.
+$repo = Split-Path $PSScriptRoot -Parent
+if (-not $Dll) { $Dll = Join-Path $repo "build\MobTracker.dll" }
+if (-not $KeepDir) { $KeepDir = Join-Path $repo "retired" }
+# Drop a trailing \ (the quoted path handed to preflight.ps1 below would end in \", an escaped quote), and the "
+# that powershell.exe -File leaves when a quoted path ending in \ is the last argument (anywhere earlier it
+# swallows the arguments after it: leave the \ off).
+$ValheimDir = $ValheimDir.TrimEnd('\', '"')
 if (Get-Process -Name valheim -ErrorAction SilentlyContinue) { throw "Valheim is running - close the game first." }
 if (-not (Test-Path -LiteralPath $Dll)) { throw "No build at $Dll - run dotnet build first." }
 

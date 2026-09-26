@@ -16,12 +16,19 @@
   Skipped on purpose: compiler-generated members (a field-like event's backing field has the event's own
   name, so publishing it would make every use of the event ambiguous).
 #>
+[CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string[]]$Assemblies = @("assembly_valheim", "assembly_utils"),
-    [string]$OutDir = (Join-Path (Split-Path $PSScriptRoot -Parent) "lib\publicized")
+    [string]$OutDir = ""   # default: lib\publicized in this repository (set below)
 )
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty in an advanced script's parameter defaults when the script is
+# started with powershell.exe -File, as the build does; the body always has it.
+if (-not $OutDir) { $OutDir = Join-Path (Split-Path $PSScriptRoot -Parent) "lib\publicized" }
+# Drop a trailing \, and the " that powershell.exe -File leaves when a quoted path ending in
+# \ is the last argument (anywhere earlier it swallows the arguments after it: leave the \ off).
+$ValheimDir = $ValheimDir.TrimEnd('\', '"')
 $managed = Join-Path $ValheimDir "valheim_Data\Managed"
 $cecilLoaded = $false
 

@@ -3,10 +3,13 @@
   Builds the release zip from a clean checkout: dist\MobTracker-<version>.zip, the same bytes every time.
 
 .DESCRIPTION
-  Refuses unless the working tree is clean, so the zip is the commit and nothing else. Builds MobTracker.csproj
-  from scratch (Release, with no debug symbols whatever a local .csproj.user says), checks that the DLL's version
-  names this commit and that it carries no symbol-file path, and zips three entries in this order: MobTracker.dll
-  as built, and README.md and LICENSE exactly as the commit stores them. Every entry carries the commit's time.
+  Refuses unless the checkout is clean - no changed or untracked files, and no ignored file that can change a
+  build (a MobTracker.csproj.user, a Directory.Build.* file; only the tools' own output folders may be there) -
+  so the zip is the commit and nothing else; a release's zip comes from a fresh clone of its tag. Builds
+  MobTracker.csproj from scratch (Release, with no debug symbols whatever a local .csproj.user says), checks that
+  the DLL's version names this commit and that it carries no symbol-file path, and zips three entries in this
+  order: MobTracker.dll as built, and README.md and LICENSE exactly as the commit stores them. Every entry
+  carries the commit's time.
 
   So the same commit gives a byte-identical zip when this runs in Windows PowerShell 5.1 (its .NET Framework does
   the compressing; PowerShell 7 compresses differently, so this script refuses to run there) with the same .NET
@@ -18,6 +21,7 @@
 .EXAMPLE
   .\tools\package.ps1
 #>
+[CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$ValheimDir = ""
 )
@@ -26,8 +30,17 @@ if ($PSVersionTable.PSEdition -ne "Desktop") {
     throw "Run this in Windows PowerShell 5.1 (powershell.exe): another PowerShell compresses the zip into different bytes."
 }
 $repo = Split-Path $PSScriptRoot -Parent
-$ValheimDir = $ValheimDir.TrimEnd('\')
-$game = if ($ValheimDir) { $ValheimDir } elseif ($env:VALHEIM) { $env:VALHEIM.TrimEnd('\') } else { "E:\SteamLibrary\steamapps\common\Valheim" }
+# Drop a trailing \, and the " that powershell.exe -File leaves when a quoted path ending in
+# \ is the last argument (anywhere earlier it swallows the arguments after it: leave the \ off).
+$ValheimDir = $ValheimDir.TrimEnd('\', '"')
+if ($ValheimDir) {
+    # Resolved here: MSBuild would resolve a relative path against the project's folder, not this shell's.
+    if (-not (Test-Path -LiteralPath (Join-Path $ValheimDir "valheim_Data\Managed\assembly_valheim.dll"))) {
+        throw "No Valheim install at $ValheimDir (valheim_Data\Managed\assembly_valheim.dll not found)."
+    }
+    $ValheimDir = (Resolve-Path -LiteralPath $ValheimDir).ProviderPath.TrimEnd('\')
+}
+$game = if ($ValheimDir) { $ValheimDir } elseif ($env:VALHEIM) { $env:VALHEIM.TrimEnd('\', '"') } else { "E:\SteamLibrary\steamapps\common\Valheim" }
 
 function Git-Bytes([string[]]$arguments) {
     # git's output as raw bytes (PowerShell's own capture would re-encode it as text).
@@ -47,6 +60,13 @@ function Git-Bytes([string[]]$arguments) {
 function Git-Text([string[]]$arguments) { return [Text.Encoding]::UTF8.GetString((Git-Bytes $arguments)).Trim() }
 
 if (Git-Text @("status", "--porcelain")) { throw "The working tree has changes - commit or stash them; the zip must be exactly a commit." }
+# Ignored files are invisible to the check above, and some change a build without changing the commit.
+$outputs = @("build/", "dist/", "lib/", "obj/", "bin/", "retired/", ".vs/", "tests/obj/", "tests/bin/")
+$ignored = @((Git-Text @("status", "--porcelain", "--ignored")) -split "`n" | Where-Object { $_.StartsWith("!! ") } |
+    ForEach-Object { $_.Substring(3).Trim() } | Where-Object { $outputs -notcontains $_ })
+if ($ignored.Count -gt 0) {
+    throw ("Ignored files that can change the build: {0} - package from a fresh clone." -f ($ignored -join ", "))
+}
 $commit = Git-Text @("rev-parse", "HEAD")
 $csproj = [IO.File]::ReadAllText((Join-Path $repo "MobTracker.csproj"))
 $m = [regex]::Match($csproj, "<Version>([^<]+)</Version>")
