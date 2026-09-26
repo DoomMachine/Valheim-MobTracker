@@ -78,12 +78,14 @@ namespace MobTracker
     ///
     /// Low priority, so that a mod at the default priority with markers of its own (TomTom) has had
     /// its turn: HarmonyX runs every prefix, and a false from one of them arrives here as
-    /// __runOriginal, meaning the gesture is taken - one click never removes two pins.
+    /// __runOriginal, meaning the gesture is taken - one click never removes two pins. The priority
+    /// sits on the method: PatchAll(Type) ignores a [HarmonyPriority] on the class, and at the default
+    /// priority this plugin's prefix would run first (BepInEx loads com.mobtracker before DoomMachine).
     /// </summary>
     [HarmonyPatch(typeof(Minimap), nameof(Minimap.RemovePin), new[] { typeof(Vector3), typeof(float) })]
-    [HarmonyPriority(Priority.Low)]
     internal static class RemoveAreaPinPatch
     {
+        [HarmonyPriority(Priority.Low)]
         private static bool Prefix(Minimap __instance, Vector3 pos, float radius, ref bool __result, bool __runOriginal)
         {
             if (!__runOriginal)

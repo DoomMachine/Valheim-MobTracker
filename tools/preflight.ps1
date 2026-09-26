@@ -5,13 +5,15 @@
 .DESCRIPTION
   1. identity: BepInPlugin GUID com.mobtracker.plugin, name MobTracker, the expected version
   2. every [HarmonyPatch] target type and method (the overload, when one is named) still exists in the game,
-     every patch parameter is a target parameter or a Harmony injection, and Awake applies every patch class
+     every patch parameter is a target parameter or a Harmony injection, Awake applies every patch class, and
+     a patch priority sits on the method (Harmony ignores one on the class)
   3. every type and member the plugin uses in the game, Unity, BepInEx and Harmony resolves with its exact
      signature - including the private members it reaches (the ground-path guide's Pathfinding internals,
      Find area's SpawnSystem.m_instances), which it lists - and a deliberately
      wrong member fails to resolve, so the check cannot pass vacuously
   4. the star filters read the right settings; Find area honours the spawn rules' key and event conditions,
-     takes the map's delete gesture for its own pins, and adds them local-only (save false, ownerID 0)
+     takes the map's delete gesture for its own pins after other mods' prefixes, and adds them local-only
+     (save false, ownerID 0, and no Minimap method that adds pins of its own)
   5. every assembly the plugin references is in the game folder
   Run it after every Valheim update. Exits 1 on any failure.
 
@@ -113,6 +115,23 @@ if ($awake) { foreach ($i in $awake.Body.Instructions) { if ($i.OpCode.Name -eq 
 $unregistered = @($patchClasses | Where-Object { -not $registered.ContainsKey($_.FullName) } | ForEach-Object { $_.Name })
 if ($unregistered.Count -eq 0 -and $patchClasses.Count -ge 1) { Ok "MobTrackerPlugin.Awake applies every patch class" }
 else { Fail ("MobTrackerPlugin.Awake never applies: {0}" -f ($unregistered -join ", ")) }
+# HarmonyX 2.9's PatchAll(Type) drops a [HarmonyPriority] written on the class (HarmonyMethodExtensions.Merge keeps
+# the method's -1), so the patch runs at the default priority; it has to sit on the patch method.
+function Get-Priority($provider) {
+    foreach ($ca in $provider.CustomAttributes) { if ($ca.AttributeType.Name -eq "HarmonyPriority") { return [int]$ca.ConstructorArguments[0].Value } }
+    return $null
+}
+$checks++
+$classLevel = @($patchClasses | Where-Object { $null -ne (Get-Priority $_) } | ForEach-Object { $_.Name })
+if ($classLevel.Count -eq 0) { Ok "no [HarmonyPriority] on a patch class, where Harmony would ignore it" }
+else { Fail ("[HarmonyPriority] on the class, which PatchAll(Type) ignores - put it on the patch method: {0}" -f ($classLevel -join ", ")) }
+# The delete-gesture prefix must run after a default-priority co-patcher's (TomTom's), or one click removes two pins.
+$checks++
+$rpPrefix = $null
+foreach ($t in $patchClasses) { if ($t.Name -eq "RemoveAreaPinPatch") { $rpPrefix = $t.Methods | Where-Object { $_.Name -eq "Prefix" } | Select-Object -First 1 } }
+$rpPriority = if ($rpPrefix) { Get-Priority $rpPrefix } else { $null }
+if ($null -ne $rpPriority -and $rpPriority -lt 400) { Ok "RemoveAreaPinPatch.Prefix runs at priority $rpPriority, after default-priority prefixes" }
+else { Fail ("RemoveAreaPinPatch.Prefix priority is {0}; it must be below 400 (Normal), set on the method" -f $(if ($null -eq $rpPriority) { "unset" } else { $rpPriority })) }
 
 Write-Output "== game types and members the plugin uses =="
 $scopes = @("assembly_valheim", "assembly_utils", "assembly_guiutils", "BepInEx", "0Harmony")
@@ -252,10 +271,32 @@ else {
     if ($missing.Count -eq 0) { Ok ("SpawnFinder.StartFind uses {0}" -f ($needed -join ", ")) }
     else { Fail ("SpawnFinder.StartFind (with its lambdas) does not use {0}" -f ($missing -join ", ")) }
 }
+# The delete gesture: the prefix first stands aside when another prefix has taken the gesture (reads __runOriginal
+# and returns false), and only then hands it to RemovePinNear, which picks a pin the way Minimap.GetClosestPin does.
 $checks++
-$rp = Get-Touches (Get-Method "MobTracker.RemoveAreaPinPatch" "Prefix")
-if ($rp -and $rp.ContainsKey("SpawnFinder::RemovePinNear")) { Ok "RemoveAreaPinPatch.Prefix hands the delete gesture to SpawnFinder::RemovePinNear" }
-else { Fail "RemoveAreaPinPatch.Prefix does not call SpawnFinder::RemovePinNear" }
+$rpm = Get-Method "MobTracker.RemoveAreaPinPatch" "Prefix"
+$guarded = $false; $calls = $false
+if ($rpm) {
+    $ins = @($rpm.Body.Instructions)
+    $callAt = -1
+    for ($k = 0; $k -lt $ins.Count; $k++) { if ($ins[$k].Operand -is [Mono.Cecil.MethodReference] -and $ins[$k].Operand.Name -eq "RemovePinNear") { $callAt = $k; break } }
+    $calls = $callAt -ge 0
+    for ($k = 0; $k -lt $callAt - 3; $k++) {
+        $p = $null
+        if ($ins[$k].Operand -is [Mono.Cecil.ParameterDefinition]) { $p = $ins[$k].Operand }
+        elseif ($ins[$k].OpCode.Name -match "^ldarg\.([0-3])$") { $p = $rpm.Parameters[[int]$Matches[1]] }
+        if (-not $p -or $p.Name -ne "__runOriginal" -or $ins[$k].OpCode.Name -notlike "ldarg*") { continue }
+        if ($ins[$k + 1].OpCode.Name -like "brtrue*" -and $ins[$k + 2].OpCode.Name -eq "ldc.i4.0" -and $ins[$k + 3].OpCode.Name -eq "ret") { $guarded = $true }
+    }
+}
+if ($calls -and $guarded) { Ok "RemoveAreaPinPatch.Prefix returns false when __runOriginal is already false, then calls SpawnFinder::RemovePinNear" }
+else { Fail ("RemoveAreaPinPatch.Prefix: {0}" -f (@($(if (-not $guarded) { "no 'if (!__runOriginal) return false;' before the RemovePinNear call" }), $(if (-not $calls) { "never calls SpawnFinder::RemovePinNear" })) | Where-Object { $_ }) -join "; ") }
+$checks++
+$near = Get-Touches (Get-Method "MobTracker.SpawnFinder" "RemovePinNear")
+$needed = @("PinData::m_uiElement", "GameObject::get_activeInHierarchy", "Utils::DistanceXZ", "SpawnFinder::_pinsMap", "Minimap::RemovePin(Minimap/PinData)")
+$missing = @($needed | Where-Object { -not $near.ContainsKey($_) })
+if ($missing.Count -eq 0) { Ok "SpawnFinder.RemovePinNear picks like GetClosestPin (shown on the map, DistanceXZ) among its own map's pins" }
+else { Fail ("SpawnFinder.RemovePinNear does not use {0}" -f ($missing -join ", ")) }
 
 # The pins are the player's alone: never written to the map data, never shared at a cartography table. That is
 # AddPin's save argument false and ownerID 0 - read from the IL, finding both parameters by name in the game's
@@ -337,6 +378,37 @@ else {
 }
 $checks++
 if ($pinWrites.Count -eq 0) { Ok "nothing writes a pin's m_save or m_ownerID" } else { foreach ($w in $pinWrites) { Fail "a pin's save or owner is changed after AddPin: $w" } }
+# Minimap methods that add pins of their own, with their own save flag (DiscoverLocation adds a saved one): worked
+# out from the game's IL - every Minimap method that reaches AddPin through other Minimap methods - so a new one in
+# a game update is covered. The plugin may call none of them; AddPin itself is checked above.
+$checks++
+$mmType = $null
+foreach ($m in $gameModules.Values) { $gt = $m.GetType("Minimap"); if ($gt) { $mmType = $gt; break } }
+$addsPins = @{}
+if ($mmType) {
+    $changed = $true
+    while ($changed) {
+        $changed = $false
+        foreach ($gm in $mmType.Methods) {
+            if (-not $gm.HasBody -or $gm.Name -eq "AddPin" -or $addsPins.ContainsKey($gm.FullName)) { continue }
+            foreach ($i in $gm.Body.Instructions) {
+                $op = $i.Operand
+                if ($op -isnot [Mono.Cecil.MethodReference] -or $op.DeclaringType.Name -ne "Minimap") { continue }
+                $callee = $null; try { $callee = $op.Resolve() } catch { }
+                if ($op.Name -eq "AddPin" -or ($callee -and $addsPins.ContainsKey($callee.FullName))) { $addsPins[$gm.FullName] = $true; $changed = $true; break }
+            }
+        }
+    }
+}
+$viaGame = @()
+foreach ($mr in $plug.GetMemberReferences()) {
+    if ($mr -isnot [Mono.Cecil.MethodReference] -or $mr.DeclaringType.Name -ne "Minimap") { continue }
+    $r = $null; try { $r = $mr.Resolve() } catch { }
+    if ($r -and $addsPins.ContainsKey($r.FullName)) { $viaGame += $mr.Name }
+}
+if (-not $mmType -or $addsPins.Count -eq 0) { Fail "Minimap or its pin-adding methods not found in the game - the check would be vacuous" }
+elseif ($viaGame.Count -eq 0) { Ok ("no call to any of the {0} Minimap methods that add pins of their own (DiscoverLocation and the like)" -f $addsPins.Count) }
+else { Fail ("calls Minimap methods that add pins with their own save flag: {0}" -f (($viaGame | Sort-Object -Unique) -join ", ")) }
 
 Write-Output "== assembly references =="
 foreach ($ar in $plug.AssemblyReferences) {
