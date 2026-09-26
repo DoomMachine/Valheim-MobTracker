@@ -6,8 +6,9 @@
 .DESCRIPTION
   Works in build\mutants\ (git ignores build\), on a copy of the working tree's tracked files and of lib\, so the
   repository itself is never edited. Each mutant is one regex replacement that must match exactly once. First the
-  unmutated copy is built and must PASS, so a failure below is the mutant's and not the copy's. Exits 1 if the
-  clean copy fails, a mutant cannot be planted or built, or any mutant passes preflight.
+  unmutated copy is built and must PASS, so a failure below is the mutant's and not the copy's. Exits 1 if
+  -ValheimDir holds no Valheim install, the clean copy fails, a mutant cannot be planted or built, or any
+  mutant passes preflight.
 
   The game folder is -ValheimDir, else the VALHEIM environment variable, else the default - as for the build and
   the other tools; it reaches the copy's build and preflight through VALHEIM.
@@ -28,11 +29,11 @@ function Finish([int]$code) { $env:VALHEIM = $callersValheim; exit $code }
 trap { $env:VALHEIM = $callersValheim; break }
 if ($ValheimDir) {
     # Resolved here, so a relative path means the same to the copy's build as to this shell.
-    if (-not (Test-Path (Join-Path $ValheimDir "valheim_Data\Managed\assembly_valheim.dll"))) {
+    if (-not (Test-Path -LiteralPath (Join-Path $ValheimDir "valheim_Data\Managed\assembly_valheim.dll"))) {
         Write-Output "No Valheim install at $ValheimDir (valheim_Data\Managed\assembly_valheim.dll not found)."
         Finish 1
     }
-    $env:VALHEIM = (Resolve-Path $ValheimDir).Path
+    $env:VALHEIM = (Resolve-Path -LiteralPath $ValheimDir).Path.TrimEnd('\')
 }
 $Only = @($Only | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 $repo = Split-Path $PSScriptRoot -Parent
@@ -73,9 +74,9 @@ function Build-And-Check {
     # --no-incremental: the copies keep their files' old timestamps, so MSBuild would take the last mutant's
     # compiled output for up to date.
     $dll = Join-Path $work "build\MobTracker.dll"
-    if (Test-Path $dll) { Remove-Item $dll }
+    if (Test-Path -LiteralPath $dll) { Remove-Item -LiteralPath $dll }
     $b = & dotnet build (Join-Path $work "MobTracker.csproj") -c Release --no-incremental -nologo -v q 2>&1 | Out-String
-    if (-not (Test-Path $dll)) { return [pscustomobject]@{ Code = $null; Lines = @("    BUILD FAILED", $b) } }
+    if (-not (Test-Path -LiteralPath $dll)) { return [pscustomobject]@{ Code = $null; Lines = @("    BUILD FAILED", $b) } }
     $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $work "tools\preflight.ps1") -Plugin $dll 2>&1
     $code = $LASTEXITCODE
     $lines = @($out | Where-Object { "$_" -cmatch "FAIL" } | ForEach-Object { "      $_" })
@@ -87,11 +88,13 @@ New-Item -ItemType Directory -Force -Path $work | Out-Null
 foreach ($f in @(& git -C $repo ls-files)) {
     $dest = Join-Path $work $f
     New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
-    Copy-Item -Path (Join-Path $repo $f) -Destination $dest -Force
+    Copy-Item -LiteralPath (Join-Path $repo $f) -Destination $dest -Force
 }
-if (Test-Path (Join-Path $repo "lib")) {
+if (Test-Path -LiteralPath (Join-Path $repo "lib")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $work "lib") | Out-Null
-    Copy-Item -Path (Join-Path $repo "lib\*") -Destination (Join-Path $work "lib") -Recurse -Force
+    foreach ($item in Get-ChildItem -LiteralPath (Join-Path $repo "lib")) {
+        Copy-Item -LiteralPath $item.FullName -Destination (Join-Path $work "lib") -Recurse -Force
+    }
 }
 
 $bad = 0

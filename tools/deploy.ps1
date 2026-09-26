@@ -21,26 +21,28 @@ param(
     [string]$KeepDir = (Join-Path (Split-Path $PSScriptRoot -Parent) "retired")
 )
 $ErrorActionPreference = "Stop"
+# A trailing backslash would end the quoted argument handed to preflight.ps1 in \", an escaped quote.
+$ValheimDir = $ValheimDir.TrimEnd('\')
 if (Get-Process -Name valheim -ErrorAction SilentlyContinue) { throw "Valheim is running - close the game first." }
-if (-not (Test-Path $Dll)) { throw "No build at $Dll - run dotnet build first." }
+if (-not (Test-Path -LiteralPath $Dll)) { throw "No build at $Dll - run dotnet build first." }
 
 $target = Join-Path $ValheimDir "BepInEx\plugins\MobTracker.dll"
-$newHash = (Get-FileHash $Dll -Algorithm SHA256).Hash
-if (Test-Path $target) {
-    $oldHash = (Get-FileHash $target -Algorithm SHA256).Hash
+$newHash = (Get-FileHash -LiteralPath $Dll -Algorithm SHA256).Hash
+if (Test-Path -LiteralPath $target) {
+    $oldHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
     if ($oldHash -eq $newHash) { Write-Output "already installed ($newHash)"; exit 0 }
     $oldVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($target).ProductVersion
     if (-not $oldVersion) { $oldVersion = "unknown" }
     $oldVersion = ($oldVersion -split '\+')[0]
-    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"   # milliseconds: two installs in one second keep both DLLs
     $keep = Join-Path $KeepDir ("MobTracker-{0}-{1}" -f $oldVersion, $stamp)
     New-Item -ItemType Directory -Force -Path $keep | Out-Null
-    Move-Item -Path $target -Destination (Join-Path $keep "MobTracker.dll")
+    Move-Item -LiteralPath $target -Destination (Join-Path $keep "MobTracker.dll")
     [IO.File]::WriteAllText((Join-Path $keep "SHA256.txt"), $oldHash + "  MobTracker.dll`r`n", (New-Object Text.UTF8Encoding $false))
     Write-Output ("moved the installed {0} ({1}) to {2}" -f $oldVersion, $oldHash.Substring(0, 16), $keep)
 }
-Copy-Item -Path $Dll -Destination $target
-$installedHash = (Get-FileHash $target -Algorithm SHA256).Hash
+Copy-Item -LiteralPath $Dll -Destination $target
+$installedHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
 if ($installedHash -ne $newHash) { throw "installed hash $installedHash differs from the build's $newHash" }
 Write-Output ("installed {0}  SHA-256 {1}" -f $target, $installedHash)
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "preflight.ps1") -Plugin $target -ExpectedVersion $ExpectedVersion -ValheimDir $ValheimDir

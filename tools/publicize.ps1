@@ -51,15 +51,15 @@ function Publicize($type, $counts) {
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 foreach ($name in $Assemblies) {
     $source = Join-Path $managed ($name + ".dll")
-    if (-not (Test-Path $source)) { throw "$name.dll not found at $source (pass -ValheimDir)" }
+    if (-not (Test-Path -LiteralPath $source)) { throw "$name.dll not found at $source (pass -ValheimDir)" }
     $target = Join-Path $OutDir ($name + ".dll")
     $stamp = Join-Path $OutDir ($name + ".source.sha256")
-    $hash = (Get-FileHash $source -Algorithm SHA256).Hash
-    if ((Test-Path $target) -and (Test-Path $stamp) -and ((Get-Content $stamp -Raw).Trim() -eq $hash)) {
+    $hash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+    if ((Test-Path -LiteralPath $target) -and (Test-Path -LiteralPath $stamp) -and ((Get-Content -LiteralPath $stamp -Raw).Trim() -eq $hash)) {
         Write-Output "publicized $name.dll is current"
         continue
     }
-    if (-not $cecilLoaded) { Add-Type -Path (Join-Path $ValheimDir "BepInEx\core\Mono.Cecil.dll"); $cecilLoaded = $true }
+    if (-not $cecilLoaded) { Add-Type -LiteralPath (Join-Path $ValheimDir "BepInEx\core\Mono.Cecil.dll"); $cecilLoaded = $true }
     $resolver = New-Object Mono.Cecil.DefaultAssemblyResolver
     $resolver.AddSearchDirectory($managed)
     $rp = New-Object Mono.Cecil.ReaderParameters

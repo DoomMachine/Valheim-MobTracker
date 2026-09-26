@@ -23,7 +23,8 @@ param(
     [int]$Context = 0     # lines of each method's description to show around its first difference
 )
 $ErrorActionPreference = "Stop"
-Add-Type -Path (Join-Path $ValheimDir "BepInEx\core\Mono.Cecil.dll")
+$ValheimDir = $ValheimDir.TrimEnd('\')
+Add-Type -LiteralPath (Join-Path $ValheimDir "BepInEx\core\Mono.Cecil.dll")
 
 function Read-Mod([string]$path) {
     $r = New-Object Mono.Cecil.DefaultAssemblyResolver
@@ -32,7 +33,7 @@ function Read-Mod([string]$path) {
     $p = New-Object Mono.Cecil.ReaderParameters
     $p.AssemblyResolver = $r
     $p.InMemory = $true
-    return [Mono.Cecil.ModuleDefinition]::ReadModule((Resolve-Path $path).Path, $p)
+    return [Mono.Cecil.ModuleDefinition]::ReadModule((Resolve-Path -LiteralPath $path).Path, $p)
 }
 
 function Format-Attrs($provider) {

@@ -27,11 +27,12 @@ param(
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" })
 )
 $ErrorActionPreference = "Stop"
+$ValheimDir = $ValheimDir.TrimEnd('\')
 $managed = Join-Path $ValheimDir "valheim_Data\Managed"
 $core = Join-Path $ValheimDir "BepInEx\core"
 if ($Plugin -eq "") { $Plugin = Join-Path $ValheimDir "BepInEx\plugins\MobTracker.dll" }
-if (-not (Test-Path $Plugin)) { Write-Output "FAIL  plugin not found: $Plugin"; exit 1 }
-Add-Type -Path (Join-Path $core "Mono.Cecil.dll")
+if (-not (Test-Path -LiteralPath $Plugin)) { Write-Output "FAIL  plugin not found: $Plugin"; exit 1 }
+Add-Type -LiteralPath (Join-Path $core "Mono.Cecil.dll")
 
 $resolver = New-Object Mono.Cecil.DefaultAssemblyResolver
 $resolver.AddSearchDirectory($managed)
@@ -39,7 +40,7 @@ $resolver.AddSearchDirectory($core)
 $rp = New-Object Mono.Cecil.ReaderParameters
 $rp.AssemblyResolver = $resolver
 $rp.InMemory = $true
-$plug = [Mono.Cecil.ModuleDefinition]::ReadModule((Resolve-Path $Plugin).Path, $rp)
+$plug = [Mono.Cecil.ModuleDefinition]::ReadModule((Resolve-Path -LiteralPath $Plugin).Path, $rp)
 $checks = 0; $failures = 0
 function Ok($m) { Write-Output "  ok    $m" }
 function Fail($m) { Write-Output "  FAIL  $m"; $script:failures++ }
@@ -67,7 +68,7 @@ if ($hasLine) { Ok "Awake logs '$loadedLine'" } else { Fail "MobTrackerPlugin.Aw
 
 Write-Output "== Harmony patch targets =="
 $gameModules = @{}
-foreach ($f in @(Get-ChildItem $managed -Filter *.dll) + @(Get-ChildItem $core -Filter *.dll)) { try { $gameModules[$f.Name] = [Mono.Cecil.ModuleDefinition]::ReadModule($f.FullName) } catch { } }
+foreach ($f in @(Get-ChildItem -LiteralPath $managed -Filter *.dll) + @(Get-ChildItem -LiteralPath $core -Filter *.dll)) { try { $gameModules[$f.Name] = [Mono.Cecil.ModuleDefinition]::ReadModule($f.FullName) } catch { } }
 # Names Harmony fills in itself; any other patch parameter must be named (and typed) like a parameter of the target,
 # or Harmony refuses the patch when the game starts - after every build check has passed.
 $injected = @("__instance", "__result", "__state", "__runOriginal", "__originalMethod", "__args", "__exception")
@@ -417,7 +418,7 @@ Write-Output "== assembly references =="
 foreach ($ar in $plug.AssemblyReferences) {
     if ($ar.Name -eq "mscorlib" -or $ar.Name -eq "System.Core" -or $ar.Name -eq "System" -or $ar.Name -eq "netstandard") { continue }
     $checks++
-    if ((Test-Path (Join-Path $managed ($ar.Name + ".dll"))) -or (Test-Path (Join-Path $core ($ar.Name + ".dll")))) { Ok $ar.Name }
+    if ((Test-Path -LiteralPath (Join-Path $managed ($ar.Name + ".dll"))) -or (Test-Path -LiteralPath (Join-Path $core ($ar.Name + ".dll")))) { Ok $ar.Name }
     else { Fail ("{0} cannot be found in the game folder" -f $ar.Name) }
 }
 

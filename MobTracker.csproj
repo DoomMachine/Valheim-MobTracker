@@ -56,7 +56,7 @@
 
   <!-- Make (or refresh, after a game update) the publicized assemblies before references resolve. -->
   <Target Name="PublicizeGameAssemblies" BeforeTargets="ResolveAssemblyReferences">
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)tools\publicize.ps1&quot; -ValheimDir &quot;$(ValheimDir)&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)tools\publicize.ps1&quot; -ValheimDir &quot;$(ValheimDir.TrimEnd('\'))&quot;" />
   </Target>
 
 </Project>
