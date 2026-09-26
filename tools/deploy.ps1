@@ -4,16 +4,21 @@
 
 .DESCRIPTION
   Refuses while Valheim is running. Moves the installed BepInEx\plugins\MobTracker.dll (never deletes it) to
-  _ModSource\_retired\MobTracker-<its version>-<date>\, copies the new DLL in, confirms the installed file's
-  SHA-256 equals the build's, and runs tools\preflight.ps1 on the installed file.
+  <KeepDir>\MobTracker-<its version>-<date>\ - by default the repository's own retired\ folder, which git
+  ignores - copies the new DLL in, confirms the installed file's SHA-256 equals the build's, and runs
+  tools\preflight.ps1 on the installed file.
+
+  The game folder is -ValheimDir, else the VALHEIM environment variable (as the build uses), else the default.
 
 .EXAMPLE
-  .\tools\deploy.ps1                         # build\MobTracker.dll
+  .\tools\deploy.ps1                                          # build\MobTracker.dll
+  .\tools\deploy.ps1 -KeepDir D:\Backups\MobTracker          # keep the replaced DLL somewhere else
 #>
 param(
     [string]$Dll = (Join-Path (Split-Path $PSScriptRoot -Parent) "build\MobTracker.dll"),
     [string]$ExpectedVersion = "0.2.0",
-    [string]$ValheimDir = "E:\SteamLibrary\steamapps\common\Valheim"
+    [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
+    [string]$KeepDir = (Join-Path (Split-Path $PSScriptRoot -Parent) "retired")
 )
 $ErrorActionPreference = "Stop"
 if (Get-Process -Name valheim -ErrorAction SilentlyContinue) { throw "Valheim is running - close the game first." }
@@ -28,7 +33,7 @@ if (Test-Path $target) {
     if (-not $oldVersion) { $oldVersion = "unknown" }
     $oldVersion = ($oldVersion -split '\+')[0]
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $keep = Join-Path $ValheimDir ("_ModSource\_retired\MobTracker-{0}-{1}" -f $oldVersion, $stamp)
+    $keep = Join-Path $KeepDir ("MobTracker-{0}-{1}" -f $oldVersion, $stamp)
     New-Item -ItemType Directory -Force -Path $keep | Out-Null
     Move-Item -Path $target -Destination (Join-Path $keep "MobTracker.dll")
     [IO.File]::WriteAllText((Join-Path $keep "SHA256.txt"), $oldHash + "  MobTracker.dll`r`n", (New-Object Text.UTF8Encoding $false))

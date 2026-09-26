@@ -19,7 +19,7 @@
 param(
     [string]$Plugin = "",
     [string]$ExpectedVersion = "0.2.0",
-    [string]$ValheimDir = "E:\SteamLibrary\steamapps\common\Valheim"
+    [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" })
 )
 $ErrorActionPreference = "Stop"
 $managed = Join-Path $ValheimDir "valheim_Data\Managed"

@@ -7,8 +7,8 @@
   too), its attributes, base type, interfaces and custom attributes; every field (type, flags, constant);
   every method (signature, flags, parameters, custom attributes, locals, exception handlers and each IL
   instruction with its operand - branch targets as instruction indices, floats by their bits); properties and
-  events; the assembly references and assembly-level attributes. Prints each difference and exits 1 if there
-  is any in code; assembly-level attribute differences (version stamps and the like) are listed separately
+  events; the assembly references and assembly-level attributes. Prints the first difference in each method
+  (-Context N shows the lines around it) and exits 1 if there is any in code; assembly-level attribute differences (version stamps and the like) are listed separately
   and do not fail unless -Strict is given.
 
 .EXAMPLE
@@ -17,7 +17,7 @@
 param(
     [Parameter(Mandatory = $true)] [string]$Left,
     [Parameter(Mandatory = $true)] [string]$Right,
-    [string]$ValheimDir = "E:\SteamLibrary\steamapps\common\Valheim",
+    [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [switch]$Strict,
     [int]$Context = 0     # lines of each method's description to show around its first difference
 )

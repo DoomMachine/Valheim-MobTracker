@@ -7,5 +7,8 @@ bin/
 .vs/
 *.user
 
-# the publicized copy of the game's assembly_valheim.dll (tools/publicize.ps1) - game code, never committed
+# publicized copies of the game's assemblies (tools/publicize.ps1) - game code, never committed
 lib/
+
+# plugin DLLs replaced by tools/deploy.ps1
+retired/

@@ -17,7 +17,7 @@
   name, so publishing it would make every use of the event ambiguous).
 #>
 param(
-    [string]$ValheimDir = "E:\SteamLibrary\steamapps\common\Valheim",
+    [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string[]]$Assemblies = @("assembly_valheim", "assembly_utils"),
     [string]$OutDir = (Join-Path (Split-Path $PSScriptRoot -Parent) "lib\publicized")
 )

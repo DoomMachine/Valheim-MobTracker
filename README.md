@@ -49,15 +49,16 @@ dependencies, nothing to install on a server.
 
 `dotnet build MobTracker.csproj -c Release` (needs the game with BepInEx; see the comment at the top of
 `MobTracker.csproj`). `tools/preflight.ps1` checks a build against the installed game - run it after every
-Valheim update - and `tools/deploy.ps1` installs one, keeping the DLL it replaces. `tests/` holds the rules
-that need no game (`dotnet run` there).
+Valheim update - and `tools/deploy.ps1` installs one, moving the DLL it replaces into `retired/` in this folder
+(`-KeepDir` to choose another). The tools find the game the way the build does: `-ValheimDir`, else the
+`VALHEIM` environment variable. `tests/` holds the rules that need no game (`dotnet run` there).
 
 ## Credits
 
 The original idea, concept and initial version of MobTracker are by **null** (also **nullptr**), published
-here with their permission. Its extensions from 0.2.0 are conceived and directed by DoomMachine and written by
-Claude, Anthropic's AI model, in Claude Code under DoomMachine's direction; the commits are DoomMachine's, and
-Claude is credited here rather than as a co-author.
+here with their permission. The build tooling and the extensions from 0.2.0 on are conceived and directed by
+DoomMachine and written by Claude, Anthropic's AI model, in Claude Code under DoomMachine's direction; the
+commits are DoomMachine's, and Claude is credited here rather than as a co-author.
 
 ## History
 
