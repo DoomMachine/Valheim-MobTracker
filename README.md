@@ -72,15 +72,21 @@ time in a copy under `build/`, and checks that each one fails it. `tests/` holds
 
 ## Credits
 
-The original idea, concept and initial version of MobTracker are by **null** (also **nullptr**), published
-here with their permission. The build tooling and the extensions from 0.2.0 on are conceived and directed by
-DoomMachine and written by Claude, Anthropic's AI model, in Claude Code under DoomMachine's direction; the
-commits are DoomMachine's, and Claude is credited here rather than as a co-author.
+MobTracker is by **null** (also **nullptr**) and **DoomMachine**.
+
+- **null** (**nullptr**): the original idea, concept and initial version (0.1.0), published here with their
+  permission.
+- **DoomMachine**: the build tooling and the extensions from 0.2.0 on, conceived and directed by DoomMachine.
+  The code, tests and docs of the tooling and of these extensions were written by Claude, Anthropic's AI
+  model, in Claude Code under DoomMachine's direction; the commits are DoomMachine's, and Claude is
+  credited here rather than as a co-author.
+
+The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
 - **0.2.0** - star filters for the list and for watch alerts. Find area follows boss progression and
   events, names the rule that placed the nearest pin, and its pins can be cleared; a right click on one
-  used to delete the nearest pin of yours instead.
+  used to delete the nearest pin of yours instead. Not yet played in the game.
 - **0.1.0** - the original MobTracker by null: creature list, watch alerts, tracking arrow and ground path
   (up to 250 m), and Find area.
