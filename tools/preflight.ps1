@@ -127,10 +127,16 @@ function Get-Method($typeName, $methodName) {
     return $null
 }
 function Get-Touches($m) {
+    # Every field and method a method refers to; a field it writes is also recorded as "set <field>", so a check
+    # can tell storing the applied filter from merely reading it.
     $out = @{}
     foreach ($i in $m.Body.Instructions) {
         $op = $i.Operand
-        if ($op -is [Mono.Cecil.FieldReference]) { $out[$op.DeclaringType.Name + "::" + $op.Name] = $true }
+        if ($op -is [Mono.Cecil.FieldReference]) {
+            $key = $op.DeclaringType.Name + "::" + $op.Name
+            $out[$key] = $true
+            if ($i.OpCode.Name -eq "stfld" -or $i.OpCode.Name -eq "stsfld") { $out["set " + $key] = $true }
+        }
         if ($op -is [Mono.Cecil.MethodReference]) { $out[$op.DeclaringType.Name + "::" + $op.Name] = $true }
     }
     return $out
@@ -138,7 +144,7 @@ function Get-Touches($m) {
 $wiring = @(
     @("MobTracker.WatchAlerts", "Update", @("ModConfig::AlertStars", "StarFilters::Accepts", "Character::GetLevel"), @("ModConfig::ListStars", "EntityListWindow::_appliedListStars")),
     @("MobTracker.EntityListWindow", "Refresh", @("EntityListWindow::_appliedListStars", "StarFilters::Accepts", "Character::GetLevel"), @("ModConfig::AlertStars")),
-    @("MobTracker.EntityListWindow", "Update", @("ModConfig::ListStars", "EntityListWindow::_appliedListStars"), @("ModConfig::AlertStars"))
+    @("MobTracker.EntityListWindow", "Update", @("ModConfig::ListStars", "EntityListWindow::_appliedListStars", "set EntityListWindow::_appliedListStars"), @("ModConfig::AlertStars"))
 )
 foreach ($w in $wiring) {
     $checks++
@@ -150,6 +156,35 @@ foreach ($w in $wiring) {
     if ($missing.Count -eq 0 -and $wrong.Count -eq 0) { Ok ("{0}.{1} uses {2}" -f $w[0].Split('.')[-1], $w[1], ($w[2] -join ", ")) }
     else { Fail ("{0}.{1}: missing {2}; must not use {3}" -f $w[0].Split('.')[-1], $w[1], ($missing -join ", "), ($wrong -join ", ")) }
 }
+# The two toolbar rows: from the "List:" label to the "Alerts:" label only the list's setting may be touched, from
+# there to the end of DrawWindow only the alerts'. Swapping the rows compiles and passes everything else.
+$checks++
+$dw = Get-Method "MobTracker.EntityListWindow" "DrawWindow"
+$iList = -1; $iAlerts = -1; $dwIns = @()
+if ($dw) {
+    $dwIns = @($dw.Body.Instructions)
+    for ($k = 0; $k -lt $dwIns.Count; $k++) {
+        if ($dwIns[$k].OpCode.Name -ne "ldstr") { continue }
+        if ("$($dwIns[$k].Operand)" -eq "List:") { $iList = $k } elseif ("$($dwIns[$k].Operand)" -eq "Alerts:") { $iAlerts = $k }
+    }
+}
+function Get-StarSettings($from, $to) {
+    $o = @{}
+    for ($k = $from; $k -lt $to; $k++) {
+        $op = $dwIns[$k].Operand
+        if ($op -is [Mono.Cecil.FieldReference] -and $op.DeclaringType.Name -eq "ModConfig" -and $op.Name -like "*Stars") { $o[$op.Name] = $true }
+    }
+    return $o
+}
+if ($iList -ge 0 -and $iAlerts -gt $iList) {
+    $listRow = Get-StarSettings $iList $iAlerts
+    $alertRow = Get-StarSettings $iAlerts $dwIns.Count
+    if ($listRow.ContainsKey("ListStars") -and -not $listRow.ContainsKey("AlertStars") -and $alertRow.ContainsKey("AlertStars") -and -not $alertRow.ContainsKey("ListStars")) {
+        Ok "EntityListWindow.DrawWindow: the List: row uses ModConfig::ListStars only, the Alerts: row ModConfig::AlertStars only"
+    } else {
+        Fail ("EntityListWindow.DrawWindow: the List: row uses {0}; the Alerts: row uses {1}" -f (($listRow.Keys | Sort-Object) -join ", "), (($alertRow.Keys | Sort-Object) -join ", "))
+    }
+} else { Fail "EntityListWindow.DrawWindow: the 'List:' and 'Alerts:' row labels were not found in that order" }
 
 Write-Output "== assembly references =="
 foreach ($ar in $plug.AssemblyReferences) {

@@ -51,11 +51,12 @@ namespace MobTracker
             ListStars = config.Bind("General", "ListStarFilter", StarFilter.All,
                 "Which star levels the creature list's nearby view shows: All, NoStars, OneStar, TwoStars, or TwoOrMoreStars " +
                 "(two stars and above). The window's 'List:' row sets it; the all-types view is not filtered. " +
-                "Type one of the names exactly: a number or a comma list means something else.");
+                "A number typed here counts stars: 0 = NoStars, 1 = OneStar, 2 = TwoStars, 3 = TwoOrMoreStars, 4 = All.");
             AlertStars = config.Bind("Alerts", "AlertStarFilter", StarFilter.All,
                 "Which star levels of a watched creature type alert, and are auto-tracked: All, NoStars, OneStar, TwoStars, or " +
                 "TwoOrMoreStars (two stars and above). The window's 'Alerts:' row sets it. A creature left out now can still " +
-                "alert later if the filter changes. Type one of the names exactly: a number or a comma list means something else.");
+                "alert later if the filter changes. A number typed here counts stars: 0 = NoStars, 1 = OneStar, 2 = TwoStars, " +
+                "3 = TwoOrMoreStars, 4 = All.");
             WarnIfUnknown(ListStars);
             WarnIfUnknown(AlertStars);
             ListStars.SettingChanged += (sender, args) => WarnIfUnknown(ListStars);
@@ -66,14 +67,15 @@ namespace MobTracker
         }
 
         /// <summary>
-        /// BepInEx parses an enum leniently: "2" is OneStar (the second name, not two stars), and "OneStar, TwoStars" is
-        /// the two ORed together. Anything that lands outside the five names works as All; say so once, in the log.
+        /// BepInEx parses an enum leniently: a number is the member with that value (StarFilter is numbered by star
+        /// count, so "2" is TwoStars), and "OneStar, TwoStars" is the two ORed together. Anything that lands outside
+        /// the five members works as All; say so once, in the log.
         /// </summary>
         private static void WarnIfUnknown(ConfigEntry<StarFilter> entry)
         {
             if (!StarFilters.IsDefined(entry.Value))
                 MobTrackerPlugin.Log.LogWarning(entry.Definition.Key + " is set to " + (int)entry.Value +
-                    ", which is not one of All, NoStars, OneStar, TwoStars, TwoOrMoreStars; it works as All.");
+                    ", which is not one of NoStars (0), OneStar (1), TwoStars (2), TwoOrMoreStars (3), All (4); it works as All.");
         }
 
         public static void ToggleWatch(string prefabName)

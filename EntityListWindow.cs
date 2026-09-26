@@ -43,9 +43,10 @@ namespace MobTracker
         private Row? _pendingFind;
 
         // The list's star filter as of the last refresh; a change (toolbar or cfg) refreshes at once.
-        private StarFilter _appliedListStars;
+        private StarFilter _appliedListStars = StarFilter.All; // default(StarFilter) is NoStars
 
-        // Built once, so drawing the star toolbars allocates nothing.
+        // Built once, so the toolbars do not rebuild their five labels on every event (the string[] overload would).
+        // Unity's toolbar itself still makes a few small allocations per call.
         private static readonly GUIContent[] StarChoices = BuildStarChoices();
         private static readonly GUILayoutOption[] RowLabelWidth = { GUILayout.Width(50f) };
 

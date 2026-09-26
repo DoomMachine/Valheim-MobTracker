@@ -78,6 +78,20 @@ namespace MobTracker
             Check("toolbar: an out-of-range value shows as the All segment, and an out-of-range index picks All",
                 StarFilters.Index((StarFilter)7) == 0 && StarFilters.Index((StarFilter)(-1)) == 0
                 && StarFilters.FromIndex(9) == StarFilter.All && StarFilters.FromIndex(-1) == StarFilter.All, "");
+            Check("toolbar: segments read All, No star, 1 star, 2 stars, 2+ stars, left to right",
+                string.Join(",", labels) == "All,No star,1 star,2 stars,2+ stars", string.Join(",", labels));
+
+            // BepInEx reads a hand-typed enum with Enum.Parse(type, text, ignoreCase: true), so a number is the member
+            // with that value. StarFilter is numbered by star count, so the number typed is the number of stars.
+            Check("cfg: a typed 0, 1, 2 or 3 means that many stars (3 = two or more), 4 means All",
+                (StarFilter)Enum.Parse(typeof(StarFilter), "0", true) == StarFilter.NoStars
+                && (StarFilter)Enum.Parse(typeof(StarFilter), "1", true) == StarFilter.OneStar
+                && (StarFilter)Enum.Parse(typeof(StarFilter), "2", true) == StarFilter.TwoStars
+                && (StarFilter)Enum.Parse(typeof(StarFilter), "3", true) == StarFilter.TwoOrMoreStars
+                && (StarFilter)Enum.Parse(typeof(StarFilter), "4", true) == StarFilter.All, "");
+            Check("cfg: names are read case-insensitively; a number above 4 is not a known choice",
+                (StarFilter)Enum.Parse(typeof(StarFilter), "twostars", true) == StarFilter.TwoStars
+                && !StarFilters.IsDefined((StarFilter)Enum.Parse(typeof(StarFilter), "7", true)), "");
         }
 
         // What the search box and the watchlist already did before the star filter.
