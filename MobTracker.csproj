@@ -1,32 +1,62 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Build:  dotnet build MobTracker.csproj -c Release     (build\MobTracker.dll - installs nothing)
+    Needs the .NET SDK, the .NET Framework 4.8 targeting pack, and Valheim with BepInEx: set ValheimDir
+    (-p:ValheimDir=...) or the VALHEIM environment variable if the game is not at the default path.
+    tools\publicize.ps1 runs first and writes the publicized game assemblies the compiler needs into lib\.
+  -->
+
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <AssemblyName>MobTracker</AssemblyName>
     <RootNamespace>MobTracker</RootNamespace>
     <Version>0.1.0</Version>
+    <!-- Emits SecurityPermission(SkipVerification) and UnverifiableCode, as the publicizer package did: part of
+         how the plugin reaches private game members at run time (IgnoresAccessChecksTo.cs). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- No .pdb and no path in the DLL: a symbol file names the folder it was built in. -->
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <Deterministic>true</Deterministic>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>build\</OutputPath>
+    <!-- Unity's assemblies bind other System.* versions than net48's; harmless for a plugin. -->
+    <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
+
+    <ValheimDir Condition="'$(ValheimDir)' == '' and '$(VALHEIM)' != ''">$(VALHEIM)</ValheimDir>
+    <ValheimDir Condition="'$(ValheimDir)' == ''">E:\SteamLibrary\steamapps\common\Valheim</ValheimDir>
+    <Managed>$(ValheimDir)\valheim_Data\Managed</Managed>
+    <Publicized>$(MSBuildThisFileDirectory)lib\publicized</Publicized>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
-    <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.2" PrivateAssets="all" ExcludeAssets="runtime" />
+    <!-- The plugin's sources are the .cs files in this folder; tests\ is a project of its own. -->
+    <Compile Include="*.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="BepInEx"><HintPath>$(VALHEIM)\BepInEx\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="0Harmony"><HintPath>$(VALHEIM)\BepInEx\core\0Harmony.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="assembly_valheim" Publicize="true"><HintPath>$(VALHEIM)\valheim_Data\Managed\assembly_valheim.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="assembly_utils" Publicize="true"><HintPath>$(VALHEIM)\valheim_Data\Managed\assembly_utils.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="Splatform"><HintPath>$(VALHEIM)\valheim_Data\Managed\Splatform.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="assembly_guiutils"><HintPath>$(VALHEIM)\valheim_Data\Managed\assembly_guiutils.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine"><HintPath>$(VALHEIM)\valheim_Data\Managed\UnityEngine.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.CoreModule"><HintPath>$(VALHEIM)\valheim_Data\Managed\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(VALHEIM)\valheim_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.AIModule"><HintPath>$(VALHEIM)\valheim_Data\Managed\UnityEngine.AIModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.AudioModule"><HintPath>$(VALHEIM)\valheim_Data\Managed\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(VALHEIM)\valheim_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(VALHEIM)\valheim_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="netstandard"><HintPath>$(VALHEIM)\valheim_Data\Managed\netstandard.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx"><HintPath>$(ValheimDir)\BepInEx\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(ValheimDir)\BepInEx\core\0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="assembly_valheim"><HintPath>$(Publicized)\assembly_valheim.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="assembly_utils"><HintPath>$(Publicized)\assembly_utils.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Splatform"><HintPath>$(Managed)\Splatform.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="assembly_guiutils"><HintPath>$(Managed)\assembly_guiutils.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(Managed)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(Managed)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(Managed)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AIModule"><HintPath>$(Managed)\UnityEngine.AIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(Managed)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(Managed)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(Managed)\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="netstandard"><HintPath>$(Managed)\netstandard.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
+
+  <!-- Make (or refresh, after a game update) the publicized assemblies before references resolve. -->
+  <Target Name="PublicizeGameAssemblies" BeforeTargets="ResolveAssemblyReferences">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)tools\publicize.ps1&quot; -ValheimDir &quot;$(ValheimDir)&quot;" />
+  </Target>
 
 </Project>

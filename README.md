@@ -35,4 +35,6 @@ dependencies, nothing to install on a server.
 | `Alerts.AlertVolume` | `0.8` | Ding volume |
 | `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking |
 
-Build and deploy: `./deploy.ps1 -Project MobTracker`.
+Build: `dotnet build MobTracker.csproj -c Release` (needs the game with BepInEx; see the comment at the top of
+`MobTracker.csproj`). `tools/preflight.ps1` checks a build against the installed game - run it after every
+Valheim update - and `tools/deploy.ps1` installs one, keeping the DLL it replaces.

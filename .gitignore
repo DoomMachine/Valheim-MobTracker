@@ -1,0 +1,11 @@
+# build output
+build/
+dist/
+obj/
+bin/
+*.rsp
+.vs/
+*.user
+
+# the publicized copy of the game's assembly_valheim.dll (tools/publicize.ps1) - game code, never committed
+lib/
