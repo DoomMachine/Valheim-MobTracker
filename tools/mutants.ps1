@@ -7,8 +7,8 @@
   Works in build\mutants\ (git ignores build\), on a copy of the working tree's tracked files and of lib\, so the
   repository itself is never edited. Each mutant is one regex replacement that must match exactly once. First the
   unmutated copy is built and must PASS, so a failure below is the mutant's and not the copy's. Exits 1 if
-  -ValheimDir holds no Valheim install, the clean copy fails, a mutant cannot be planted or built, or any
-  mutant passes preflight.
+  -ValheimDir holds no Valheim install, an -Only id is not one of its mutants, the clean copy fails, a mutant
+  cannot be planted or built, or any mutant passes preflight.
 
   The game folder is -ValheimDir, else the VALHEIM environment variable, else the default - as for the build and
   the other tools; it reaches the copy's build and preflight through VALHEIM.
@@ -39,7 +39,7 @@ if ($ValheimDir) {
     }
     $env:VALHEIM = (Resolve-Path -LiteralPath $ValheimDir).ProviderPath.TrimEnd('\')
 }
-$Only = @($Only | ForEach-Object { $_ -split "," } | Where-Object { $_ })
+$Only = @($Only | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $repo = Split-Path $PSScriptRoot -Parent
 $work = Join-Path $repo "build\mutants"
 $enc = New-Object System.Text.UTF8Encoding($false)
@@ -71,6 +71,12 @@ $mutants = @(
     @("F16 a saved pin through Minimap.DiscoverLocation", "SpawnFinder.cs", ("(" + [regex]::Escape("Tracker.TrackPoint(new Vector3(areas[0].x, WaterLevel, areas[0].y), displayName + "" spawn area"");") + ")"), '${1} if (map != null) map.DiscoverLocation(Vector3.zero, Minimap.PinType.Icon3, "", false);'),
     @("F17 the delete patch takes pins not shown on the map", "SpawnFinder.cs", "[ \t]*if \(pin\.m_uiElement == null \|\| !pin\.m_uiElement\.gameObject\.activeInHierarchy\)\r?\n[ \t]*continue;\r?\n", "")
 )
+$ids = @($mutants | ForEach-Object { ($_[0] -split " ")[0] })
+$unknown = @($Only | Where-Object { $ids -notcontains $_ })
+if ($unknown.Count -gt 0) {
+    Write-Output ("Unknown mutant id(s): {0}. The ids are: {1}" -f ($unknown -join ", "), ($ids -join ", "))
+    Finish 1
+}
 
 function Build-And-Check {
     # Returns the lines to show and preflight's exit code ($null if the copy did not build); it prints nothing
@@ -79,10 +85,15 @@ function Build-And-Check {
     # compiled output for up to date.
     $dll = Join-Path $work "build\MobTracker.dll"
     if (Test-Path -LiteralPath $dll) { Remove-Item -LiteralPath $dll }
+    # Continue around the child processes: under Stop, their error output through 2>&1 would end the run with a
+    # NativeCommandError rather than count as a failed build or a caught mutant.
+    $ErrorActionPreference = "Continue"
     $b = & dotnet build (Join-Path $work "MobTracker.csproj") -c Release --no-incremental -nologo -v q 2>&1 | Out-String
     if (-not (Test-Path -LiteralPath $dll)) { return [pscustomobject]@{ Code = $null; Lines = @("    BUILD FAILED", $b) } }
-    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $work "tools\preflight.ps1") -Plugin $dll 2>&1
-    $code = $LASTEXITCODE
+    $global:LASTEXITCODE = $null   # a preflight that could not start must not read dotnet's 0 as a pass
+    $console = (Join-Path $PSHOME $(if ($PSVersionTable.PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }))   # not the host: inside the ISE that is the ISE
+    $out = & $console -NoProfile -ExecutionPolicy Bypass -File (Join-Path $work "tools\preflight.ps1") -Plugin $dll 2>&1 | ForEach-Object { "$_" }
+    $code = $global:LASTEXITCODE
     $lines = @($out | Where-Object { "$_" -cmatch "FAIL" } | ForEach-Object { "      $_" })
     return [pscustomobject]@{ Code = $code; Lines = $lines }
 }

@@ -22,7 +22,9 @@
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <Deterministic>true</Deterministic>
-    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- No default item globs at all (not only Compile): a stray .resx in a folder here - even an ignored one
+         such as retired\ - would otherwise be compiled into the DLL. The one item list is below. -->
+    <EnableDefaultItems>false</EnableDefaultItems>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>build\</OutputPath>
     <!-- Unity's assemblies bind other System.* versions than net48's; harmless for a plugin. -->

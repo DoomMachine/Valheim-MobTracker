@@ -1,20 +1,27 @@
 <#
 .SYNOPSIS
-  Builds the release zip from a clean checkout: dist\MobTracker-<version>.zip, the same bytes every time.
+  Builds the release zip from a clean checkout: dist\MobTracker-<version>.zip, the same bytes from the same inputs.
 
 .DESCRIPTION
   Refuses unless the checkout is clean - no changed or untracked files, and no ignored file that can change a
   build (a MobTracker.csproj.user, a Directory.Build.* file; only the tools' own output folders may be there) -
-  so the zip is the commit and nothing else; a release's zip comes from a fresh clone of its tag. Builds
-  MobTracker.csproj from scratch (Release, with no debug symbols whatever a local .csproj.user says), checks that
-  the DLL's version names this commit and that it carries no symbol-file path, and zips three entries in this
-  order: MobTracker.dll as built, and README.md and LICENSE exactly as the commit stores them. Every entry
+  empties build\, obj\ and lib\ before building, so nothing an earlier build left there (a stale publicized
+  assembly, an extra obj\MobTracker.csproj.*.props) reaches the zip, and builds with Directory.Build.* and
+  Directory.Packages.props files above the checkout and MSBuild response files switched off. Other inputs
+  besides the commit remain - among them the .NET SDK and the .NET Framework 4.8 targeting pack, the game's and
+  BepInEx's files, per-user MSBuild imports and the shell's environment (MSBuild reads environment variables as
+  properties) - so build in a plain shell. A release's zip comes from a fresh clone of its tag.
+
+  It builds MobTracker.csproj from scratch (Release, with no debug symbols whatever a local .csproj.user says),
+  checks that the DLL's version names this commit and that it carries no symbol-file path, and zips three entries
+  in this order: MobTracker.dll as built, and README.md and LICENSE exactly as the commit stores them. Every entry
   carries the commit's time.
 
   So the same commit gives a byte-identical zip when this runs in Windows PowerShell 5.1 (its .NET Framework does
   the compressing; PowerShell 7 compresses differently, so this script refuses to run there) with the same .NET
-  SDK, against the same Valheim and BepInEx files - which is how a release's zip can be checked. It prints the
-  zip's SHA-256, writes it beside the zip as <zip>.sha256, and names the SDK, BepInEx and game files it used.
+  SDK, against the same Valheim and BepInEx files and with the other inputs above unchanged - which is how a
+  release's zip can be checked. It prints the zip's SHA-256, writes it beside the zip as <zip>.sha256, and names
+  the SDK, BepInEx and game files it used.
 
   The game folder is -ValheimDir, else the VALHEIM environment variable, else the default - as for the build.
 
@@ -59,10 +66,10 @@ function Git-Bytes([string[]]$arguments) {
 }
 function Git-Text([string[]]$arguments) { return [Text.Encoding]::UTF8.GetString((Git-Bytes $arguments)).Trim() }
 
-if (Git-Text @("status", "--porcelain")) { throw "The working tree has changes - commit or stash them; the zip must be exactly a commit." }
+if (Git-Text @("status", "--porcelain", "--untracked-files=normal")) { throw "The working tree has changes - commit or stash them; the zip must be exactly a commit." }
 # Ignored files are invisible to the check above, and some change a build without changing the commit.
 $outputs = @("build/", "dist/", "lib/", "obj/", "bin/", "retired/", ".vs/", "tests/obj/", "tests/bin/")
-$ignored = @((Git-Text @("status", "--porcelain", "--ignored")) -split "`n" | Where-Object { $_.StartsWith("!! ") } |
+$ignored = @((Git-Text @("status", "--porcelain", "--ignored", "--untracked-files=normal")) -split "`n" | Where-Object { $_.StartsWith("!! ") } |
     ForEach-Object { $_.Substring(3).Trim() } | Where-Object { $outputs -notcontains $_ })
 if ($ignored.Count -gt 0) {
     throw ("Ignored files that can change the build: {0} - package from a fresh clone." -f ($ignored -join ", "))
@@ -80,9 +87,24 @@ if ($tag -ne "v$version") {
     Write-Warning "HEAD is not the tag v$version, so this zip is not that release's asset - upload only from a clone of the tag."
 }
 
+# The build's own folders are rebuilt from nothing: lib\ is written again by tools\publicize.ps1, obj\ by the
+# restore, build\ by the compiler. A directory link in them is refused rather than emptied through.
+$generated = @("build", "obj", "lib" | ForEach-Object { Join-Path $repo $_ } | Where-Object { Test-Path -LiteralPath $_ })
+foreach ($dir in $generated) {   # all three checked before any is emptied
+    $isLink = (Get-Item -LiteralPath $dir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint
+    $links = @(Get-ChildItem -LiteralPath $dir -Recurse -Force -Attributes ReparsePoint -ErrorAction SilentlyContinue)
+    if ($isLink -or $links.Count -gt 0) { throw "$dir is or holds a directory link - package from a fresh clone." }
+}
+foreach ($dir in $generated) { [IO.Directory]::Delete($dir, $true) }
+
 # DebugType=none on the command line: a global property, so an ignored MobTracker.csproj.user cannot turn symbols
 # (and the build folder's path) back on.
-$build = @("build", (Join-Path $repo "MobTracker.csproj"), "-c", "Release", "--no-incremental", "-nologo", "-v", "q", "-p:DebugType=none")
+# Directory.Build.* and Directory.Packages.props files above the checkout, and MSBuild response files, are switched
+# off too: global properties and -noAutoResponse, since a property inside the project would come too late for the
+# SDK's imports.
+$build = @("build", (Join-Path $repo "MobTracker.csproj"), "-c", "Release", "--no-incremental", "-nologo", "-v", "q", "-p:DebugType=none",
+    "-p:ImportDirectoryBuildProps=false", "-p:ImportDirectoryBuildTargets=false", "-p:ImportDirectoryPackagesProps=false",
+    "-noAutoResponse")
 if ($ValheimDir) { $build += "-p:ValheimDir=$ValheimDir" }
 & dotnet @build
 if ($LASTEXITCODE -ne 0) { throw "The build failed." }

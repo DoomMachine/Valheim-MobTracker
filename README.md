@@ -79,11 +79,12 @@ a new version adds its own with their defaults. When the game starts, `BepInEx/L
 `MobTracker.csproj`). `tools/preflight.ps1` checks a build against the installed game - run it after every
 Valheim update - and `tools/deploy.ps1` installs one, moving the DLL it replaces into `retired/` in this folder
 (`-KeepDir` to choose another). The tools find the game the way the build does: `-ValheimDir`, else the
-`VALHEIM` environment variable; they take named arguments only, and reject a misspelt one. From `cmd.exe`
-(`powershell -File ...`), write a quoted game path without a trailing backslash: `"...\Valheim\"` ends in an
-escaped quote there. `tools/mutants.ps1` plants the defects preflight is there to catch, one at a
-time in a copy under `build/`, and checks that each one fails it. `tools/package.ps1` makes a release's zip
-from a clean checkout. Run in Windows PowerShell 5.1 with the same .NET SDK, against the same Valheim and
+`VALHEIM` environment variable; they take named arguments only, and reject a misspelt one. When a tool is
+started with `powershell -File ...`, write a quoted game path without a trailing backslash: `"...\Valheim\"`
+can end in an escaped quote there (always from `cmd.exe` or a shortcut; from Windows PowerShell when the path
+has a space). `tools/mutants.ps1` plants the defects preflight is there to catch, one at a time in a copy under
+`build/`, and checks that each one fails it. `tools/package.ps1` makes a release's zip from a clean checkout.
+Run in Windows PowerShell 5.1, in a plain shell, with the same .NET SDK and against the same Valheim and
 BepInEx files, the same commit gives the same bytes, so a downloaded zip can be checked against its tag; each
 release's notes name the versions used. `tests/` holds the rules that need no game (`dotnet run` there).
 
