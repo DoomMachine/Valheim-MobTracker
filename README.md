@@ -3,9 +3,16 @@
 Client-side creature list, tracker and spawn alerts for Valheim. Plain BepInEx, no other
 dependencies, nothing to install on a server.
 
-- **F7** opens the list of every creature loaded around you (roughly the zones within ~100-200 m -
-  creatures further away do not exist on your client). Type to search by name or prefab name.
-  **Esc** or F7 closes it.
+- **F7** opens the list of every creature loaded around you - creatures further away do not exist on your
+  client. How far that reaches follows the game's "Draw distance" graphics setting: roughly 130 to 290 m at
+  the default and one step up. Creatures inside a dungeon above or below you are loaded too, and show about
+  5 km away, because distances are measured in 3D. Type to search by name or prefab name. **Esc** or F7
+  closes it.
+- **Star filters**: two rows in the window, each a choice of *All*, *No star*, *1 star*, *2 stars* and
+  *2+ stars* (two stars and above - natural spawns stop at two; the spawn command and mods can go higher).
+  **List:** filters the nearby list; **Alerts:** filters which watched creatures alert and are auto-tracked.
+  They are independent, so you can browse every star level while being alerted only for, say, two-star
+  Trolls. Stars are shown as asterisks: `Deer` has none, `Deer *` one.
 - **Track** follows that one creature: a 3D arrow over your head, or with `GuideMode = GroundPath`
   a walkable line on the ground. The path builds over a few seconds on long distances; while it
   is missing or incomplete (flying/swimming targets, cliffs) the arrow shows as well.
@@ -17,7 +24,8 @@ dependencies, nothing to install on a server.
   nearest areas (at least 400 m apart) get map pins, the arrow points at the nearest, and the HUD
   message says what the rule is ("Swamp, 5000-8000m from centre, day+night"). Only the zone you
   are standing in rolls for spawns, so walk *through* the area rather than waiting beside it.
-  Creatures that only come from spawners, raids or summons have no rule to find.
+  Creatures that only come from spawners, raids or summons have no rule to find. The pins are yours
+  alone: they are never saved with your map or shared through a Cartography Table.
 - **Guide: 3D arrow / ground path** switches the tracking guide without touching the config file.
 - **Watch** alerts on that creature *type*: a centre-screen message and a ding whenever one
   starts existing near you (spawned or walked into range - the same thing to a client). Tamed
@@ -28,13 +36,31 @@ dependencies, nothing to install on a server.
 | Setting | Default | |
 |---|---|---|
 | `General.ListKey` | `F7` | Toggle the list |
+| `General.ListStarFilter` | `All` | The list's star filter: `All`, `NoStars`, `OneStar`, `TwoStars` or `TwoOrMoreStars`, typed exactly (also the **List:** row) |
 | `Tracking.GuideMode` | `Arrow` | `Arrow` or `GroundPath` |
 | `Tracking.ArrowSize` / `ArrowHeight` | `0.6` / `2.6` | Metres |
-| `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. Edit by hand to watch something not currently around |
+| `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type; a hand edit of the file takes effect at the next start |
 | `Alerts.AlertRadius` | `0` | Only alert within this many metres; 0 = anywhere loaded |
 | `Alerts.AlertVolume` | `0.8` | Ding volume |
 | `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking |
+| `Alerts.AlertStarFilter` | `All` | The alerts' star filter, same choices (also the **Alerts:** row) |
 
-Build: `dotnet build MobTracker.csproj -c Release` (needs the game with BepInEx; see the comment at the top of
+## Building
+
+`dotnet build MobTracker.csproj -c Release` (needs the game with BepInEx; see the comment at the top of
 `MobTracker.csproj`). `tools/preflight.ps1` checks a build against the installed game - run it after every
-Valheim update - and `tools/deploy.ps1` installs one, keeping the DLL it replaces.
+Valheim update - and `tools/deploy.ps1` installs one, keeping the DLL it replaces. `tests/` holds the rules
+that need no game (`dotnet run` there).
+
+## Credits
+
+The original idea, concept and initial version of MobTracker are by **null** (also **nullptr**), published
+here with their permission. Its extensions from 0.2.0 are conceived and directed by DoomMachine and written by
+Claude, Anthropic's AI model, in Claude Code under DoomMachine's direction; the commits are DoomMachine's, and
+Claude is credited here rather than as a co-author.
+
+## History
+
+- **0.2.0** - star filters for the list and for watch alerts.
+- **0.1.0** - the original MobTracker by null: creature list, watch alerts, tracking arrow and ground path,
+  and Find area.

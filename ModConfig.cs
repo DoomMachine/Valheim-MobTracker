@@ -20,6 +20,8 @@ namespace MobTracker
         public static ConfigEntry<float> AlertRadius;
         public static ConfigEntry<float> AlertVolume;
         public static ConfigEntry<bool> AutoTrack;
+        public static ConfigEntry<StarFilter> ListStars;
+        public static ConfigEntry<StarFilter> AlertStars;
 
         /// <summary>Parsed view of <see cref="WatchlistEntry"/>; rebuilt whenever the entry changes.</summary>
         public static HashSet<string> Watchlist { get; private set; }
@@ -45,8 +47,33 @@ namespace MobTracker
             AutoTrack = config.Bind("Alerts", "AutoTrack", true,
                 "Start tracking a watched creature the moment it alerts. Never replaces a creature you are already tracking.");
 
+            // Two independent filters: browse every star level while being alerted only for, say, two-star creatures.
+            ListStars = config.Bind("General", "ListStarFilter", StarFilter.All,
+                "Which star levels the creature list's nearby view shows: All, NoStars, OneStar, TwoStars, or TwoOrMoreStars " +
+                "(two stars and above). The window's 'List:' row sets it; the all-types view is not filtered. " +
+                "Type one of the names exactly: a number or a comma list means something else.");
+            AlertStars = config.Bind("Alerts", "AlertStarFilter", StarFilter.All,
+                "Which star levels of a watched creature type alert, and are auto-tracked: All, NoStars, OneStar, TwoStars, or " +
+                "TwoOrMoreStars (two stars and above). The window's 'Alerts:' row sets it. A creature left out now can still " +
+                "alert later if the filter changes. Type one of the names exactly: a number or a comma list means something else.");
+            WarnIfUnknown(ListStars);
+            WarnIfUnknown(AlertStars);
+            ListStars.SettingChanged += (sender, args) => WarnIfUnknown(ListStars);
+            AlertStars.SettingChanged += (sender, args) => WarnIfUnknown(AlertStars);
+
             Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value);
             WatchlistEntry.SettingChanged += (sender, args) => Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value);
+        }
+
+        /// <summary>
+        /// BepInEx parses an enum leniently: "2" is OneStar (the second name, not two stars), and "OneStar, TwoStars" is
+        /// the two ORed together. Anything that lands outside the five names works as All; say so once, in the log.
+        /// </summary>
+        private static void WarnIfUnknown(ConfigEntry<StarFilter> entry)
+        {
+            if (!StarFilters.IsDefined(entry.Value))
+                MobTrackerPlugin.Log.LogWarning(entry.Definition.Key + " is set to " + (int)entry.Value +
+                    ", which is not one of All, NoStars, OneStar, TwoStars, TwoOrMoreStars; it works as All.");
         }
 
         public static void ToggleWatch(string prefabName)

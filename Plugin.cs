@@ -4,10 +4,13 @@ using HarmonyLib;
 
 namespace MobTracker
 {
-    [BepInPlugin(PluginId, "MobTracker", "0.1.0")]
+    [BepInPlugin(PluginId, "MobTracker", Version)]
     public class MobTrackerPlugin : BaseUnityPlugin
     {
         public const string PluginId = "com.mobtracker.plugin";
+
+        /// <summary>Also MobTracker.csproj's Version; tools/preflight.ps1 checks that the two agree.</summary>
+        public const string Version = "0.2.0";
 
         internal static ManualLogSource Log;
 
@@ -27,7 +30,7 @@ namespace MobTracker
             _harmony = new Harmony(PluginId);
             _harmony.PatchAll();
 
-            Log.LogInfo("MobTracker 0.1.0 loaded");
+            Log.LogInfo("MobTracker " + Version + " loaded");
         }
 
         private void OnDestroy()

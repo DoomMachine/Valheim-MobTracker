@@ -18,7 +18,7 @@
 #>
 param(
     [string]$Plugin = "",
-    [string]$ExpectedVersion = "0.1.0",
+    [string]$ExpectedVersion = "0.2.0",
     [string]$ValheimDir = "E:\SteamLibrary\steamapps\common\Valheim"
 )
 $ErrorActionPreference = "Stop"
@@ -46,6 +46,19 @@ $bep = $null
 foreach ($t in $plug.Types) { foreach ($ca in $t.CustomAttributes) { if ($ca.AttributeType.Name -eq "BepInPlugin") { $bep = @($ca.ConstructorArguments | ForEach-Object { "$($_.Value)" }) } } }
 if ($bep -and $bep[0] -eq "com.mobtracker.plugin" -and $bep[1] -eq "MobTracker" -and $bep[2] -eq $ExpectedVersion) { Ok ("BepInPlugin {0} / {1} / {2}" -f $bep[0], $bep[1], $bep[2]) }
 else { Fail ("BepInPlugin is '{0}', expected 'com.mobtracker.plugin / MobTracker / {1}'" -f ($bep -join " / "), $ExpectedVersion) }
+# The version is written in two places (Plugin.cs's Version constant, the csproj's <Version>); both must agree.
+$checks++
+$asmVersion = "$($plug.Assembly.Name.Version)"
+$fileVersion = ""
+foreach ($ca in $plug.Assembly.CustomAttributes) { if ($ca.AttributeType.Name -eq "AssemblyFileVersionAttribute") { $fileVersion = "$($ca.ConstructorArguments[0].Value)" } }
+if ($asmVersion -eq "$ExpectedVersion.0" -and $fileVersion -eq "$ExpectedVersion.0") { Ok "assembly and file version $asmVersion (MobTracker.csproj)" }
+else { Fail ("assembly version {0}, file version {1}, expected {2}.0 - MobTracker.csproj's <Version> is out of step" -f $asmVersion, $fileVersion, $ExpectedVersion) }
+$checks++
+$loadedLine = "MobTracker $ExpectedVersion loaded"
+$awake = $null
+foreach ($t in $plug.Types) { if ($t.Name -eq "MobTrackerPlugin") { $awake = $t.Methods | Where-Object { $_.Name -eq "Awake" -and $_.HasBody } | Select-Object -First 1 } }
+$hasLine = $awake -and @($awake.Body.Instructions | Where-Object { $_.OpCode.Name -eq "ldstr" -and "$($_.Operand)" -eq $loadedLine }).Count -gt 0
+if ($hasLine) { Ok "Awake logs '$loadedLine'" } else { Fail "MobTrackerPlugin.Awake does not log '$loadedLine'" }
 
 Write-Output "== Harmony patch targets =="
 $gameModules = @{}
@@ -104,6 +117,39 @@ $fr = $null
 if ($fake) { try { $fr = $fake.Resolve() } catch { } }
 if ($fake -and $null -eq $fr) { Ok "a deliberately wrong member ($($fake.Name)) fails to resolve - the check is not vacuous" }
 else { Fail "the negative control did not fail to resolve (or no game method was found to build it from)" }
+
+Write-Output "== the star filters read the right setting =="
+# The list's filter and the alerts' filter are the same type, so crossing them compiles, passes the unit tests
+# (which cannot run the game-side code) and would still ship. Read the IL instead: the list refreshes from the
+# list's setting only, the alerts from the alerts' setting only, and both ask StarFilters.Accepts.
+function Get-Method($typeName, $methodName) {
+    foreach ($t in $plug.GetTypes()) { if ($t.FullName -eq $typeName) { return $t.Methods | Where-Object { $_.Name -eq $methodName -and $_.HasBody } | Select-Object -First 1 } }
+    return $null
+}
+function Get-Touches($m) {
+    $out = @{}
+    foreach ($i in $m.Body.Instructions) {
+        $op = $i.Operand
+        if ($op -is [Mono.Cecil.FieldReference]) { $out[$op.DeclaringType.Name + "::" + $op.Name] = $true }
+        if ($op -is [Mono.Cecil.MethodReference]) { $out[$op.DeclaringType.Name + "::" + $op.Name] = $true }
+    }
+    return $out
+}
+$wiring = @(
+    @("MobTracker.WatchAlerts", "Update", @("ModConfig::AlertStars", "StarFilters::Accepts", "Character::GetLevel"), @("ModConfig::ListStars", "EntityListWindow::_appliedListStars")),
+    @("MobTracker.EntityListWindow", "Refresh", @("EntityListWindow::_appliedListStars", "StarFilters::Accepts", "Character::GetLevel"), @("ModConfig::AlertStars")),
+    @("MobTracker.EntityListWindow", "Update", @("ModConfig::ListStars", "EntityListWindow::_appliedListStars"), @("ModConfig::AlertStars"))
+)
+foreach ($w in $wiring) {
+    $checks++
+    $m = Get-Method $w[0] $w[1]
+    if (-not $m) { Fail ("{0}.{1} not found" -f $w[0], $w[1]); continue }
+    $touches = Get-Touches $m
+    $missing = @($w[2] | Where-Object { -not $touches.ContainsKey($_) })
+    $wrong = @($w[3] | Where-Object { $touches.ContainsKey($_) })
+    if ($missing.Count -eq 0 -and $wrong.Count -eq 0) { Ok ("{0}.{1} uses {2}" -f $w[0].Split('.')[-1], $w[1], ($w[2] -join ", ")) }
+    else { Fail ("{0}.{1}: missing {2}; must not use {3}" -f $w[0].Split('.')[-1], $w[1], ($missing -join ", "), ($wrong -join ", ")) }
+}
 
 Write-Output "== assembly references =="
 foreach ($ar in $plug.AssemblyReferences) {

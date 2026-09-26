@@ -12,7 +12,7 @@
 #>
 param(
     [string]$Dll = (Join-Path (Split-Path $PSScriptRoot -Parent) "build\MobTracker.dll"),
-    [string]$ExpectedVersion = "0.1.0",
+    [string]$ExpectedVersion = "0.2.0",
     [string]$ValheimDir = "E:\SteamLibrary\steamapps\common\Valheim"
 )
 $ErrorActionPreference = "Stop"

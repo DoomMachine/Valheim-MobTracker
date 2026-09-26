@@ -42,6 +42,22 @@ namespace MobTracker
         private static string _pendingWatchToggle;
         private Row? _pendingFind;
 
+        // The list's star filter as of the last refresh; a change (toolbar or cfg) refreshes at once.
+        private StarFilter _appliedListStars;
+
+        // Built once, so drawing the star toolbars allocates nothing.
+        private static readonly GUIContent[] StarChoices = BuildStarChoices();
+        private static readonly GUILayoutOption[] RowLabelWidth = { GUILayout.Width(50f) };
+
+        private static GUIContent[] BuildStarChoices()
+        {
+            string[] labels = StarFilters.Labels();
+            var contents = new GUIContent[labels.Length];
+            for (int i = 0; i < labels.Length; i++)
+                contents[i] = new GUIContent(labels[i]);
+            return contents;
+        }
+
         private void Update()
         {
             Player player = Player.m_localPlayer;
@@ -82,11 +98,13 @@ namespace MobTracker
 
             // The rows and the watchlist only ever change here, never inside OnGUI: IMGUI lays a frame out in one
             // event and draws it in another, and throws if the control count differs between them.
-            if (Time.time < _nextRefresh && _query == _appliedQuery && _allTypes == _appliedAllTypes)
+            if (Time.time < _nextRefresh && _query == _appliedQuery && _allTypes == _appliedAllTypes
+                && ModConfig.ListStars.Value == _appliedListStars)
                 return;
 
             _nextRefresh = Time.time + 0.5f;
             _appliedQuery = _query;
+            _appliedListStars = ModConfig.ListStars.Value;
             if (_appliedAllTypes != _allTypes)
                 _scroll = Vector2.zero;
             _appliedAllTypes = _allTypes;
@@ -137,7 +155,7 @@ namespace MobTracker
             _rows.Clear();
             foreach (Character character in Character.GetAllCharacters())
             {
-                if (!Creature.IsListable(character))
+                if (!Creature.IsListable(character) || !StarFilters.Accepts(_appliedListStars, character.GetLevel()))
                     continue;
 
                 string prefab = Creature.PrefabName(character);
@@ -176,7 +194,12 @@ namespace MobTracker
             }
 
             GUI.matrix = Matrix4x4.Scale(Vector3.one * GuiScale);
-            _rect = GUILayout.Window(0x4D6F6254, _rect, DrawWindow, "MobTracker - " + _rows.Count + (_appliedAllTypes ? " creature types" : " creatures loaded"));
+            // With a list star filter on, the count is what it lets through, and the title says which filter - it is
+            // saved, so it may be one set in an earlier session.
+            string what = _appliedAllTypes ? " creature types"
+                : _appliedListStars == StarFilter.All ? " creatures loaded"
+                : " creatures, " + StarFilters.Label(_appliedListStars);
+            _rect = GUILayout.Window(0x4D6F6254, _rect, DrawWindow, "MobTracker - " + _rows.Count + what);
         }
 
         private void DrawWindow(int id)
@@ -199,6 +222,28 @@ namespace MobTracker
             bool autoTrack = GUILayout.Toggle(ModConfig.AutoTrack.Value, " Auto-track watched", GUILayout.ExpandWidth(false));
             if (autoTrack != ModConfig.AutoTrack.Value)
                 ModConfig.AutoTrack.Value = autoTrack;
+            GUILayout.EndHorizontal();
+
+            // Star filters: one of five, picked directly. Not a button that cycles through them - the alert poll runs
+            // every second and alerts each creature once, so every choice passed on the way would alert for real.
+            // A type in the all-types view has no level, so the list's filter does not apply there and is greyed out.
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("List:", RowLabelWidth);
+            bool enabled = GUI.enabled;
+            GUI.enabled = enabled && !_allTypes;
+            int listStars = StarFilters.Index(ModConfig.ListStars.Value);
+            int pickedList = GUILayout.Toolbar(listStars, StarChoices);
+            GUI.enabled = enabled;
+            if (pickedList != listStars)
+                ModConfig.ListStars.Value = StarFilters.FromIndex(pickedList);
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Alerts:", RowLabelWidth);
+            int alertStars = StarFilters.Index(ModConfig.AlertStars.Value);
+            int pickedAlerts = GUILayout.Toolbar(alertStars, StarChoices);
+            if (pickedAlerts != alertStars)
+                ModConfig.AlertStars.Value = StarFilters.FromIndex(pickedAlerts);
             GUILayout.EndHorizontal();
 
             if (_focusSearch && Event.current.type == EventType.Repaint)
@@ -248,7 +293,7 @@ namespace MobTracker
         {
             if (ModConfig.Watchlist.Count == 0)
             {
-                GUILayout.Label("Watching: nothing. Watch alerts on every creature of that type.");
+                GUILayout.Label("Watching: nothing. Watch alerts on every creature of that type the 'Alerts:' stars allow.");
                 return;
             }
 
