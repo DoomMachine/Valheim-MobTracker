@@ -71,9 +71,9 @@ namespace MobTracker
 
     /// <summary>
     /// The map's delete gesture - right click and the gamepad button end here, and so does a touch
-    /// long-press while a saved pin is in reach - removes the nearest SAVED pin, and cannot see a Find
-    /// area pin (save false). Left alone, a right
-    /// click on an area pin would delete the player's own pin next to it. So an area pin within reach
+    /// long-press while a saved pin shown on the map is in reach - removes the nearest SAVED pin shown
+    /// on the map, and cannot see a Find area pin (save false). Left alone, a right click on an area
+    /// pin would delete the player's own pin next to it. So an area pin within reach
     /// is removed instead, even when a pin of the player's is nearer: a deleted pin of theirs cannot be
     /// brought back, an area pin is one Find away.
     ///

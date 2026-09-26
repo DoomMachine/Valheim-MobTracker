@@ -26,7 +26,14 @@ $ErrorActionPreference = "Stop"
 $callersValheim = $env:VALHEIM
 function Finish([int]$code) { $env:VALHEIM = $callersValheim; exit $code }
 trap { $env:VALHEIM = $callersValheim; break }
-if ($ValheimDir) { $env:VALHEIM = $ValheimDir }
+if ($ValheimDir) {
+    # Resolved here, so a relative path means the same to the copy's build as to this shell.
+    if (-not (Test-Path (Join-Path $ValheimDir "valheim_Data\Managed\assembly_valheim.dll"))) {
+        Write-Output "No Valheim install at $ValheimDir (valheim_Data\Managed\assembly_valheim.dll not found)."
+        Finish 1
+    }
+    $env:VALHEIM = (Resolve-Path $ValheimDir).Path
+}
 $Only = @($Only | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 $repo = Split-Path $PSScriptRoot -Parent
 $work = Join-Path $repo "build\mutants"

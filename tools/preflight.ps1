@@ -227,7 +227,10 @@ foreach ($w in $wiring) {
     $missing = @($w[2] | Where-Object { -not $touches.ContainsKey($_) })
     $wrong = @($w[3] | Where-Object { $touches.ContainsKey($_) })
     if ($missing.Count -eq 0 -and $wrong.Count -eq 0) { Ok ("{0}.{1} uses {2}" -f $w[0].Split('.')[-1], $w[1], ($w[2] -join ", ")) }
-    else { Fail ("{0}.{1}: missing {2}; must not use {3}" -f $w[0].Split('.')[-1], $w[1], ($missing -join ", "), ($wrong -join ", ")) }
+    else {
+        $why = @($(if ($missing.Count) { "missing " + ($missing -join ", ") }), $(if ($wrong.Count) { "must not use " + ($wrong -join ", ") })) | Where-Object { $_ }
+        Fail ("{0}.{1}: {2}" -f $w[0].Split('.')[-1], $w[1], ($why -join "; "))
+    }
 }
 # The two toolbar rows: from the "List:" label to the "Alerts:" label only the list's setting may be touched, from
 # there to the end of DrawWindow only the alerts'. Swapping the rows compiles and passes everything else.
