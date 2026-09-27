@@ -11,7 +11,8 @@ https://github.com/DoomMachine/Valheim-MobTracker
   closes it.
 - **Star filters**: two rows in the window, each a choice of *All*, *No star*, *1 star*, *2 stars* and
   *2+ stars* (two stars and above - natural spawns stop at two; the spawn command and mods can go higher).
-  **List:** filters the nearby list; **Alerts:** filters which watched creatures alert and are auto-tracked.
+  **List:** filters the nearby list; **Alerts:** filters which watched creatures alert, are auto-tracked and are
+  picked by Always track nearest watched.
   They are independent, so you can browse every star level while being alerted only for, say, two-star
   Trolls. Stars are shown as asterisks: `Deer` has none, `Deer *` one.
 - **Track** follows that one creature: a 3D arrow over your head, or with `GuideMode = GroundPath`
@@ -49,6 +50,18 @@ https://github.com/DoomMachine/Valheim-MobTracker
 - **Watch** alerts on that creature *type*: a centre-screen message and a ding whenever one
   starts existing near you (spawned or walked into range - the same thing to a client). Tamed
   creatures never alert. Watched types are listed at the bottom of the window; click one to remove it.
+- **Always track nearest watched** (a checkbox in the window, off by default) is for hunting one kind of
+  creature for its drops. When the creature you are tracking is of a watched type and is lost - killed, or no
+  longer loaded on your client (out of range, despawned) - the tracker says "Lost track of" as always, waits 5
+  seconds, then points at the nearest creature of that type that passes the watch alert's filters: the
+  **Alerts:** stars, `AlertRadius`, never a tamed one. If there is none yet, it keeps looking once a second,
+  without a message, and points at the nearest one as soon as one turns up. A watch alert that names that type
+  during the wait still shows and dings, but leaves the choice to the wait; with an `AlertRadius` set, a creature
+  that alerted and has walked out of the radius by then is taken only once it is back inside. The wait ends when
+  you track something else (by hand, Find area, or Auto-track on an alert for another watched type), turn the
+  option off, unwatch the type or die. **Stop tracking** stays in the window (F7) while it waits, and calls it
+  off; nothing else shows that it is waiting. Losing a tamed creature, or stopping the tracking yourself, never
+  starts one.
 
 ## Installing
 
@@ -67,11 +80,12 @@ a new version adds its own with their defaults. When the game starts, `BepInEx/L
 | `General.ListStarFilter` | `All` | The list's star filter: `All`, `NoStars`, `OneStar`, `TwoStars` or `TwoOrMoreStars` (any case), or a number of stars: 0-3, 3 = two or more, 4 = All (also the **List:** row) |
 | `Tracking.GuideMode` | `Arrow` | `Arrow` or `GroundPath` |
 | `Tracking.ArrowSize` / `ArrowHeight` | `0.6` / `2.6` | Metres |
-| `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows, Guide, Auto-track) rewrites the file |
-| `Alerts.AlertRadius` | `0` | Only alert within this many metres; 0 = anywhere loaded |
+| `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows, Guide, the two tracking checkboxes) rewrites the file |
+| `Alerts.AlertRadius` | `0` | Only alert (or re-track, below) within this many metres; 0 = anywhere loaded |
 | `Alerts.AlertVolume` | `0.8` | Ding volume |
-| `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking |
+| `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor the choice Always track nearest watched is waiting to make for that type |
 | `Alerts.AlertStarFilter` | `All` | The alerts' star filter, same choices (also the **Alerts:** row) |
+| `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature of a watched type, not a tamed one, is lost, track the nearest one of that type that passes the watch alert's filters: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window) |
 
 ## Building
 
@@ -103,8 +117,11 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **0.3.0** - Always track nearest watched (an option, off by default): when a tracked creature of a watched
+  type is lost, the tracker moves on to the nearest one of that type. Not yet played in the game.
 - **0.2.0** - star filters for the list and for watch alerts. Find area follows boss progression and
   events, names the rule that placed the nearest pin, and its pins can be cleared; a right click on one
-  used to delete the nearest pin of yours instead. Not yet played in the game.
+  used to delete the nearest pin of yours instead. Ran through a play session without errors; its new features
+  not yet confirmed in the game.
 - **0.1.0** - the original MobTracker by null: creature list, watch alerts, tracking arrow and ground path
   (up to 250 m), and Find area.

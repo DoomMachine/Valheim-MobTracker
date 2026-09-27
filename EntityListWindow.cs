@@ -209,8 +209,12 @@ namespace MobTracker
             GUILayout.Label("Search", GUILayout.Width(50f));
             GUI.SetNextControlName(SearchControl);
             _query = GUILayout.TextField(_query);
-            if (Tracker.IsTracking && GUILayout.Button("Stop tracking", GUILayout.Width(100f)))
+            // Also while "always track nearest watched" waits for the next creature: the way to call that off.
+            if ((Tracker.IsTracking || NearestWatched.IsPending) && GUILayout.Button("Stop tracking", GUILayout.Width(100f)))
+            {
                 Tracker.Stop();
+                NearestWatched.Cancel();
+            }
             // Called straight from here: nothing drawn after it depends on HasPins, so the layout and the
             // events of this frame still see the same controls.
             if (SpawnFinder.HasPins && GUILayout.Button("Clear pins", GUILayout.Width(80f)))
@@ -224,9 +228,15 @@ namespace MobTracker
             bool path = ModConfig.Guide.Value == GuideMode.GroundPath;
             if (GUILayout.Button(path ? "Guide: ground path" : "Guide: 3D arrow"))
                 ModConfig.Guide.Value = path ? GuideMode.Arrow : GuideMode.GroundPath;
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
             bool autoTrack = GUILayout.Toggle(ModConfig.AutoTrack.Value, " Auto-track watched", GUILayout.ExpandWidth(false));
             if (autoTrack != ModConfig.AutoTrack.Value)
                 ModConfig.AutoTrack.Value = autoTrack;
+            bool always = GUILayout.Toggle(ModConfig.AlwaysTrackNearest.Value, " Always track nearest watched", GUILayout.ExpandWidth(false));
+            if (always != ModConfig.AlwaysTrackNearest.Value)
+                ModConfig.AlwaysTrackNearest.Value = always;
             GUILayout.EndHorizontal();
 
             // Star filters: one of five, picked directly. Not a button that cycles through them - the alert poll runs

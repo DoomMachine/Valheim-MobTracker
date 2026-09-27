@@ -2,7 +2,7 @@
 
   <!--
     Tests the parts of MobTracker that need no game objects - the star filter (StarFilter.cs), and the search,
-    watchlist, spacing, spawn-rule and alert-gate rules (Rules.cs) - compiled from the real source files.
+    watchlist, spacing, spawn-rule, alert-gate and re-track rules (Rules.cs) - compiled from the real source files.
     Run with "dotnet run" from this folder.
   -->
 

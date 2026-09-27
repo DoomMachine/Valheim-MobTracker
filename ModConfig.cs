@@ -20,6 +20,7 @@ namespace MobTracker
         public static ConfigEntry<float> AlertRadius;
         public static ConfigEntry<float> AlertVolume;
         public static ConfigEntry<bool> AutoTrack;
+        public static ConfigEntry<bool> AlwaysTrackNearest;
         public static ConfigEntry<StarFilter> ListStars;
         public static ConfigEntry<StarFilter> AlertStars;
 
@@ -40,12 +41,23 @@ namespace MobTracker
                 "Comma-separated creature prefab names to alert on, e.g. Troll,Serpent. " +
                 "The Watch button in the list edits this; edit by hand to watch something not currently around.");
             AlertRadius = config.Bind("Alerts", "AlertRadius", 0f,
-                "Only alert within this many metres. 0 = as soon as the creature exists on your client.");
+                "Only alert, or re-track (AlwaysTrackNearestWatched), within this many metres; a creature that alerted " +
+                "during a re-track's wait and has left the radius by then is taken only once it is back inside. 0 = no " +
+                "limit: anywhere the creature is loaded on your client.");
             AlertVolume = config.Bind("Alerts", "AlertVolume", 0.8f,
                 new ConfigDescription("Ding volume.", new AcceptableValueRange<float>(0f, 1f)));
 
             AutoTrack = config.Bind("Alerts", "AutoTrack", true,
-                "Start tracking a watched creature the moment it alerts. Never replaces a creature you are already tracking.");
+                "Start tracking a watched creature the moment it alerts. Never replaces a creature you are already tracking, " +
+                "nor the choice AlwaysTrackNearestWatched is waiting to make for that type.");
+            AlwaysTrackNearest = config.Bind("Alerts", "AlwaysTrackNearestWatched", false,
+                "When a tracked creature of a watched type is lost - killed, or no longer loaded on your client - wait 5 " +
+                "seconds, then track the nearest creature of that type that AlertStarFilter accepts, within AlertRadius and " +
+                "never a tamed one, looking again once a second until there is one. A watch alert that names that type leaves the " +
+                "choice to this. Tracking something else (by hand, Find area, or AutoTrack on an alert for another watched " +
+                "type), Stop tracking, turning this off, taking the type off the watchlist or dying ends the wait. Losing a " +
+                "tamed creature, or stopping the tracking yourself, never starts one. The window's 'Always track nearest " +
+                "watched' checkbox sets it.");
 
             // Two independent filters: browse every star level while being alerted only for, say, two-star creatures.
             ListStars = config.Bind("General", "ListStarFilter", StarFilter.All,
@@ -53,10 +65,10 @@ namespace MobTracker
                 "(two stars and above). The window's 'List:' row sets it; the all-types view is not filtered. " +
                 "A number typed here counts stars: 0 = NoStars, 1 = OneStar, 2 = TwoStars, 3 = TwoOrMoreStars, 4 = All.");
             AlertStars = config.Bind("Alerts", "AlertStarFilter", StarFilter.All,
-                "Which star levels of a watched creature type alert, and are auto-tracked: All, NoStars, OneStar, TwoStars, or " +
-                "TwoOrMoreStars (two stars and above). The window's 'Alerts:' row sets it. A creature left out now can still " +
-                "alert later if the filter changes. A number typed here counts stars: 0 = NoStars, 1 = OneStar, 2 = TwoStars, " +
-                "3 = TwoOrMoreStars, 4 = All.");
+                "Which star levels of a watched creature type alert, and are auto-tracked or re-tracked: All, NoStars, " +
+                "OneStar, TwoStars, or TwoOrMoreStars (two stars and above). The window's 'Alerts:' row sets it. A creature " +
+                "left out now can still alert later if the filter changes. A number typed here counts stars: 0 = NoStars, " +
+                "1 = OneStar, 2 = TwoStars, 3 = TwoOrMoreStars, 4 = All.");
             WarnIfUnknown(ListStars);
             WarnIfUnknown(AlertStars);
             ListStars.SettingChanged += (sender, args) => WarnIfUnknown(ListStars);

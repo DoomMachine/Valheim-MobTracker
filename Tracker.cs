@@ -34,6 +34,9 @@ namespace MobTracker
         }
 
         private static string _targetName;
+        // Kept for NearestWatched: a lost creature's own name and tameness may be gone with it.
+        private static string _targetPrefab;
+        private static bool _targetTamed;
         private static float _nextPath;
 
         private GameObject _arrow;
@@ -53,6 +56,8 @@ namespace MobTracker
             IsTracking = true;
             _isPoint = false;
             _targetName = Creature.DisplayName(character);
+            _targetPrefab = Creature.PrefabName(character);
+            _targetTamed = character.IsTamed();
             _nextPath = 0f;
         }
 
@@ -63,6 +68,8 @@ namespace MobTracker
             _isPoint = true;
             _point = point;
             _targetName = name;
+            _targetPrefab = null;
+            _targetTamed = false;
             _nextPath = 0f;
         }
 
@@ -132,6 +139,7 @@ namespace MobTracker
                 if (MessageHud.instance != null)
                     MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, "Lost track of " + _targetName);
                 Stop();
+                NearestWatched.Lost(_targetPrefab, _targetTamed); // lost, not stopped: the only place a re-track is scheduled
             }
 
             if (IsTracking && _isPoint && Utils.DistanceXZ(player.transform.position, _point) < PointReachedDistance)
@@ -147,6 +155,11 @@ namespace MobTracker
                 _line.enabled = false;
                 return;
             }
+
+            // Tamed can happen while tracked. Read only while the creature is still on the network: in the frame the game
+            // removes it, IsTamed already says false.
+            if (!_isPoint && Target.GetZDOID() != ZDOID.None)
+                _targetTamed = Target.IsTamed();
 
             Vector3 from = player.transform.position;
             // A spawn area has no meaningful height; level with the player keeps the arrow flat.

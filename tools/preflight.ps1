@@ -11,9 +11,10 @@
      signature - including the private members it reaches (the ground-path guide's Pathfinding internals,
      Find area's SpawnSystem.m_instances), which it lists - and a deliberately
      wrong member fails to resolve, so the check cannot pass vacuously
-  4. the star filters read the right settings; Find area honours the spawn rules' key and event conditions,
-     takes the map's delete gesture for its own pins after other mods' prefixes, and adds them local-only
-     (save false, ownerID 0, and no Minimap method that adds pins of its own)
+  4. the star filters read the right settings; always-track-nearest-watched gives its tested decisions (Retrack)
+     the right values and branches on them the right way, and is started only from Tracker.LateUpdate; Find area
+     honours the spawn rules' key and event conditions, takes the map's delete gesture for its own pins after other
+     mods' prefixes, and adds them local-only (save false, ownerID 0, and no Minimap method that adds pins of its own)
   5. every assembly the plugin references is in the game folder
   Run it after every Valheim update. Exits 1 on any failure.
 
@@ -24,7 +25,7 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Plugin = "",
-    [string]$ExpectedVersion = "0.2.0",
+    [string]$ExpectedVersion = "0.3.0",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" })
 )
 $ErrorActionPreference = "Stop"
@@ -223,19 +224,25 @@ $wiring = @(
     @("MobTracker.EntityListWindow", "Refresh", @("EntityListWindow::_appliedListStars", "StarFilters::Accepts", "Character::GetLevel"), @("ModConfig::AlertStars")),
     @("MobTracker.EntityListWindow", "Update", @("ModConfig::ListStars", "EntityListWindow::_appliedListStars", "set EntityListWindow::_appliedListStars"), @("ModConfig::AlertStars"))
 )
-foreach ($w in $wiring) {
-    $checks++
-    $m = Get-Method $w[0] $w[1]
-    if (-not $m) { Fail ("{0}.{1} not found" -f $w[0], $w[1]); continue }
-    $touches = Get-Touches $m
-    $missing = @($w[2] | Where-Object { -not $touches.ContainsKey($_) })
-    $wrong = @($w[3] | Where-Object { $touches.ContainsKey($_) })
-    if ($missing.Count -eq 0 -and $wrong.Count -eq 0) { Ok ("{0}.{1} uses {2}" -f $w[0].Split('.')[-1], $w[1], ($w[2] -join ", ")) }
-    else {
-        $why = @($(if ($missing.Count) { "missing " + ($missing -join ", ") }), $(if ($wrong.Count) { "must not use " + ($wrong -join ", ") })) | Where-Object { $_ }
-        Fail ("{0}.{1}: {2}" -f $w[0].Split('.')[-1], $w[1], ($why -join "; "))
+function Test-Wiring($table) {
+    # Each row: type, method, what it must touch, what it must not touch.
+    foreach ($w in $table) {
+        $script:checks++
+        $m = Get-Method $w[0] $w[1]
+        if (-not $m) { Fail ("{0}.{1} not found" -f $w[0], $w[1]); continue }
+        $touches = Get-Touches $m
+        $missing = @($w[2] | Where-Object { -not $touches.ContainsKey($_) })
+        $wrong = @($w[3] | Where-Object { $touches.ContainsKey($_) })
+        if ($missing.Count -eq 0 -and $wrong.Count -eq 0) {
+            $what = if ($w[2].Count) { "uses " + ($w[2] -join ", ") } else { "does not use " + ($w[3] -join ", ") }
+            Ok ("{0}.{1} {2}" -f $w[0].Split('.')[-1], $w[1], $what)
+        } else {
+            $why = @($(if ($missing.Count) { "missing " + ($missing -join ", ") }), $(if ($wrong.Count) { "must not use " + ($wrong -join ", ") })) | Where-Object { $_ }
+            Fail ("{0}.{1}: {2}" -f $w[0].Split('.')[-1], $w[1], ($why -join "; "))
+        }
     }
 }
+Test-Wiring $wiring
 # The two toolbar rows: from the "List:" label to the "Alerts:" label only the list's setting may be touched, from
 # there to the end of DrawWindow only the alerts'. Swapping the rows compiles and passes everything else.
 $checks++
@@ -416,6 +423,231 @@ foreach ($mr in $plug.GetMemberReferences()) {
 if (-not $mmType -or $addsPins.Count -eq 0) { Fail "Minimap or its pin-adding methods not found in the game - the check would be vacuous" }
 elseif ($viaGame.Count -eq 0) { Ok ("no call to any of the {0} Minimap methods that add pins of their own (DiscoverLocation and the like)" -f $addsPins.Count) }
 else { Fail ("calls Minimap methods that add pins with their own save flag: {0}" -f (($viaGame | Sort-Object -Unique) -join ", ")) }
+
+Write-Output "== always track nearest watched =="
+# The decisions are Retrack's - when a loss starts a wait, when the wait ends, which creature it may take - and the
+# unit tests give each of them in full. What is checked here is the wiring the tests cannot see: that each value a
+# decision is given is read from the right place (a !x or a constant is another instruction than the read), and that
+# the code branches on the answer the right way.
+function Get-SourceKey($m, $ins, $at) {
+    # What pushed a value: "Type::Member" for a call, "Type::field.Value" for a config entry's Value (the ldsfld just
+    # before get_Value), "Type::field" for a field read, "arg name" for a parameter, else the opcode.
+    if ($null -eq $at -or $at -lt 0) { return "?" }
+    $i = $ins[$at]; $op = $i.Operand; $n = $i.OpCode.Name
+    if (($n -eq "call" -or $n -eq "callvirt") -and $op -is [Mono.Cecil.MethodReference]) {
+        if ($op.Name -eq "get_Value" -and $at -ge 1 -and $ins[$at - 1].OpCode.Name -eq "ldsfld") {
+            $f = $ins[$at - 1].Operand
+            return ("{0}::{1}.Value" -f $f.DeclaringType.Name, $f.Name)
+        }
+        return ("{0}::{1}" -f $op.DeclaringType.Name, $op.Name)
+    }
+    if (($n -eq "ldsfld" -or $n -eq "ldfld") -and $op -is [Mono.Cecil.FieldReference]) { return ("{0}::{1}" -f $op.DeclaringType.Name, $op.Name) }
+    if ($op -is [Mono.Cecil.ParameterDefinition]) { return ("arg " + $op.Name) }
+    if ($n -match '^ldarg\.(\d)$') {
+        $p = [int]$Matches[1]
+        if ($m.HasThis) { $p-- }
+        if ($p -ge 0 -and $p -lt $m.Parameters.Count) { return ("arg " + $m.Parameters[$p].Name) }
+    }
+    if ($n -match '^ldloc(\.s|\.\d)?$') {
+        $var = Get-VarIndex $i
+        for ($s = $at - 1; $s -ge 0; $s--) {
+            if ($ins[$s].OpCode.Name -match '^stloc' -and (Get-VarIndex $ins[$s]) -eq $var) { return ("loc <- " + (Get-SourceKey $m $ins ($s - 1))) }
+        }
+        return "loc (not stored before)"
+    }
+    return $n
+}
+function Get-VarIndex($i) {
+    if ($i.Operand -is [Mono.Cecil.Cil.VariableDefinition]) { return $i.Operand.Index }
+    if ($i.OpCode.Name -match '^(ld|st)loc\.(\d)$') { return [int]$Matches[2] }
+    return -1
+}
+function Test-Calls($table) {
+    # Each row: type, method, the call ("Type::Member", exactly one in the method), where each value it consumes must
+    # come from (the instance first; $null = anything; @() = not checked), and the branches that may follow it ($null =
+    # not checked).
+    foreach ($c in $table) {
+        $script:checks++
+        $where = "{0}.{1}" -f $c[0].Split('.')[-1], $c[1]
+        $m = Get-Method $c[0] $c[1]
+        if (-not $m) { Fail ("{0} not found" -f $where); continue }
+        $ins = @($m.Body.Instructions)
+        $at = @(for ($k = 0; $k -lt $ins.Count; $k++) {
+            $op = $ins[$k].Operand
+            if (($ins[$k].OpCode.Name -eq "call" -or $ins[$k].OpCode.Name -eq "callvirt") -and $op -is [Mono.Cecil.MethodReference] -and
+                ($op.DeclaringType.Name + "::" + $op.Name) -eq $c[2]) { $k }
+        })
+        if ($at.Count -ne 1) { Fail ("{0}: expected one call of {1}, found {2}" -f $where, $c[2], $at.Count); continue }
+        $k = $at[0]
+        $want = @($c[3])
+        $problems = @()
+        if ($want.Count -gt 0) {
+            $src = Get-ArgumentSources $ins $k $m.Body.ExceptionHandlers
+            if ($null -eq $src) { $problems += "its values could not be traced" }
+            elseif ($src.Count -ne $want.Count) { $problems += ("it takes {0} values, the check names {1}" -f $src.Count, $want.Count) }
+            else {
+                for ($a = 0; $a -lt $want.Count; $a++) {
+                    if ($null -eq $want[$a]) { continue }
+                    $got = Get-SourceKey $m $ins $src[$a]
+                    if ($got -ne $want[$a]) { $problems += ("value {0} comes from {1}, not {2}" -f ($a + 1), $got, $want[$a]) }
+                }
+            }
+        }
+        $branch = ""
+        if ($null -ne $c[4]) {
+            $next = if ($k + 1 -lt $ins.Count) { $ins[$k + 1].OpCode.Name } else { "(end)" }
+            if (@($c[4]) -notcontains $next) { $problems += ("followed by {0}, not {1}" -f $next, (@($c[4]) -join " or ")) }
+            $branch = ", then " + $next
+        }
+        if ($problems.Count -eq 0) {
+            $shown = if ($want.Count) { "(" + (@($want | ForEach-Object { if ($null -eq $_) { "_" } else { $_ } }) -join ", ") + ")" } else { "" }
+            Ok ("{0}: {1}{2}{3}" -f $where, $c[2], $shown, $branch)
+        } else { Fail ("{0}: {1} - {2}" -f $where, $c[2], ($problems -join "; ")) }
+    }
+}
+$brfalse = @("brfalse", "brfalse.s"); $brtrue = @("brtrue", "brtrue.s")
+Test-Calls @(
+    # A loss starts a wait only with the option on, for a watched type, not for a tamed creature, from now.
+    @("MobTracker.NearestWatched", "Lost", "Retrack::Lost",
+        @("NearestWatched::Pending", "arg prefab", "ModConfig::AlwaysTrackNearest.Value", 'HashSet`1::Contains', "arg tamed", "Time::get_time"), $null),
+    @("MobTracker.NearestWatched", "Lost", 'HashSet`1::Contains', @("ModConfig::get_Watchlist", "arg prefab"), $null),
+    @("MobTracker.Tracker", "LateUpdate", "NearestWatched::Lost", @("Tracker::_targetPrefab", "Tracker::_targetTamed"), $null),
+    # The wait ends (a true answer skips no code: the cancel follows) on death, any tracking, the option off, unwatching.
+    @("MobTracker.NearestWatched", "Update", "Retrack::EndsWait",
+        @("Character::IsDead", "Tracker::get_IsTracking", "ModConfig::AlwaysTrackNearest.Value", 'HashSet`1::Contains'), $brfalse),
+    @("MobTracker.NearestWatched", "Update", 'HashSet`1::Contains', @("ModConfig::get_Watchlist", "Retrack::get_Prefab"), $null),
+    @("MobTracker.NearestWatched", "Update", "Retrack::ShouldLook", @("NearestWatched::Pending", "Time::get_time"), $brtrue),
+    # Which creature: listable first (the null and dead check), then the candidate test, a false answer skipping it.
+    @("MobTracker.NearestWatched", "Update", "Creature::IsListable", @($null), $brfalse),
+    @("MobTracker.NearestWatched", "Update", "Retrack::IsCandidate",
+        @("String::Equals", "ZDOID::op_Inequality", "Character::IsTamed", "StarFilters::Accepts", "Rules::WithinRadius"), $brfalse),
+    @("MobTracker.NearestWatched", "Update", "String::Equals", @("Creature::PrefabName", "Retrack::get_Prefab", $null), $null),
+    @("MobTracker.NearestWatched", "Update", "ZDOID::op_Inequality", @("Character::GetZDOID", "ZDOID::None"), $null),
+    @("MobTracker.NearestWatched", "Update", "StarFilters::Accepts", @("ModConfig::AlertStars.Value", "Character::GetLevel"), $null),
+    @("MobTracker.NearestWatched", "Update", "Rules::WithinRadius", @("loc <- Vector3::Distance", "ModConfig::AlertRadius.Value"), $null),
+    # A watch alert for the type being waited for leaves the choice to the re-track (true skips the auto-track); the
+    # window shows Stop tracking while a wait is on (false skips the button only when nothing is tracked either).
+    @("MobTracker.WatchAlerts", "Update", "NearestWatched::IsPendingFor", @("Creature::PrefabName"), $brtrue),
+    @("MobTracker.EntityListWindow", "DrawWindow", "NearestWatched::get_IsPending", @(), $brfalse),
+    # Whose members the code reads (the creature's, not the player's), and what the wrappers forward.
+    @("MobTracker.NearestWatched", "Update", "Character::GetZDOID", @("loc <- Enumerator::get_Current"), $null),
+    @("MobTracker.NearestWatched", "Update", "Character::IsTamed", @("loc <- Enumerator::get_Current"), $null),
+    @("MobTracker.NearestWatched", "Update", "Character::GetLevel", @("loc <- Enumerator::get_Current"), $null),
+    @("MobTracker.NearestWatched", "Update", "Creature::PrefabName", @("loc <- Enumerator::get_Current"), $null),
+    @("MobTracker.NearestWatched", "Update", "Vector3::Distance", @("loc <- Transform::get_position", "Transform::get_position"), $null),
+    @("MobTracker.NearestWatched", "IsPendingFor", "Retrack::IsPendingFor", @("NearestWatched::Pending", "arg prefab"), @("ret")),
+    @("MobTracker.NearestWatched", "get_IsPending", "Retrack::get_IsPending", @("NearestWatched::Pending"), @("ret")),
+    @("MobTracker.NearestWatched", "Cancel", "Retrack::Cancel", @("NearestWatched::Pending"), @("ret")),
+    @("MobTracker.Tracker", "LateUpdate", "Character::IsTamed", @("Tracker::get_Target"), @("stsfld")),
+    @("MobTracker.Tracker", "LateUpdate", "Character::GetZDOID", @("Tracker::get_Target"), $null),
+    @("MobTracker.Tracker", "Track", "Character::IsTamed", @("arg character"), @("stsfld")),
+    @("MobTracker.Tracker", "Track", "Creature::PrefabName", @("arg character"), @("stsfld"))
+)
+Test-Wiring @(
+    @("MobTracker.NearestWatched", "Update", @("Player::m_localPlayer", "Retrack::Cancel", "Tracker::Track"),
+        @("ModConfig::ListStars", "EntityListWindow::_appliedListStars")),
+    @("MobTracker.Tracker", "Track", @("set Tracker::_targetPrefab", "set Tracker::_targetTamed", "Character::IsTamed"), @()),
+    # Tamed is refreshed while tracking, but only while the creature is on the network (IsTamed says false after).
+    @("MobTracker.Tracker", "LateUpdate", @("set Tracker::_targetTamed", "Character::GetZDOID", "ZDOID::op_Inequality"), @()),
+    @("MobTracker.Tracker", "Stop", @(), @("NearestWatched::Lost")),
+    @("MobTracker.EntityListWindow", "DrawWindow", @("NearestWatched::Cancel", "ModConfig::AlwaysTrackNearest"), @("NearestWatched::Lost")),
+    # Standing down for every watched type while waiting would leave an alert for another type silently untracked.
+    @("MobTracker.WatchAlerts", "Update", @(), @("NearestWatched::get_IsPending"))
+)
+# Where the wait's two exits lead, and how the nearest candidate is kept. These two, and the deferral check below,
+# are exact IL shapes, and an ldloc is keyed by the store before it in instruction order, not by control flow: a
+# legitimate rewrite of NearestWatched.Update or of WatchAlerts' auto-track fails them, and they must then be
+# re-read against the method's IL (ILSpy or Mono.Cecil), not loosened until they pass.
+function Get-CallAt($ins, $key) { @(for ($q = 0; $q -lt $ins.Count; $q++) { $o = $ins[$q].Operand; if (($ins[$q].OpCode.Name -eq "call" -or $ins[$q].OpCode.Name -eq "callvirt") -and $o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq $key) { $q } }) }
+function Get-TrueAt($ins, $q) { $b = $ins[$q + 1]; if ($b.OpCode.Name -like "brtrue*") { return [array]::IndexOf($ins, $b.Operand) }; if ($b.OpCode.Name -like "brfalse*") { return $q + 2 }; return -1 }
+$nwu = Get-Method "MobTracker.NearestWatched" "Update"
+$ni = @($nwu.Body.Instructions)
+$checks++
+$ew = @(Get-CallAt $ni "Retrack::EndsWait")
+$nullAt = @(Get-CallAt $ni "Object::op_Equality" | Where-Object { $src = Get-ArgumentSources $ni $_ $nwu.Body.ExceptionHandlers; $src -and (Get-SourceKey $nwu $ni $src[0]) -eq "loc <- Player::m_localPlayer" })
+$why = @()
+if ($ew.Count -ne 1) { $why += "EndsWait calls: $($ew.Count)" } else {
+    $tp = Get-TrueAt $ni $ew[0]
+    if ($tp -lt 0 -or $ni[$tp].OpCode.Name -ne "ldsfld" -or "$($ni[$tp].Operand.Name)" -ne "Pending" -or -not ($ni[$tp + 1].Operand -is [Mono.Cecil.MethodReference] -and $ni[$tp + 1].Operand.Name -eq "Cancel")) { $why += "EndsWait's true path does not go straight to Pending.Cancel" }
+    if ($nullAt.Count -ne 1) { $why += "player == null tests: $($nullAt.Count)" } elseif ((Get-TrueAt $ni $nullAt[0]) -ne $tp) { $why += "player == null does not lead to the same Pending.Cancel" }
+}
+if ($why.Count -eq 0) { Ok "NearestWatched.Update: no player, and EndsWait true, both lead straight to Pending.Cancel" } else { Fail ("NearestWatched.Update: " + ($why -join "; ")) }
+$checks++
+$ic = @(Get-CallAt $ni "Retrack::IsCandidate")
+$why = @()
+if ($ic.Count -ne 1) { $why += "IsCandidate calls: $($ic.Count)" } else {
+    $c = $ic[0]; $skip = $ni[$c + 1].Operand
+    $k2 = Get-SourceKey $nwu $ni ($c + 2); $k5 = Get-SourceKey $nwu $ni ($c + 5)
+    if ($k2 -ne "loc <- Vector3::Distance" -or $ni[$c + 3].OpCode.Name -notmatch '^ldloc') { $why += "not 'distance < nearestDistance' after the candidate test ($k2)" }
+    elseif ($ni[$c + 4].OpCode.Name -notmatch '^bge\.un' -or $ni[$c + 4].Operand -ne $skip) { $why += ("the comparison is {0}, not bge.un to the same skip" -f $ni[$c + 4].OpCode.Name) }
+    elseif ($k5 -ne "loc <- Enumerator::get_Current" -or $ni[$c + 6].OpCode.Name -notmatch '^stloc') { $why += "the candidate is not stored as the nearest" }
+    elseif ((Get-VarIndex $ni[$c + 7]) -ne (Get-VarIndex $ni[$c + 2]) -or $ni[$c + 8].OpCode.Name -notmatch '^stloc' -or (Get-VarIndex $ni[$c + 8]) -ne (Get-VarIndex $ni[$c + 3])) { $why += "its distance is not stored as the nearest distance" }
+    else {
+        $tr = @(Get-CallAt $ni "Tracker::Track")
+        $ts = if ($tr.Count -eq 1) { Get-ArgumentSources $ni $tr[0] $nwu.Body.ExceptionHandlers } else { $null }
+        if ($null -eq $ts -or (Get-VarIndex $ni[$ts[0]]) -ne (Get-VarIndex $ni[$c + 6])) { $why += "Tracker.Track is not given the kept nearest" }
+    }
+}
+if ($why.Count -eq 0) { Ok "NearestWatched.Update: a candidate nearer than the nearest so far replaces it, with its distance, and the nearest is what is tracked" } else { Fail ("NearestWatched.Update: " + ($why -join "; ")) }
+# The deferral asks about the creature Tracker.Track would be given (one level below IsPendingFor's argument).
+$checks++
+$wau = Get-Method "MobTracker.WatchAlerts" "Update"
+$wi = @($wau.Body.Instructions)
+$pf = @(Get-CallAt $wi "NearestWatched::IsPendingFor"); $tr = @(Get-CallAt $wi "Tracker::Track")
+$why = @()
+if ($pf.Count -ne 1 -or $tr.Count -ne 1) { $why += ("IsPendingFor / Track calls: {0} / {1}" -f $pf.Count, $tr.Count) } else {
+    $a = Get-ArgumentSources $wi $pf[0] $wau.Body.ExceptionHandlers
+    $pn = if ($a) { $a[0] } else { -1 }
+    if ($pn -lt 0 -or -not ($wi[$pn].Operand -is [Mono.Cecil.MethodReference] -and $wi[$pn].Operand.Name -eq "PrefabName")) { $why += "IsPendingFor is not given Creature.PrefabName(...)" } else {
+        $pa = Get-ArgumentSources $wi $pn $wau.Body.ExceptionHandlers
+        $ta = Get-ArgumentSources $wi $tr[0] $wau.Body.ExceptionHandlers
+        if (-not $pa -or -not $ta -or $wi[$pa[0]].OpCode.Name -notmatch '^ldloc' -or (Get-VarIndex $wi[$pa[0]]) -ne (Get-VarIndex $wi[$ta[0]])) { $why += "IsPendingFor asks about another creature than the one Tracker.Track is given" }
+    }
+}
+if ($why.Count -eq 0) { Ok "WatchAlerts.Update: the deferral asks about the type of the creature Tracker.Track would take" } else { Fail ("WatchAlerts.Update: " + ($why -join "; ")) }
+# Only Tracker.LateUpdate starts a wait: one call of NearestWatched.Lost in the plugin, there, and one of Retrack.Lost,
+# in NearestWatched.Lost. Which branch of LateUpdate the call sits in is not checked.
+$checks++
+$lostCalls = @()
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($i in $m.Body.Instructions) {
+            $op = $i.Operand
+            if ($op -is [Mono.Cecil.MethodReference] -and $op.Name -eq "Lost" -and $op.DeclaringType.FullName -eq "MobTracker.NearestWatched") {
+                $lostCalls += ("{0}.{1}" -f $t.Name, $m.Name)
+            }
+        }
+    }
+}
+if ($lostCalls.Count -eq 1 -and $lostCalls[0] -eq "Tracker.LateUpdate") { Ok "NearestWatched.Lost is called once, from Tracker.LateUpdate" }
+else { Fail ("NearestWatched.Lost must be called exactly once, from Tracker.LateUpdate; found: {0}" -f $(if ($lostCalls.Count) { $lostCalls -join ", " } else { "none" })) }
+$checks++
+$retrackLost = @()
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($i in $m.Body.Instructions) {
+            $op = $i.Operand
+            if ($op -is [Mono.Cecil.MethodReference] -and $op.Name -eq "Lost" -and $op.DeclaringType.FullName -eq "MobTracker.Retrack") {
+                $retrackLost += ("{0}.{1}" -f $t.Name, $m.Name)
+            }
+        }
+    }
+}
+if ($retrackLost.Count -eq 1 -and $retrackLost[0] -eq "NearestWatched.Lost") { Ok "Retrack.Lost is called once, from NearestWatched.Lost" }
+else { Fail ("Retrack.Lost must be called exactly once, from NearestWatched.Lost; found: {0}" -f $(if ($retrackLost.Count) { $retrackLost -join ", " } else { "none" })) }
+# A component nobody adds never runs: Awake must add NearestWatched (AddComponent<NearestWatched>).
+$checks++
+$added = $false
+if ($awake) {
+    foreach ($i in $awake.Body.Instructions) {
+        $op = $i.Operand
+        if ($op -is [Mono.Cecil.GenericInstanceMethod] -and $op.Name -eq "AddComponent" -and
+            @($op.GenericArguments | Where-Object { $_.FullName -eq "MobTracker.NearestWatched" }).Count -gt 0) { $added = $true }
+    }
+}
+if ($added) { Ok "MobTrackerPlugin.Awake adds the NearestWatched component" } else { Fail "MobTrackerPlugin.Awake never adds NearestWatched" }
 
 Write-Output "== assembly references =="
 foreach ($ar in $plug.AssemblyReferences) {

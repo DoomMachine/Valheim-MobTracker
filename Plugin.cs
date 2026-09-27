@@ -11,7 +11,7 @@ namespace MobTracker
         public const string PluginId = "com.mobtracker.plugin";
 
         /// <summary>Also MobTracker.csproj's Version; tools/preflight.ps1 checks that the two agree.</summary>
-        public const string Version = "0.2.0";
+        public const string Version = "0.3.0";
 
         internal static ManualLogSource Log;
 
@@ -26,6 +26,7 @@ namespace MobTracker
             gameObject.AddComponent<EntityListWindow>();
             gameObject.AddComponent<Tracker>();
             gameObject.AddComponent<WatchAlerts>();
+            gameObject.AddComponent<NearestWatched>();
             gameObject.AddComponent<SpawnFinder>();
 
             // One class at a time: PatchAll stops at the first target a game update renamed, which would also take

@@ -17,6 +17,7 @@ namespace MobTracker
             OpenRuleTests();
             AlertGateTests();
             AlertStarFilterTests();
+            RetrackTests();
             Console.WriteLine(_failures == 0
                 ? "ALL TESTS PASSED (" + _passes + ")"
                 : _failures + " TEST(S) FAILED, " + _passes + " passed");
@@ -172,6 +173,12 @@ namespace MobTracker
             var gate = new AlertGate<int>();
             Check("gate: an unwatched creature never alerts", !gate.ShouldAlert(1, false, false, 10f, 0f), "");
             Check("gate: a tamed creature never alerts", !gate.ShouldAlert(2, true, true, 10f, 0f), "");
+            Check("radius: 0 or less means anywhere", Rules.WithinRadius(5000f, 0f) && Rules.WithinRadius(5000f, -1f), "");
+            Check("radius: exactly on the radius is inside, a little past it is not",
+                Rules.WithinRadius(20f, 20f) && !Rules.WithinRadius(20.01f, 20f), "");
+            Check("radius: NaN typed by hand means anywhere, as in 0.2.0", Rules.WithinRadius(5000f, float.NaN), "");
+            Check("radius: infinity means anywhere, minus infinity too",
+                Rules.WithinRadius(5000f, float.PositiveInfinity) && Rules.WithinRadius(5000f, float.NegativeInfinity), "");
             Check("gate: outside the radius it does not alert", !gate.ShouldAlert(3, true, false, 50f, 20f), "");
             Check("gate: ...and alerts once it comes inside", gate.ShouldAlert(3, true, false, 15f, 20f), "");
             Check("gate: a creature alerts only once", gate.ShouldAlert(4, true, false, 10f, 0f) && !gate.ShouldAlert(4, true, false, 10f, 0f), "");
@@ -207,6 +214,55 @@ namespace MobTracker
             bool oneStarAfter = Decide(fresh, 22, 2, StarFilter.OneStar, true);
             Check("alert stars: picking 1 star straight from 2 stars alerts the one-star Troll and never the plain one",
                 !plainBefore && !plainAfter && oneStarAfter, plainBefore + "/" + plainAfter + "/" + oneStarAfter);
+        }
+
+        // "Always track nearest watched": the waiting and cancelling that NearestWatched does around the game's objects.
+        private static void RetrackTests()
+        {
+            var r = new Retrack();
+            r.Lost("Troll", false, true, false, 100f);
+            Check("retrack: with the option off, a lost Troll schedules nothing", !r.IsPending && !r.ShouldLook(200f), "");
+            r.Lost("Deer", true, false, false, 100f);
+            Check("retrack: a lost creature whose type is not watched schedules nothing", !r.IsPending, "");
+            r.Lost("", true, true, false, 100f);
+            Check("retrack: no type (a spawn area was tracked) schedules nothing", !r.IsPending, "");
+            r.Lost("Wolf", true, true, true, 100f);
+            Check("retrack: losing a tamed Wolf starts no hunt for a wild one", !r.IsPending && !r.ShouldLook(200f), "");
+
+            r.Lost("Troll", true, true, false, 100f);
+            Check("retrack: a lost watched Troll is pending, for Trolls", r.IsPending && r.Prefab == "Troll", r.Prefab ?? "null");
+            Check("retrack: a Troll's watch alert waits for it; a Serpent's, a lower-case troll's or no type's does not",
+                r.IsPendingFor("Troll") && !r.IsPendingFor("Serpent") && !r.IsPendingFor("troll") && !r.IsPendingFor(null), "");
+            Check("retrack: nothing is looked for during the first 5 seconds", !r.ShouldLook(100f) && !r.ShouldLook(104.99f), "");
+            Check("retrack: at 5 seconds it is time to look", r.ShouldLook(105f), "");
+            Check("retrack: then once a second, not every frame", !r.ShouldLook(105.5f) && !r.ShouldLook(105.99f) && r.ShouldLook(106f), "");
+            Check("retrack: it keeps looking while nothing is found", r.ShouldLook(107f) && r.ShouldLook(108.2f) && r.IsPending, "");
+
+            r.Lost("Troll", true, true, false, 200f);
+            Check("retrack: another loss starts the 5 seconds again", !r.ShouldLook(204f) && r.ShouldLook(205f), "");
+            r.Lost("Troll", false, true, false, 210f);
+            Check("retrack: a loss with the option turned off clears what was pending", !r.IsPending && !r.ShouldLook(300f), "");
+
+            r.Lost("Serpent", true, true, false, 300f);
+            r.Cancel();
+            Check("retrack: Cancel ends the wait (Stop tracking, tracking something else, leaving the world)",
+                !r.IsPending && !r.ShouldLook(400f) && !r.IsPendingFor("Serpent"), "");
+
+            // EndsWait(playerDead, tracking, enabled, watched): alive, nothing tracked, option on, type watched = wait on.
+            Check("retrack: the wait goes on while nothing ends it", !Retrack.EndsWait(false, false, true, true), "");
+            Check("retrack: the player dying ends the wait", Retrack.EndsWait(true, false, true, true), "");
+            Check("retrack: anything being tracked ends the wait", Retrack.EndsWait(false, true, true, true), "");
+            Check("retrack: turning the option off ends the wait", Retrack.EndsWait(false, false, false, true), "");
+            Check("retrack: unwatching the type ends the wait", Retrack.EndsWait(false, false, true, false), "");
+
+            // IsCandidate(sameType, networked, tamed, starsAccepted, withinRadius).
+            Check("retrack: a wild creature of the type, on the network, accepted stars, in range is taken",
+                Retrack.IsCandidate(true, true, false, true, true), "");
+            Check("retrack: another type is not", !Retrack.IsCandidate(false, true, false, true, true), "");
+            Check("retrack: one the game is removing this frame is not", !Retrack.IsCandidate(true, false, false, true, true), "");
+            Check("retrack: a tamed one is not", !Retrack.IsCandidate(true, true, true, true, true), "");
+            Check("retrack: one the Alerts star filter leaves out is not", !Retrack.IsCandidate(true, true, false, false, true), "");
+            Check("retrack: one outside AlertRadius is not", !Retrack.IsCandidate(true, true, false, true, false), "");
         }
 
         private static void Check(string label, bool condition, string detail)

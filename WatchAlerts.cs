@@ -75,8 +75,11 @@ namespace MobTracker
 
             // Not while a creature is tracked: a watched type that keeps spawning would otherwise
             // yank the guide off the one being chased every time another appears. A spawn-area
-            // guide does give way - the creature turning up is what it was for.
-            if (ModConfig.AutoTrack.Value && !Tracker.IsTrackingCreature)
+            // guide does give way - the creature turning up is what it was for. Nor while "always track
+            // nearest watched" waits for this type: it takes the nearest one at its next look (5 s after the
+            // loss, then once a second).
+            if (ModConfig.AutoTrack.Value && !Tracker.IsTrackingCreature
+                && !NearestWatched.IsPendingFor(Creature.PrefabName(nearest)))
                 Tracker.Track(nearest);
         }
     }
