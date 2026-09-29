@@ -47,12 +47,23 @@ $enc = New-Object System.Text.UTF8Encoding($false)
 
 # id, file, regex (must match exactly once), replacement
 $mutants = @(
-    # The star filters (the list's and the alerts' are the same type, so crossing them compiles).
-    @("S1 WatchAlerts reads the list's filter", "WatchAlerts.cs", [regex]::Escape("StarFilters.Accepts(ModConfig.AlertStars.Value, character.GetLevel())"), "StarFilters.Accepts(ModConfig.ListStars.Value, character.GetLevel())"),
-    @("S2 Refresh reads the alerts' filter", "EntityListWindow.cs", [regex]::Escape("StarFilters.Accepts(_appliedListStars, character.GetLevel())"), "StarFilters.Accepts(ModConfig.AlertStars.Value, character.GetLevel())"),
-    @("S3 Update never stores the applied list filter", "EntityListWindow.cs", ("[ \t]*" + [regex]::Escape("_appliedListStars = ModConfig.ListStars.Value;") + "\r?\n"), ""),
-    @("S4 the Alerts: row reads and writes the list's filter", "EntityListWindow.cs", "(?s)(GUILayout\.Label\(""Alerts:"", RowLabelWidth\);.*?)ModConfig\.AlertStars\.Value(.*?)ModConfig\.AlertStars\.Value", '${1}ModConfig.ListStars.Value${2}ModConfig.ListStars.Value'),
-    @("S5 the List: row writes the alerts' filter", "EntityListWindow.cs", [regex]::Escape("ModConfig.ListStars.Value = StarFilters.FromIndex(pickedList);"), "ModConfig.AlertStars.Value = StarFilters.FromIndex(pickedList);"),
+    # The star filters (the list's and the alerts' are the same types, text entry and parsed set, so crossing them
+    # compiles): who reads each, which entry each is parsed from, and what each window row writes.
+    @("S1 WatchAlerts reads the list's filter", "WatchAlerts.cs", [regex]::Escape("StarSets.Accepts(ModConfig.AlertStars, character.GetLevel())"), "StarSets.Accepts(ModConfig.ListStars, character.GetLevel())"),
+    @("S2 Refresh reads the alerts' filter", "EntityListWindow.cs", [regex]::Escape("StarSets.Accepts(_appliedListStars, character.GetLevel())"), "StarSets.Accepts(ModConfig.AlertStars, character.GetLevel())"),
+    @("S3 Update never stores the applied list filter", "EntityListWindow.cs", ("[ \t]*" + [regex]::Escape("_appliedListStars = ModConfig.ListStars;") + "\r?\n"), ""),
+    @("S4 the Alerts: row reads and writes the list's filter", "EntityListWindow.cs", "(?s)(GUILayout\.Label\(""Alerts:"", RowLabelWidth\);.*?)ModConfig\.AlertStars;(.*?)ModConfig\.AlertStarsText\.Value", '${1}ModConfig.ListStars;${2}ModConfig.ListStarsText.Value'),
+    @("S5 the List: row writes the alerts' entry", "EntityListWindow.cs", [regex]::Escape("ModConfig.ListStarsText.Value = StarSets.Format(StarSets.Toggle(listStars,"), "ModConfig.AlertStarsText.Value = StarSets.Format(StarSets.Toggle(listStars,"),
+    @("S6 the Alerts: row writes the list's entry", "EntityListWindow.cs", [regex]::Escape("ModConfig.AlertStarsText.Value = StarSets.Format(StarSets.Toggle(alertStars,"), "ModConfig.ListStarsText.Value = StarSets.Format(StarSets.Toggle(alertStars,"),
+    @("S7 the list's entry feeds the alerts' filter at the start", "ModConfig.cs", "(?m)^([ \t]*)AlertStars = ParseStars\(AlertStarsText\);", '${1}AlertStars = ParseStars(ListStarsText);'),
+    @("S8 the alerts' entry feeds the list's filter when it changes", "ModConfig.cs", [regex]::Escape("=> ListStars = ParseStars(ListStarsText);"), "=> ListStars = ParseStars(AlertStarsText);"),
+    @("S9 a change to the alerts' entry re-parses the list's filter", "ModConfig.cs", [regex]::Escape("AlertStarsText.SettingChanged += (sender, args) => AlertStars = ParseStars(AlertStarsText);"), "AlertStarsText.SettingChanged += (sender, args) => ListStars = ParseStars(ListStarsText);"),
+    @("S10 the alerts' re-parse hangs on the list's entry", "ModConfig.cs", [regex]::Escape("AlertStarsText.SettingChanged += (sender, args) => AlertStars"), "ListStarsText.SettingChanged += (sender, args) => AlertStars"),
+    @("S11 the list's filter never re-parsed - its row stops working", "ModConfig.cs", "[ \t]*ListStarsText\.SettingChanged \+= [^\r\n]*\r?\n", ""),
+    @("S12 the Alerts: row writes a raw ToString, not Format", "EntityListWindow.cs", [regex]::Escape("StarSets.Format(StarSets.Toggle(alertStars, StarButtons[i]))"), "StarSets.Toggle(alertStars, StarButtons[i]).ToString()"),
+    @("S13 the List: row drops Toggle - one category at a time again", "EntityListWindow.cs", [regex]::Escape("StarSets.Format(StarSets.Toggle(listStars, StarButtons[i]))"), "StarSets.Format(StarSets.Of(StarButtons[i]))"),
+    @("S14 the rows swapped under their labels", "EntityListWindow.cs", "(?s)GUILayout\.Label\(""List:"", RowLabelWidth\);(.*?)GUILayout\.Label\(""Alerts:"", RowLabelWidth\);", 'GUILayout.Label("Alerts:", RowLabelWidth);${1}GUILayout.Label("List:", RowLabelWidth);'),
+    @("S15 the List: row shows the alerts' marks", "EntityListWindow.cs", [regex]::Escape("StarSets.IsMarked(listStars,"), "StarSets.IsMarked(ModConfig.AlertStars,"),
     # Find area.
     @("F1 area pins saved", "SpawnFinder.cs", [regex]::Escape("displayName + "" area"", false, false)"), "displayName + "" area"", true, false)"),
     @("F2 area pins owned by someone", "SpawnFinder.cs", [regex]::Escape("displayName + "" area"", false, false)"), "displayName + "" area"", false, false, 1L)"),
@@ -73,7 +84,7 @@ $mutants = @(
     @("F17 the delete patch takes pins not shown on the map", "SpawnFinder.cs", "[ \t]*if \(pin\.m_uiElement == null \|\| !pin\.m_uiElement\.gameObject\.activeInHierarchy\)\r?\n[ \t]*continue;\r?\n", ""),
     # Always track nearest watched: every value its decisions are given, which way the code branches on them, and
     # what may start, end or take over a wait.
-    @("N1 the re-track chooses by the list's star filter", "NearestWatched.cs", [regex]::Escape("StarFilters.Accepts(ModConfig.AlertStars.Value"), "StarFilters.Accepts(ModConfig.ListStars.Value"),
+    @("N1 the re-track chooses by the list's star filter", "NearestWatched.cs", [regex]::Escape("StarSets.Accepts(ModConfig.AlertStars"), "StarSets.Accepts(ModConfig.ListStars"),
     @("N2 the re-track takes tamed creatures", "NearestWatched.cs", [regex]::Escape("character.IsTamed(),"), "false,"),
     @("N3 a loss schedules a re-track with the option off", "NearestWatched.cs", [regex]::Escape("Pending.Lost(prefab, ModConfig.AlwaysTrackNearest.Value,"), "Pending.Lost(prefab, true,"),
     @("N4 the player's own Stop schedules a re-track", "Tracker.cs", "(public static void Stop\(\)\r?\n\s*\{\r?\n)", '${1}            NearestWatched.Lost(_targetPrefab, _targetTamed);' + "`n"),
@@ -84,7 +95,7 @@ $mutants = @(
     @("N9 Stop tracking cannot call off the wait", "EntityListWindow.cs", "[ \t]*NearestWatched\.Cancel\(\);\r?\n", ""),
     @("N10 the re-track ignores AlertRadius", "NearestWatched.cs", [regex]::Escape("Rules.WithinRadius(distance, ModConfig.AlertRadius.Value),"), "true,"),
     @("N11 the re-track takes only tamed creatures", "NearestWatched.cs", [regex]::Escape("character.IsTamed(),"), "!character.IsTamed(),"),
-    @("N12 the re-track takes only the stars the Alerts filter leaves out", "NearestWatched.cs", [regex]::Escape("StarFilters.Accepts(ModConfig.AlertStars.Value, character.GetLevel()),"), "!StarFilters.Accepts(ModConfig.AlertStars.Value, character.GetLevel()),"),
+    @("N12 the re-track takes only the stars the Alerts filter leaves out", "NearestWatched.cs", [regex]::Escape("StarSets.Accepts(ModConfig.AlertStars, character.GetLevel()),"), "!StarSets.Accepts(ModConfig.AlertStars, character.GetLevel()),"),
     @("N13 the re-track takes only creatures outside AlertRadius", "NearestWatched.cs", [regex]::Escape("Rules.WithinRadius(distance, ModConfig.AlertRadius.Value),"), "!Rules.WithinRadius(distance, ModConfig.AlertRadius.Value),"),
     @("N14 the wait ends whenever nothing is tracked - it never re-tracks", "NearestWatched.cs", [regex]::Escape("player.IsDead(), Tracker.IsTracking,"), "player.IsDead(), !Tracker.IsTracking,"),
     @("N15 the wait ends while the option is on", "NearestWatched.cs", [regex]::Escape("Tracker.IsTracking, ModConfig.AlwaysTrackNearest.Value,"), "Tracker.IsTracking, !ModConfig.AlwaysTrackNearest.Value,"),
@@ -120,7 +131,7 @@ $mutants = @(
     @("N45 distance from the player to the player - radius and nearest ignored", "NearestWatched.cs", [regex]::Escape("Vector3.Distance(from, character.transform.position)"), "Vector3.Distance(from, from)"),
     @("N46 Track records the display name as the type - starred types never re-track", "Tracker.cs", [regex]::Escape("_targetPrefab = Creature.PrefabName(character);"), "_targetPrefab = Creature.DisplayName(character);"),
     @("N47 the networked test reads the player", "NearestWatched.cs", [regex]::Escape("character.GetZDOID() != ZDOID.None,"), "player.GetZDOID() != ZDOID.None,"),
-    @("N48 the star test reads the player's level", "NearestWatched.cs", [regex]::Escape("StarFilters.Accepts(ModConfig.AlertStars.Value, character.GetLevel())"), "StarFilters.Accepts(ModConfig.AlertStars.Value, player.GetLevel())"),
+    @("N48 the star test reads the player's level", "NearestWatched.cs", [regex]::Escape("StarSets.Accepts(ModConfig.AlertStars, character.GetLevel())"), "StarSets.Accepts(ModConfig.AlertStars, player.GetLevel())"),
     @("N49 the tamed test reads the player", "NearestWatched.cs", [regex]::Escape("character.IsTamed(),"), "player.IsTamed(),"),
     @("N50 IsPendingFor stands down for every type", "NearestWatched.cs", [regex]::Escape("return Pending.IsPendingFor(prefab);"), "return Pending.IsPending;"),
     @("N51 IsPending always false - Stop tracking hidden during a wait", "NearestWatched.cs", [regex]::Escape("get { return Pending.IsPending; }"), "get { return false; }"),

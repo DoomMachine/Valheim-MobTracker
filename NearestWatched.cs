@@ -73,7 +73,7 @@ namespace MobTracker
                 float distance = Vector3.Distance(from, character.transform.position);
                 if (Retrack.IsCandidate(string.Equals(Creature.PrefabName(character), Pending.Prefab, StringComparison.Ordinal),
                         character.GetZDOID() != ZDOID.None, character.IsTamed(),
-                        StarFilters.Accepts(ModConfig.AlertStars.Value, character.GetLevel()),
+                        StarSets.Accepts(ModConfig.AlertStars, character.GetLevel()),
                         Rules.WithinRadius(distance, ModConfig.AlertRadius.Value),
                         Rules.SameLayer(character.InInterior(), playerInside))
                     && distance < nearestDistance)

@@ -20,12 +20,17 @@ https://github.com/DoomMachine/Valheim-MobTracker
   map pin's name, while the console is open, or over the pause menu, the build menu or the inventory.
 - **With TomTom or Wayfinder** installed, their window key (F11 by default) and skip key (if you bound one) keep
   working while the list is open, and F7 opens the list over TomTom's window.
-- **Star filters**: two rows in the window, each a choice of *All*, *No star*, *1 star*, *2 stars* and
+- **Star filters**: two rows of toggle buttons in the window, *All*, *No star*, *1 star*, *2 stars* and
   *2+ stars* (two stars and above - natural spawns stop at two; the spawn command and mods can go higher).
-  **List:** filters the nearby list; **Alerts:** filters which watched creatures alert, are auto-tracked and are
-  picked by Always track nearest watched.
-  They are independent, so you can browse every star level while being alerted only for, say, two-star
-  Trolls. Stars are shown as asterisks: `Deer` has none, `Deer *` one.
+  **List:** filters the nearby list (greyed out in the all-types view: a creature type has no stars); **Alerts:**
+  filters which watched creatures alert, are auto-tracked and are picked by Always track nearest watched.
+  The categories you mark combine: mark *No star* and *1 star* to list, or be alerted for, both, or *1 star*
+  and *2 stars* for only those two. The marked buttons show as selected. With *All* marked, a click on a
+  category marks it alone; a click on a marked category takes it off, and taking off the last one returns
+  the row to *All*; a click on *All* resets the row. With categories marked, the window's title names them
+  ("MobTracker - 12 creatures, No star + 1 star"). The two rows are independent, so you can browse every star
+  level while being alerted only for, say, two-star Trolls. Stars are shown as asterisks: `Deer` has none,
+  `Deer *` one.
 - **Track** follows that one creature: a 3D arrow over your head, or with `GuideMode = GroundPath`
   a walkable line on the ground. The path builds over a few seconds on long distances; while it
   is missing or incomplete (flying/swimming targets, cliffs) the arrow shows as well. Beyond 250 m
@@ -90,14 +95,14 @@ a new version adds its own with their defaults. When the game starts, `BepInEx/L
 | Setting | Default | |
 |---|---|---|
 | `General.ListKey` | `F7` | Toggle the list (Escape or the gamepad's B also close it). A key the game cannot read (WheelUp, F13, Plus...), or the left, right or middle mouse button, does nothing and says so once in the log; keys the game ignores outright - Mouse5, Mouse6, F16 to F24 and the numbered-joystick buttons - never fire, with no warning |
-| `General.ListStarFilter` | `All` | The list's star filter: `All`, `NoStars`, `OneStar`, `TwoStars` or `TwoOrMoreStars` (any case), or a number of stars: 0-3, 3 = two or more, 4 = All (also the **List:** row) |
+| `General.ListStarFilter` | `All` | The list's star filter (also the **List:** row): `All`, or one or more of `NoStars`, `OneStar`, `TwoStars` and `TwoOrMoreStars` separated by commas, e.g. `NoStars, OneStar` for both. Any case; the window's labels (`No star`, `1 star`, `2 stars`, `2+ stars`) work too, and a number counts stars: 0-3, 3 = two or more, 4 = All. `All` anywhere in the list means All; anything else is ignored with a warning in the log, and with nothing valid the filter works as All. A text setting since 0.4.0 (a single name or number from a 0.3.x file reads as before), so ConfigurationManager shows a text box for it rather than a list, and applies it at every keystroke |
 | `Tracking.GuideMode` | `Arrow` | `Arrow` or `GroundPath` |
 | `Tracking.ArrowSize` / `ArrowHeight` | `0.6` / `2.6` | Metres |
 | `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows, Guide, the two tracking checkboxes) rewrites the file |
 | `Alerts.AlertRadius` | `0` | Only alert (or re-track, below) within this many metres; 0 = anywhere loaded |
 | `Alerts.AlertVolume` | `0.8` | Ding volume; the game's Volume and Effect volume settings apply on top of it |
 | `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor the choice Always track nearest watched is waiting to make for that type, nor takes a creature on the other side of a dungeon entrance |
-| `Alerts.AlertStarFilter` | `All` | The alerts' star filter, same choices (also the **Alerts:** row) |
+| `Alerts.AlertStarFilter` | `All` | The alerts' star filter (also the **Alerts:** row), written the same way: e.g. `OneStar, TwoStars` alerts only for one- and two-star creatures. A text setting since 0.4.0, like `ListStarFilter` |
 | `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature of a watched type, not a tamed one, is lost, track the nearest one of that type that passes the watch alert's filters and is on your side of a dungeon entrance: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window) |
 
 ## Known limits
@@ -114,6 +119,12 @@ a new version adds its own with their defaults. When the game starts, `BepInEx/L
   auto-tracked; with `AlertRadius` at 0 it has then had its alert, so going in does not alert it again.
 - While the pointer rests on the window its rows do not update: a creature killed meanwhile keeps its row, and
   its Track button does nothing, until the pointer leaves the window.
+- Each click on the **Alerts:** row applies at once, and watched creatures are checked every second. While you
+  take categories off, a creature of a category you are taking off can alert before your last click, and has
+  then had its alert; taking off the only marked category returns the row to *All*, so until your next click
+  any watched creature can. To go from one category to another, mark the new one first, then take the old one
+  off. Typed in ConfigurationManager, `AlertStarFilter` applies at every keystroke too: a half-typed value can
+  work as All for a moment, and each value it cannot read logs a warning.
 - Over a runestone's or a readable item's text, Escape closes the list and the text together, and typing `e` in
   the search closes the text.
 - With TomTom's, Wayfinder's or MeasurementTracker's window open as well, one Escape closes both windows. F5
@@ -161,6 +172,11 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **0.4.0** - star filters take several categories at once: the **List:** and **Alerts:** rows are five toggle
+  buttons each, so you can list or be alerted for, say, no-star and one-star creatures together, or only one-
+  and two-star ones; a click on *All* resets a row, and the window's title names the categories the list shows.
+  `ListStarFilter` and `AlertStarFilter` are now text, such as `NoStars, OneStar`; a single name or number
+  from a 0.3.x configuration reads as before. Not yet played in the game.
 - **0.3.1** - fixes. While the list is open: the mouse wheel no longer zooms the camera, Tab no longer opens
   the inventory, and a click on the window no longer reaches the map or a game window under it (on the map a
   right click deleted a pin, a middle click pinged everyone, a double click left a pin the Cartography Table

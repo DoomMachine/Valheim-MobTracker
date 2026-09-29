@@ -55,7 +55,7 @@ namespace MobTracker
                     float distance = Vector3.Distance(from, character.transform.position);
                     // Outside the alert star filter counts as not watched, so the gate does not remember it: it can
                     // still alert if the filter changes. The level test goes first; it allocates no name string.
-                    bool watched = StarFilters.Accepts(ModConfig.AlertStars.Value, character.GetLevel())
+                    bool watched = StarSets.Accepts(ModConfig.AlertStars, character.GetLevel())
                                    && ModConfig.Watchlist.Contains(Creature.PrefabName(character));
                     if (!_gate.ShouldAlert(id, watched, character.IsTamed(), distance, ModConfig.AlertRadius.Value))
                         continue;

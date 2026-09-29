@@ -11,7 +11,7 @@ namespace MobTracker
         public static int Main()
         {
             StarFilterTests();
-            CaptionTests();
+            StarSetTests();
             RulesTests();
             SpacingTests();
             OpenRuleTests();
@@ -27,7 +27,7 @@ namespace MobTracker
             return _failures == 0 ? 0 : 1;
         }
 
-        // The five choices, level by level. Stars are level minus one: 1 = none, 2 = one star, 3 = two stars.
+        // The five buttons' categories, level by level. Stars are level minus one: 1 = none, 2 = one star, 3 = two stars.
         private static void StarFilterTests()
         {
             var expected = new Dictionary<StarFilter, Func<int, bool>>
@@ -63,40 +63,165 @@ namespace MobTracker
                 && StarFilters.Label(StarFilter.OneStar) == "1 star" && StarFilters.Label(StarFilter.TwoStars) == "2 stars"
                 && StarFilters.Label(StarFilter.TwoOrMoreStars) == "2+ stars", "");
 
-            // A value outside the enum (a number or a comma list typed into the cfg) behaves as All.
+            // A value outside the enum behaves as All.
             StarFilter bogus = (StarFilter)7;
-            Check("stars: an out-of-range value accepts everything, reads 'All' and is not a known choice",
-                StarFilters.Accepts(bogus, 1) && StarFilters.Accepts(bogus, 3) && StarFilters.Label(bogus) == "All" && !StarFilters.IsDefined(bogus)
-                && StarFilters.IsDefined(StarFilter.TwoOrMoreStars), "");
+            Check("stars: an out-of-range category accepts everything and reads 'All'",
+                StarFilters.Accepts(bogus, 1) && StarFilters.Accepts(bogus, 3) && StarFilters.Label(bogus) == "All", "");
+
+            // The window's buttons: one per category, All first.
+            string[] labels = StarFilters.Labels();
+            StarFilter[] buttons = StarFilters.Buttons();
+            Check("buttons: All, No star, 1 star, 2 stars, 2+ stars, left to right",
+                string.Join(",", labels) == "All,No star,1 star,2 stars,2+ stars" && buttons.Length == labels.Length
+                && buttons[0] == StarFilter.All && buttons[1] == StarFilter.NoStars && buttons[2] == StarFilter.OneStar
+                && buttons[3] == StarFilter.TwoStars && buttons[4] == StarFilter.TwoOrMoreStars, string.Join(",", labels));
+            buttons[0] = StarFilter.TwoStars;
+            Check("buttons: Buttons() hands out a copy", StarFilters.Buttons()[0] == StarFilter.All, "");
         }
 
-        // The window's toolbars: one segment per choice, in enum order, picked directly by index.
-        private static void CaptionTests()
-        {
-            string[] labels = StarFilters.Labels();
-            int members = Enum.GetValues(typeof(StarFilter)).Length;
-            Check("toolbar: one segment per choice", labels.Length == members, labels.Length + " for " + members);
-            bool roundTrip = true;
-            foreach (StarFilter f in Enum.GetValues(typeof(StarFilter)))
-                roundTrip &= StarFilters.FromIndex(StarFilters.Index(f)) == f && labels[StarFilters.Index(f)] == StarFilters.Label(f);
-            Check("toolbar: each choice has its own segment, labelled with it", roundTrip, string.Join(" | ", labels));
-            Check("toolbar: an out-of-range value shows as the All segment, and an out-of-range index picks All",
-                StarFilters.Index((StarFilter)7) == 0 && StarFilters.Index((StarFilter)(-1)) == 0
-                && StarFilters.FromIndex(9) == StarFilter.All && StarFilters.FromIndex(-1) == StarFilter.All, "");
-            Check("toolbar: segments read All, No star, 1 star, 2 stars, 2+ stars, left to right",
-                string.Join(",", labels) == "All,No star,1 star,2 stars,2+ stars", string.Join(",", labels));
+        private static readonly StarSet[] Singles = { StarSet.NoStars, StarSet.OneStar, StarSet.TwoStars, StarSet.TwoOrMoreStars };
+        private static readonly StarFilter[] Categories = { StarFilter.NoStars, StarFilter.OneStar, StarFilter.TwoStars, StarFilter.TwoOrMoreStars };
 
-            // BepInEx reads a hand-typed enum with Enum.Parse(type, text, ignoreCase: true), so a number is the member
-            // with that value. StarFilter is numbered by star count, so the number typed is the number of stars.
-            Check("cfg: a typed 0, 1, 2 or 3 means that many stars (3 = two or more), 4 means All",
-                (StarFilter)Enum.Parse(typeof(StarFilter), "0", true) == StarFilter.NoStars
-                && (StarFilter)Enum.Parse(typeof(StarFilter), "1", true) == StarFilter.OneStar
-                && (StarFilter)Enum.Parse(typeof(StarFilter), "2", true) == StarFilter.TwoStars
-                && (StarFilter)Enum.Parse(typeof(StarFilter), "3", true) == StarFilter.TwoOrMoreStars
-                && (StarFilter)Enum.Parse(typeof(StarFilter), "4", true) == StarFilter.All, "");
-            Check("cfg: names are read case-insensitively; a number above 4 is not a known choice",
-                (StarFilter)Enum.Parse(typeof(StarFilter), "twostars", true) == StarFilter.TwoStars
-                && !StarFilters.IsDefined((StarFilter)Enum.Parse(typeof(StarFilter), "7", true)), "");
+        // Every one of the 16 sets: All (0) and every combination of the four categories.
+        private static IEnumerable<StarSet> EverySet()
+        {
+            for (int bits = 0; bits < 16; bits++)
+                yield return (StarSet)bits;
+        }
+
+        // The rule written out afresh: which categories take a level.
+        private static bool Expected(StarSet set, int level)
+        {
+            if (set == StarSet.All) return true;
+            return ((set & StarSet.NoStars) != 0 && level <= 1) || ((set & StarSet.OneStar) != 0 && level == 2)
+                   || ((set & StarSet.TwoStars) != 0 && level == 3) || ((set & StarSet.TwoOrMoreStars) != 0 && level >= 3);
+        }
+
+        // Several categories at once: the union of the marked ones; All resets.
+        private static void StarSetTests()
+        {
+            var wrong = new List<string>();
+            foreach (StarSet set in EverySet())
+            {
+                for (int level = 1; level <= 5; level++)
+                {
+                    if (StarSets.Accepts(set, level) != Expected(set, level)) wrong.Add(StarSets.Format(set) + " @" + level);
+                }
+            }
+            Check("sets: each of the 16 sets accepts exactly the levels 1-5 of its categories", wrong.Count == 0, string.Join("; ", wrong));
+            Check("sets: level 0 counts as no star, level 10 as two or more",
+                StarSets.Accepts(StarSet.NoStars, 0) && !StarSets.Accepts(StarSet.OneStar, 0)
+                && StarSets.Accepts(StarSet.TwoOrMoreStars, 10) && !StarSets.Accepts(StarSet.TwoStars, 10), "");
+            // The request's examples.
+            StarSet noOrOne = StarSet.NoStars | StarSet.OneStar, oneOrTwo = StarSet.OneStar | StarSet.TwoStars;
+            Check("sets: 'no star + 1 star' takes a plain and a one-star creature, not a two-star one",
+                StarSets.Accepts(noOrOne, 1) && StarSets.Accepts(noOrOne, 2) && !StarSets.Accepts(noOrOne, 3), "");
+            Check("sets: '1 star + 2 stars' takes one- and two-star creatures, not a plain one nor a modded three-star",
+                !StarSets.Accepts(oneOrTwo, 1) && StarSets.Accepts(oneOrTwo, 2) && StarSets.Accepts(oneOrTwo, 3) && !StarSets.Accepts(oneOrTwo, 4), "");
+            StarSet stray = (StarSet)16;
+            Check("sets: bits outside the four categories are ignored - alone they behave, show and are written as All",
+                StarSets.Accepts(stray, 1) && StarSets.Accepts(stray, 3) && StarSets.IsMarked(stray, StarFilter.All)
+                && !StarSets.IsMarked(stray, StarFilter.OneStar) && StarSets.Format(stray) == "All" && StarSets.Label(stray) == "All"
+                && StarSets.Format(stray | StarSet.OneStar) == "OneStar" && !StarSets.Accepts(stray | StarSet.OneStar, 1)
+                && StarSets.Toggle(stray | StarSet.OneStar, StarFilter.OneStar) == StarSet.All, "");
+
+            // IsMarked: the All button only while nothing else is, a category while it is in the set.
+            bool marksRight = true;
+            foreach (StarSet set in EverySet())
+            {
+                marksRight &= StarSets.IsMarked(set, StarFilter.All) == (set == StarSet.All);
+                for (int c = 0; c < 4; c++)
+                    marksRight &= StarSets.IsMarked(set, Categories[c]) == ((set & Singles[c]) != 0);
+            }
+            Check("marks: All is marked only for All; each category exactly while it is in the set", marksRight, "");
+            Check("marks: with 'No star + 1 star', those two are marked and All is not",
+                StarSets.IsMarked(noOrOne, StarFilter.NoStars) && StarSets.IsMarked(noOrOne, StarFilter.OneStar)
+                && !StarSets.IsMarked(noOrOne, StarFilter.All) && !StarSets.IsMarked(noOrOne, StarFilter.TwoStars)
+                && !StarSets.IsMarked(noOrOne, StarFilter.TwoOrMoreStars), "");
+
+            // Toggle: All -> one -> two -> remove one -> remove the last = All.
+            StarSet s0 = StarSet.All;
+            StarSet s1 = StarSets.Toggle(s0, StarFilter.NoStars);
+            StarSet s2 = StarSets.Toggle(s1, StarFilter.OneStar);
+            StarSet s3 = StarSets.Toggle(s2, StarFilter.NoStars);
+            StarSet s4 = StarSets.Toggle(s3, StarFilter.OneStar);
+            Check("toggle: from All a category is marked alone; a second adds to it; clicking a marked one removes it; the last removed gives All",
+                s1 == StarSet.NoStars && s2 == noOrOne && s3 == StarSet.OneStar && s4 == StarSet.All,
+                StarSets.Format(s1) + " / " + StarSets.Format(s2) + " / " + StarSets.Format(s3) + " / " + StarSets.Format(s4));
+            bool resets = true, fromAll = true;
+            foreach (StarSet set in EverySet())
+                resets &= StarSets.Toggle(set, StarFilter.All) == StarSet.All;
+            for (int c = 0; c < 4; c++)
+                fromAll &= StarSets.Toggle(StarSet.All, Categories[c]) == Singles[c];
+            Check("toggle: All resets from every set", resets, "");
+            Check("toggle: from All, each category gives that category alone", fromAll, "");
+            Check("toggle: '2 stars' and '2+ stars' can both be marked",
+                StarSets.Toggle(StarSet.TwoStars, StarFilter.TwoOrMoreStars) == (StarSet.TwoStars | StarSet.TwoOrMoreStars), "");
+            StarSet everything = StarSet.NoStars | StarSet.OneStar | StarSet.TwoStars | StarSet.TwoOrMoreStars;
+            Check("toggle: all four categories marked stay four marks (not All) until one is clicked off",
+                StarSets.Toggle(StarSet.NoStars | StarSet.OneStar | StarSet.TwoStars, StarFilter.TwoOrMoreStars) == everything
+                && !StarSets.IsMarked(everything, StarFilter.All) && StarSets.Toggle(everything, StarFilter.OneStar) == (everything & ~StarSet.OneStar), "");
+
+            // Parse: what the cfg may hold.
+            string names = TryParse("All", StarSet.All) + TryParse("NoStars", StarSet.NoStars) + TryParse("OneStar", StarSet.OneStar)
+                           + TryParse("TwoStars", StarSet.TwoStars) + TryParse("TwoOrMoreStars", StarSet.TwoOrMoreStars);
+            Check("parse: the five values a 0.3.x cfg holds read as before", names == "", names);
+            string anyCase = TryParse("twostars", StarSet.TwoStars) + TryParse("ONESTAR", StarSet.OneStar) + TryParse("all", StarSet.All)
+                             + TryParse("  TwoOrMoreStars  ", StarSet.TwoOrMoreStars);
+            Check("parse: names in any case, with spaces around", anyCase == "", anyCase);
+            string labelText = TryParse("No star", StarSet.NoStars) + TryParse("1 star", StarSet.OneStar) + TryParse("2 stars", StarSet.TwoStars)
+                               + TryParse("2+ stars", StarSet.TwoOrMoreStars) + TryParse("2+ STARS", StarSet.TwoOrMoreStars);
+            Check("parse: the window's labels", labelText == "", labelText);
+            string numbers = TryParse("0", StarSet.NoStars) + TryParse("1", StarSet.OneStar) + TryParse("2", StarSet.TwoStars)
+                             + TryParse("3", StarSet.TwoOrMoreStars) + TryParse("4", StarSet.All) + TryParse(" 2 ", StarSet.TwoStars);
+            Check("parse: a number counts stars as before - 0 none, 1 one, 2 two, 3 two or more, 4 All", numbers == "", numbers);
+            string lists = TryParse("NoStars, OneStar", noOrOne) + TryParse("OneStar;TwoStars", oneOrTwo) + TryParse("no star,1", noOrOne)
+                           + TryParse("1 star , 2 stars", oneOrTwo) + TryParse("OneStar, onestar, 1", StarSet.OneStar)
+                           + TryParse("NoStars,,OneStar", noOrOne) + TryParse("TwoOrMoreStars, TwoStars, OneStar, NoStars", everything);
+            Check("parse: a list separated by commas or semicolons combines its categories; repeats and empty pieces do nothing", lists == "", lists);
+            string allInside = TryParse("OneStar, All", StarSet.All) + TryParse("4, NoStars", StarSet.All) + TryParse("2 stars; all", StarSet.All);
+            Check("parse: any All in a list makes it All", allInside == "", allInside);
+
+            string problem;
+            StarSet junk = StarSets.Parse("Foo", out problem);
+            Check("parse: junk alone is All, with a problem that names it", junk == StarSet.All && problem != null && problem.Contains("'Foo'"), problem ?? "no problem");
+            StarSet partly = StarSets.Parse("OneStar, Foo, 7", out problem);
+            Check("parse: junk inside a list is ignored and named; the rest applies",
+                partly == StarSet.OneStar && problem != null && problem.Contains("'Foo'") && problem.Contains("'7'"), problem ?? "no problem");
+            bool outOfRange = StarSets.Parse("5", out problem) == StarSet.All && problem != null
+                              && StarSets.Parse("-1", out problem) == StarSet.All && problem != null;
+            Check("parse: a number outside 0-4 is not a category: alone it is All, with a problem", outOfRange, "");
+            bool blanks = true;
+            foreach (string blank in new[] { "", "   ", " , ; ", null })
+                blanks &= StarSets.Parse(blank, out problem) == StarSet.All && problem != null;
+            Check("parse: empty, blank or only separators is All, with a problem", blanks, "");
+            Check("parse: a clean value reports no problem", StarSets.Parse("NoStars, OneStar", out problem) == noOrOne && problem == null, problem ?? "");
+
+            // Format: canonical, and read back exactly.
+            string trips = "";
+            foreach (StarSet set in EverySet())
+            {
+                StarSet back = StarSets.Parse(StarSets.Format(set), out problem);
+                if (back != set || problem != null) trips += StarSets.Format(set) + " -> " + back + "; ";
+            }
+            Check("format: every one of the 16 sets reads back as itself, with no problem", trips == "", trips);
+            Check("format: 'All', or the names in a fixed order joined by ', '",
+                StarSets.Format(StarSet.All) == "All" && StarSets.Format(StarSet.OneStar | StarSet.NoStars) == "NoStars, OneStar"
+                && StarSets.Format(everything) == "NoStars, OneStar, TwoStars, TwoOrMoreStars", StarSets.Format(everything));
+
+            // Label: the window title's words.
+            Check("label: 'All', or the labels joined by ' + ' in the buttons' order",
+                StarSets.Label(StarSet.All) == "All" && StarSets.Label(noOrOne) == "No star + 1 star"
+                && StarSets.Label(StarSet.TwoStars | StarSet.NoStars) == "No star + 2 stars" && StarSets.Label(StarSet.TwoOrMoreStars) == "2+ stars",
+                StarSets.Label(noOrOne));
+        }
+
+        // "" when the text parses to the set with no problem; else what went wrong.
+        private static string TryParse(string text, StarSet want)
+        {
+            string problem;
+            StarSet got = StarSets.Parse(text, out problem);
+            return got == want && problem == null ? "" : "'" + text + "' -> " + StarSets.Format(got) + (problem != null ? " (" + problem + ")" : "") + "; ";
         }
 
         // What the search box and the watchlist already did before the star filter.
@@ -192,31 +317,49 @@ namespace MobTracker
 
         // The same expression WatchAlerts.Update uses (preflight checks that it reads the alert filter, not the
         // list's): watched = the alert star filter accepts the level AND the type is on the watchlist.
-        private static bool Decide(AlertGate<int> gate, int id, int level, StarFilter filter, bool onWatchlist)
+        private static bool Decide(AlertGate<int> gate, int id, int level, StarSet filter, bool onWatchlist)
         {
-            bool watched = StarFilters.Accepts(filter, level) && onWatchlist;
+            bool watched = StarSets.Accepts(filter, level) && onWatchlist;
             return gate.ShouldAlert(id, watched, false, 10f, 0f);
         }
 
         private static void AlertStarFilterTests()
         {
             var gate = new AlertGate<int>();
-            Check("alert stars: with '2 stars', a two-star Troll alerts", Decide(gate, 10, 3, StarFilter.TwoStars, true), "");
-            Check("alert stars: with '2 stars', a plain Troll does not", !Decide(gate, 11, 1, StarFilter.TwoStars, true), "");
-            Check("alert stars: with '2 stars', a one-star Troll does not", !Decide(gate, 12, 2, StarFilter.TwoStars, true), "");
+            Check("alert stars: with '2 stars', a two-star Troll alerts", Decide(gate, 10, 3, StarSet.TwoStars, true), "");
+            Check("alert stars: with '2 stars', a plain Troll does not", !Decide(gate, 11, 1, StarSet.TwoStars, true), "");
+            Check("alert stars: with '2 stars', a one-star Troll does not", !Decide(gate, 12, 2, StarSet.TwoStars, true), "");
             Check("alert stars: a creature left out alerts once the filter lets it through",
-                Decide(gate, 11, 1, StarFilter.All, true) && !Decide(gate, 11, 1, StarFilter.All, true), "");
-            Check("alert stars: a type not on the watchlist never alerts, whatever its stars", !Decide(gate, 13, 3, StarFilter.TwoStars, false), "");
+                Decide(gate, 11, 1, StarSet.All, true) && !Decide(gate, 11, 1, StarSet.All, true), "");
+            Check("alert stars: a type not on the watchlist never alerts, whatever its stars", !Decide(gate, 13, 3, StarSet.TwoStars, false), "");
+            var both = new AlertGate<int>();
+            StarSet noOrOne = StarSet.NoStars | StarSet.OneStar;
+            Check("alert stars: with 'No star + 1 star', a plain and a one-star Troll alert, a two-star one does not",
+                Decide(both, 14, 1, noOrOne, true) && Decide(both, 15, 2, noOrOne, true) && !Decide(both, 16, 3, noOrOne, true), "");
 
-            // The review's scenario: watching Troll, the player picks "1 star" straight from "2 stars". With a direct
-            // pick the poll only ever sees those two values, so the plain Troll never alerts and the one-star Troll's
-            // single alert is not used up by a state passed on the way (a cycling button went through All and NoStars).
+            // Why toggles, and not the cycling button the 0.2.0 review rejected: every state a click passes through is
+            // live for the once-a-second poll, which alerts each creature once. Watching Troll with '2 stars' marked,
+            // the player wants '1 star'. Clicking '1 star' first passes only through '1 star + 2 stars' - nothing
+            // outside what was and what will be - so the plain Troll never alerts and the one-star Troll alerts once.
+            StarSet start = StarSet.TwoStars;
+            StarSet added = StarSets.Toggle(start, StarFilter.OneStar);
+            StarSet goal = StarSets.Toggle(added, StarFilter.TwoStars);
             var fresh = new AlertGate<int>();
-            bool plainBefore = Decide(fresh, 21, 1, StarFilter.TwoStars, true);
-            bool plainAfter = Decide(fresh, 21, 1, StarFilter.OneStar, true);
-            bool oneStarAfter = Decide(fresh, 22, 2, StarFilter.OneStar, true);
-            Check("alert stars: picking 1 star straight from 2 stars alerts the one-star Troll and never the plain one",
-                !plainBefore && !plainAfter && oneStarAfter, plainBefore + "/" + plainAfter + "/" + oneStarAfter);
+            bool plainBefore = Decide(fresh, 21, 1, start, true);
+            bool plainBetween = Decide(fresh, 21, 1, added, true);
+            bool plainAfter = Decide(fresh, 21, 1, goal, true);
+            bool oneStarAfter = Decide(fresh, 22, 2, goal, true);
+            Check("alert stars: '1 star' clicked before '2 stars' is clicked off - the plain Troll never alerts, the one-star one does",
+                goal == StarSet.OneStar && !plainBefore && !plainBetween && !plainAfter && oneStarAfter,
+                plainBefore + "/" + plainBetween + "/" + plainAfter + "/" + oneStarAfter);
+
+            // The other order is the README's known limit: clicking the only marked category off first gives All, so
+            // until the next click every watched creature can alert - the plain Troll's one alert is used up.
+            StarSet removed = StarSets.Toggle(start, StarFilter.TwoStars);
+            var other = new AlertGate<int>();
+            bool plainInAll = Decide(other, 31, 1, removed, true);
+            Check("alert stars: '2 stars' clicked off first passes through All, where the plain Troll alerts (Known limits)",
+                removed == StarSet.All && plainInAll && StarSets.Toggle(removed, StarFilter.OneStar) == StarSet.OneStar, "");
         }
 
         // "Always track nearest watched": the waiting and cancelling that NearestWatched does around the game's objects.

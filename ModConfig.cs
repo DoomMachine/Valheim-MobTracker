@@ -21,8 +21,15 @@ namespace MobTracker
         public static ConfigEntry<float> AlertVolume;
         public static ConfigEntry<bool> AutoTrack;
         public static ConfigEntry<bool> AlwaysTrackNearest;
-        public static ConfigEntry<StarFilter> ListStars;
-        public static ConfigEntry<StarFilter> AlertStars;
+        // The star filters as the cfg holds them: text, not the StarSet enum, which BepInEx would read with Enum.Parse
+        // (a typed 2 would be the flag value 2, one star). The window writes them in StarSets.Format's form.
+        public static ConfigEntry<string> ListStarsText;
+        public static ConfigEntry<string> AlertStarsText;
+
+        // Parsed views of the two texts, re-parsed whenever an entry changes. Fields, read once per creature by the
+        // alert poll; tools\preflight.ps1 checks who reads and writes each of them.
+        public static StarSet ListStars;
+        public static StarSet AlertStars;
 
         /// <summary>Parsed view of <see cref="WatchlistEntry"/>; rebuilt whenever the entry changes.</summary>
         public static HashSet<string> Watchlist { get; private set; }
@@ -73,34 +80,42 @@ namespace MobTracker
                 "watched' checkbox sets it.");
 
             // Two independent filters: browse every star level while being alerted only for, say, two-star creatures.
-            ListStars = config.Bind("General", "ListStarFilter", StarFilter.All,
-                "Which star levels the creature list's nearby view shows: All, NoStars, OneStar, TwoStars, or TwoOrMoreStars " +
-                "(two stars and above). The window's 'List:' row sets it; the all-types view is not filtered. " +
-                "A number typed here counts stars: 0 = NoStars, 1 = OneStar, 2 = TwoStars, 3 = TwoOrMoreStars, 4 = All.");
-            AlertStars = config.Bind("Alerts", "AlertStarFilter", StarFilter.All,
-                "Which star levels of a watched creature type alert, and are auto-tracked or re-tracked: All, NoStars, " +
-                "OneStar, TwoStars, or TwoOrMoreStars (two stars and above). The window's 'Alerts:' row sets it. A creature " +
-                "left out now can still alert later if the filter changes. A number typed here counts stars: 0 = NoStars, " +
-                "1 = OneStar, 2 = TwoStars, 3 = TwoOrMoreStars, 4 = All.");
-            WarnIfUnknown(ListStars);
-            WarnIfUnknown(AlertStars);
-            ListStars.SettingChanged += (sender, args) => WarnIfUnknown(ListStars);
-            AlertStars.SettingChanged += (sender, args) => WarnIfUnknown(AlertStars);
+            ListStarsText = config.Bind("General", "ListStarFilter", "All",
+                "Which star levels the creature list's nearby view shows: All, or one or more of NoStars, OneStar, " +
+                "TwoStars and TwoOrMoreStars (two stars and above) separated by commas - 'NoStars, OneStar' shows " +
+                "creatures with no star or one star. Names in any case; the window's labels (No star, 1 star, 2 stars, " +
+                "2+ stars) work too, and a number counts stars: 0 = NoStars, 1 = OneStar, 2 = TwoStars, 3 = TwoOrMoreStars, " +
+                "4 = All. All anywhere in the list means All. The window's 'List:' row sets it: a click on a category " +
+                "adds or removes it, a click on All resets. The all-types view is not filtered. Anything else is " +
+                "ignored with a warning in the log; with nothing valid, it works as All.");
+            AlertStarsText = config.Bind("Alerts", "AlertStarFilter", "All",
+                "Which star levels of a watched creature type alert, and are auto-tracked or re-tracked: All, or one or " +
+                "more of NoStars, OneStar, TwoStars and TwoOrMoreStars (two stars and above) separated by commas - " +
+                "'OneStar, TwoStars' alerts only for one- and two-star creatures. Names in any case; the window's labels " +
+                "(No star, 1 star, 2 stars, 2+ stars) work too, and a number counts stars: 0 = NoStars, 1 = OneStar, " +
+                "2 = TwoStars, 3 = TwoOrMoreStars, 4 = All. All anywhere in the list means All. The window's 'Alerts:' " +
+                "row sets it: a click on a category adds or removes it, a click on All resets. A creature left out now " +
+                "can still alert later if the filter changes. Anything else is ignored with a warning in the log; with " +
+                "nothing valid, it works as All.");
+            // Each parsed view from its own entry, now and whenever that entry changes (the window's rows, or
+            // ConfigurationManager, which also raises SettingChanged).
+            ListStars = ParseStars(ListStarsText);
+            AlertStars = ParseStars(AlertStarsText);
+            ListStarsText.SettingChanged += (sender, args) => ListStars = ParseStars(ListStarsText);
+            AlertStarsText.SettingChanged += (sender, args) => AlertStars = ParseStars(AlertStarsText);
 
             Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value);
             WatchlistEntry.SettingChanged += (sender, args) => Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value);
         }
 
-        /// <summary>
-        /// BepInEx parses an enum leniently: a number is the member with that value (StarFilter is numbered by star
-        /// count, so "2" is TwoStars), and "OneStar, TwoStars" is the two ORed together. Anything that lands outside
-        /// the five members works as All; say so once, in the log.
-        /// </summary>
-        private static void WarnIfUnknown(ConfigEntry<StarFilter> entry)
+        /// <summary>A star filter entry's set; what it could not read is said in the log, naming the setting.</summary>
+        private static StarSet ParseStars(ConfigEntry<string> entry)
         {
-            if (!StarFilters.IsDefined(entry.Value))
-                MobTrackerPlugin.Log.LogWarning(entry.Definition.Key + " is set to " + (int)entry.Value +
-                    ", which is not one of NoStars (0), OneStar (1), TwoStars (2), TwoOrMoreStars (3), All (4); it works as All.");
+            string problem;
+            StarSet set = StarSets.Parse(entry.Value, out problem);
+            if (problem != null)
+                MobTrackerPlugin.Log.LogWarning(entry.Definition.Section + "." + entry.Definition.Key + " is '" + entry.Value + "': " + problem);
+            return set;
         }
 
         public static void ToggleWatch(string prefabName)
