@@ -69,6 +69,10 @@ https://github.com/DoomMachine/Valheim-MobTracker
   game's Volume and Effect volume settings) whenever one
   starts existing near you (spawned or walked into range - the same thing to a client). Tamed
   creatures never alert. Watched types are listed at the bottom of the window; click one to remove it.
+- **One game session**: what you watch and both star rows go back to nothing watched and *All* whenever you
+  enter a world or go back to the main menu, so logging out and in again, or restarting the game, starts
+  afresh, whichever character you play; dying does not. Turn on `KeepBetweenSessions` to keep them from one
+  session to the next.
 - **Always track nearest watched** (a checkbox in the window, off by default) is for hunting one kind of
   creature for its drops. When the creature you are tracking is of a watched type and is lost - killed, or no
   longer loaded on your client (out of range, despawned) - the tracker says "Lost track of" as always, waits 5
@@ -88,8 +92,9 @@ https://github.com/DoomMachine/Valheim-MobTracker
 MobTracker needs BepInEx 5 for Valheim (the BepInExPack for Valheim, for example). Download
 `MobTracker-<version>.zip` from this repository's Releases, remove any older `MobTracker.dll` from
 `BepInEx/plugins/`, and put the `MobTracker.dll` from the zip there; the zip also holds this README and the
-licence. The settings in `BepInEx/config/com.mobtracker.plugin.cfg` are kept from one version to the next, and
-a new version adds its own with their defaults. When the game starts, `BepInEx/LogOutput.log` says
+licence. The settings in `BepInEx/config/com.mobtracker.plugin.cfg` are kept from one version to the next - since
+0.5.0 the watchlist and the two star filters only with `KeepBetweenSessions` on - and a new version adds its own
+with their defaults. When the game starts, `BepInEx/LogOutput.log` says
 `MobTracker <version> loaded`. To remove it, delete `MobTracker.dll`, and the .cfg too to forget the settings.
 
 ## Configuration (`BepInEx/config/com.mobtracker.plugin.cfg`)
@@ -97,14 +102,15 @@ a new version adds its own with their defaults. When the game starts, `BepInEx/L
 | Setting | Default | |
 |---|---|---|
 | `General.ListKey` | `F7` | Toggle the list (Escape or the gamepad's B also close it). A key the game cannot read (WheelUp, F13, Plus...), or the left, right or middle mouse button, does nothing and says so once in the log; keys the game ignores outright - Mouse5, Mouse6, F16 to F24 and the numbered-joystick buttons - never fire, with no warning |
-| `General.ListStarFilter` | `All` | The list's star filter (also the **List:** row): `All`, or one or more of `NoStars`, `OneStar`, `TwoStars` and `TwoOrMoreStars` separated by commas, e.g. `NoStars, OneStar` for both. Any case; the window's labels (`No star`, `1 star`, `2 stars`, `2+ stars`) work too, and a number counts stars: 0-3, 3 = two or more, 4 = All. `All` anywhere in the list means All; anything else is ignored with a warning in the log, and with nothing valid the filter works as All. A text setting since 0.4.0 (a single name or number from a 0.3.x file reads as before), so ConfigurationManager shows a text box for it rather than a list, and applies it at every keystroke |
+| `General.KeepBetweenSessions` | `false` | Keep `Watchlist`, `ListStarFilter` and `AlertStarFilter` - the Watch buttons and the **List:** and **Alerts:** rows - from one game session to the next. Off, they are set back to nothing watched and `All` whenever you enter a world or go back to the main menu (see **One game session**); closing the game leaves the last ones in this file until you next enter a world |
+| `General.ListStarFilter` | `All` | The list's star filter (also the **List:** row): `All`, or one or more of `NoStars`, `OneStar`, `TwoStars` and `TwoOrMoreStars` separated by commas, e.g. `NoStars, OneStar` for both. Any case; the window's labels (`No star`, `1 star`, `2 stars`, `2+ stars`) work too, and a number counts stars: 0-3, 3 = two or more, 4 = All. `All` anywhere in the list means All; anything else is ignored with a warning in the log, and with nothing valid the filter works as All. A text setting since 0.4.0 (a single name or number from a 0.3.x file reads as before), so ConfigurationManager shows a text box for it rather than a list, and applies it at every keystroke. Back to `All` at every session unless `KeepBetweenSessions` is on |
 | `Tracking.GuideMode` | `Arrow` | `Arrow` or `GroundPath` |
 | `Tracking.ArrowSize` / `ArrowHeight` | `0.6` / `2.6` | Metres |
-| `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows, Guide, the two tracking checkboxes) rewrites the file |
+| `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Emptied at every session unless `KeepBetweenSessions` is on. With it on, edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows, Guide, the two tracking checkboxes) rewrites the file |
 | `Alerts.AlertRadius` | `0` | Only alert (or re-track, below) within this many metres; 0 = anywhere loaded |
 | `Alerts.AlertVolume` | `0.8` | Ding volume; the game's Volume and Effect volume settings apply on top of it |
 | `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor the choice Always track nearest watched is waiting to make for that type, nor takes a creature on the other side of a dungeon entrance |
-| `Alerts.AlertStarFilter` | `All` | The alerts' star filter (also the **Alerts:** row), written the same way: e.g. `OneStar, TwoStars` alerts only for one- and two-star creatures. A text setting since 0.4.0, like `ListStarFilter`, except that a change in the window or in ConfigurationManager takes effect only once the filter has stayed the same for 1.5 seconds (see Known limits); edit the file by hand with the game closed, as for `Watchlist` |
+| `Alerts.AlertStarFilter` | `All` | The alerts' star filter (also the **Alerts:** row), written the same way: e.g. `OneStar, TwoStars` alerts only for one- and two-star creatures. A text setting since 0.4.0, like `ListStarFilter`, except that a change in the window or in ConfigurationManager takes effect only once the filter has stayed the same for 1.5 seconds (see Known limits). Back to `All` at every session unless `KeepBetweenSessions` is on; with it on, edit the file by hand with the game closed, as for `Watchlist` |
 | `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature of a watched type, not a tamed one, is lost, track the nearest one of that type that passes the watch alert's filters and is on your side of a dungeon entrance: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window) |
 
 ## Known limits
@@ -148,6 +154,9 @@ a new version adds its own with their defaults. When the game starts, `BepInEx/L
 - The window and the tracking label grow with your screen height above 1080p; they do not follow the game's GUI
   scale setting. The window's size and place are not kept from one start of the game to the next.
 
+Open issues, what has not yet been confirmed in the game, and ideas for later are listed in
+`docs/open-items.md` in the repository.
+
 ## Building
 
 `dotnet build MobTracker.csproj -c Release` (needs the game with BepInEx; see the comment at the top of
@@ -181,17 +190,27 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **0.5.0** - the watched types and both star rows last one game session: whenever you enter a world or go
+  back to the main menu, nothing is watched and both rows are at *All* again, so logging out and in, or
+  restarting the game, starts afresh (dying does not). The new `KeepBetweenSessions` setting, off by default,
+  keeps them as before. A watchlist and star filters saved by an earlier version are set back when you first enter
+  a world; to keep them, turn `KeepBetweenSessions` on before that - in ConfigurationManager at the main menu, or
+  in the cfg with the game closed (add `KeepBetweenSessions = true` under `[General]` if the line is not there yet -
+  0.5.0 writes it at its first start; a change made in the file while the game runs is overwritten). Not yet played
+  in the game.
 - **0.4.1** - fixes. Taking off the only marked category on the **Alerts:** row no longer lets every watched
   creature alert until your next click: a change on that row, or to `AlertStarFilter` in ConfigurationManager,
   now takes effect once it has stayed the same for 1.5 seconds, so what the row passes through while you click,
   or a half-typed value, is not seen. F7 no longer opens the list over the Barber Station, where the Escape that
   closed the list also cancelled the barber and put back the hair and beard you had. The safety checks catch more
-  planted defects, and `tools/unit-mutants.ps1` checks the unit tests the same way. Not yet played in the game.
+  planted defects, and `tools/unit-mutants.ps1` checks the unit tests the same way. Ran through a long play
+  session without errors, in which a watch alert came, the `AlertStarFilter` held several categories at once,
+  types were watched and unwatched and the guide mode was switched; whether its fixes work was not checked there.
 - **0.4.0** - star filters take several categories at once: the **List:** and **Alerts:** rows are five toggle
   buttons each, so you can list or be alerted for, say, no-star and one-star creatures together, or only one-
   and two-star ones; a click on *All* resets a row, and the window's title names the categories the list shows.
   `ListStarFilter` and `AlertStarFilter` are now text, such as `NoStars, OneStar`; a single name or number
-  from a 0.3.x configuration reads as before. Not yet played in the game.
+  from a 0.3.x configuration reads as before. Its changes ran in 0.4.1's play session; none was checked there.
 - **0.3.1** - fixes. While the list is open: the mouse wheel no longer zooms the camera, Tab no longer opens
   the inventory, and a click on the window no longer reaches the map or a game window under it (on the map a
   right click deleted a pin, a middle click pinged everyone, a double click left a pin the Cartography Table
@@ -200,14 +219,14 @@ The copyright holder is DoomMachine (see `LICENSE`).
   keys work. A ListKey the game cannot read no longer throws on every frame. Auto-track and Always track nearest
   watched no longer point the arrow at a creature on the other side of a dungeon entrance; the rows hold still
   under the pointer; the window keeps a corner on screen; the ding follows the game's Volume and Effect volume;
-  a creature another mod broke can no longer stop the alerts; setting descriptions corrected or brought up to date. Not yet
-  played in the game.
+  a creature another mod broke can no longer stop the alerts; setting descriptions corrected or brought up to date. Its
+  changes ran in 0.4.1's play session; none was checked there.
 - **0.3.0** - Always track nearest watched (an option, off by default): when a tracked creature of a watched
   type is lost, the tracker moves on to the nearest one of that type. Ran through play sessions without errors;
   the new option has not yet been seen acting in the game.
 - **0.2.0** - star filters for the list and for watch alerts. Find area follows boss progression and
   events, names the rule that placed the nearest pin, and its pins can be cleared; a right click on one
-  used to delete the nearest pin of yours instead. Ran through a play session without errors; its new features
+  used to delete the nearest pin of yours instead. Ran through two play sessions without errors; its new features
   not yet confirmed in the game.
 - **0.1.0** - the original MobTracker by null: creature list, watch alerts, tracking arrow and ground path
   (up to 250 m), and Find area.

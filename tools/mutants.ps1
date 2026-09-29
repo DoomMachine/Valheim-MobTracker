@@ -330,7 +330,36 @@ $mutants = @(
     @("U13 the screen's width for its height", "EntityListWindow.cs", [regex]::Escape("Screen.height, screenPoint.x, screenPoint.y)"), "Screen.width, screenPoint.x, screenPoint.y)"),
     @("U14 the point's x and y swapped", "EntityListWindow.cs", [regex]::Escape("Screen.height, screenPoint.x, screenPoint.y)"), "Screen.height, screenPoint.y, screenPoint.x)"),
     @("U15 blocks while the list is closed", "EntityListWindow.cs", [regex]::Escape("return IsOpen && Rules.PointerOverWindow("), "return Rules.PointerOverWindow("),
-    @("U16 OnGUI drops the moved window's rect - the test keeps the old place", "EntityListWindow.cs", [regex]::Escape("_rect = GUILayout.Window("), "GUILayout.Window(")
+    @("U16 OnGUI drops the moved window's rect - the test keeps the old place", "EntityListWindow.cs", [regex]::Escape("_rect = GUILayout.Window("), "GUILayout.Window("),
+    # The game session (0.5.0): with KeepBetweenSessions off, the watchlist and the star filters last one session.
+    @("E1 GameSession never added - every choice outlasts the session", "Plugin.cs", "[ \t]*gameObject\.AddComponent<GameSession>\(\);\r?\n", ""),
+    @("E2 Unity's == - a logout goes unseen until the next world", "GameSession.cs", [regex]::Escape("if (ReferenceEquals(game, _game))"), "if (game == _game)"),
+    @("E3 the Game never remembered - the choices emptied on every frame", "GameSession.cs", "[ \t]*_game = game;\r?\n", ""),
+    @("E4 GameSession's Update renamed update - Unity never calls it, nothing resets", "GameSession.cs", [regex]::Escape("private void Update()"), "private void update()"),
+    @("E5 the choices never reset", "GameSession.cs", "[ \t]*ModConfig\.ResetSession\(\);\r?\n", ""),
+    @("E6 the settler never started over", "GameSession.cs", "[ \t]*WatchAlerts\.ResetSession\(\);\r?\n", ""),
+    @("E7 the local player compared, not the Game - a death empties the choices", "GameSession.cs", [regex]::Escape("ReferenceEquals(game, _game)"), "ReferenceEquals(Player.m_localPlayer, _game)"),
+    @("E8 the stored Game compared with itself - never a new session", "GameSession.cs", [regex]::Escape("ReferenceEquals(game, _game)"), "ReferenceEquals(_game, _game)"),
+    @("E9 KeepBetweenSessions ignored - the choices always reset", "ModConfig.cs", "[ \t]*if \(KeepBetweenSessions\.Value\)\r?\n[ \t]*return;\r?\n", ""),
+    @("E10 KeepBetweenSessions inverted - reset only when kept", "ModConfig.cs", [regex]::Escape("if (KeepBetweenSessions.Value)"), "if (!KeepBetweenSessions.Value)"),
+    @("E11 the reset asks AutoTrack, not KeepBetweenSessions", "ModConfig.cs", [regex]::Escape("if (KeepBetweenSessions.Value)"), "if (AutoTrack.Value)"),
+    @("E12 the watchlist never emptied", "ModConfig.cs", "[ \t]*WatchlistEntry\.Value = \(string\)WatchlistEntry\.DefaultValue;\r?\n", ""),
+    @("E13 the List: row never reset", "ModConfig.cs", "[ \t]*ListStarsText\.Value = \(string\)ListStarsText\.DefaultValue;\r?\n", ""),
+    @("E14 the Alerts: row never reset", "ModConfig.cs", "[ \t]*AlertStarsText\.Value = \(string\)AlertStarsText\.DefaultValue;\r?\n", ""),
+    @("E15 the List: row reset to the watchlist's default", "ModConfig.cs", [regex]::Escape("ListStarsText.Value = (string)ListStarsText.DefaultValue;"), "ListStarsText.Value = (string)WatchlistEntry.DefaultValue;"),
+    @("E16 KeepBetweenSessions on by default - nothing resets", "ModConfig.cs", [regex]::Escape("""KeepBetweenSessions"", false,"), """KeepBetweenSessions"", true,"),
+    @("E17 WatchAlerts.Update starts the settler over on every frame - the Alerts: row never waits", "WatchAlerts.cs", "(private void Update\(\)\r?\n[ \t]*\{\r?\n)", '${1}            ResetSession();' + "`r`n"),
+    @("E18 a new settler started over, not the alerts' own", "WatchAlerts.cs", [regex]::Escape("AlertStarsSettler.Reset();"), "new StarSetSettler().Reset();"),
+    @("E19 a Watch click still waiting at a logout is applied in the next session", "EntityListWindow.cs", "(never carried into the\r?\n[^\r\n]*\r?\n)[ \t]*_pendingWatchToggle = null;\r?\n", '${1}'),
+    @("E20 the reset saves the cfg at each write again - a failed save leaves the parsed watchlist behind its entry", "ModConfig.cs", "[ \t]*file\.SaveOnConfigSet = false;\r?\n", ""),
+    @("E21 SaveOnConfigSet never put back - no setting saves again until the game restarts", "ModConfig.cs", "[ \t]*file\.SaveOnConfigSet = saveEach;\r?\n", ""),
+    @("E22 the reset's save not caught - a locked cfg throws out of GameSession.Update", "ModConfig.cs", "try\r?\n[ \t]*\{\r?\n[ \t]*file\.Save\(\);\r?\n[ \t]*\}\r?\n[ \t]*catch \(System\.Exception e\)\r?\n[ \t]*\{\r?\n[^\r\n]*\r?\n[ \t]*\}", "file.Save();"),
+    @("E23 the watchlist entry's handler gone - the reset empties the cfg, not the watchlist the alerts read", "ModConfig.cs", "[ \t]*WatchlistEntry\.SettingChanged \+= [^\r\n]*\r?\n", ""),
+    @("E24 GameSession on an object of the scene - it goes with the first logout", "Plugin.cs", [regex]::Escape("gameObject.AddComponent<GameSession>();"), "new GameObject(""MobTracker session"").AddComponent<GameSession>();"),
+    @("E25 the plugin's Awake renamed awake - Unity never calls it, nothing loads", "Plugin.cs", [regex]::Escape("private void Awake()"), "private void awake()"),
+    @("E27 the wheel postfix's __result spelt __Result - HarmonyX refuses the patch at the game's start", "Plugin.cs", "(?s)(internal static class MouseWheelPatch.*?ref float )__result\)(.*?)__result = 0f;", '${1}__Result)${2}__Result = 0f;'),
+    @("E28 the delete-gesture prefix's pos spelt Pos - HarmonyX refuses the patch at the game's start", "Plugin.cs", "(?s)(Prefix\(Minimap __instance, Vector3 )pos(, float radius.*?RemovePinNear\(__instance, )pos,", '${1}Pos${2}Pos,'),
+    @("E26 the wheel patch's Postfix renamed postfix - Harmony applies nothing, and the wheel reaches the free-fly camera and Server Devcommands' wheel binds again", "Plugin.cs", "(internal static class MouseWheelPatch\s*\{\s*\[HarmonyPriority\(Priority\.Last\)\]\s*private static void )Postfix\(", '${1}postfix(')
 )
 $ids = @($mutants | ForEach-Object { ($_[0] -split " ")[0] })
 $unknown = @($Only | Where-Object { $ids -notcontains $_ })

@@ -372,6 +372,21 @@ namespace MobTracker
                                && o.Settled(StarSet.OneStar, 0, 15.5f) == StarSet.OneStar;
             Check("settle: fed one revision throughout, a change of the set alone restarts the wait, and a return to the set in use calls it off",
                 firstWaits && calledOff && againWaits && setRestarts, firstWaits + "/" + calledOff + "/" + againWaits + "/" + setRestarts);
+
+            // A new game session starts the settler over (WatchAlerts.ResetSession): the next set is taken at once, as
+            // at the start - All, after ModConfig.ResetSession, or a row kept with KeepBetweenSessions - even in the
+            // middle of a wait; after it, a change waits as before.
+            var n = new StarSetSettler();
+            n.Settled(StarSet.TwoStars, 0, 0f);
+            bool midWait = n.Settled(StarSet.All, 1, 10f) == StarSet.TwoStars;
+            n.Reset();
+            bool allAtOnce = n.Settled(StarSet.All, 2, 10.1f) == StarSet.All;
+            bool thenWaits = n.Settled(StarSet.OneStar, 3, 11f) == StarSet.All && n.Settled(StarSet.OneStar, 3, 12.49f) == StarSet.All
+                             && n.Settled(StarSet.OneStar, 3, 12.5f) == StarSet.OneStar;
+            n.Reset();
+            bool keptAtOnce = n.Settled(StarSet.OneStar | StarSet.TwoStars, 3, 13f) == (StarSet.OneStar | StarSet.TwoStars);
+            Check("settle: Reset (a new game session) takes the next set at once - All or a kept one - and a change after it waits 1.5 s",
+                midWait && allAtOnce && thenWaits && keptAtOnce, midWait + "/" + allAtOnce + "/" + thenWaits + "/" + keptAtOnce);
         }
 
         // The mode and what it switches (AlertsRow): the shipped Settle, and EmptyAlertsNothing, built but not shipped.

@@ -374,6 +374,15 @@ namespace MobTracker
                 _settled = current;
             return _settled;
         }
+
+        /// <summary>
+        /// Starts over: the next set it is given is taken at once, as the first one is. For a new game session
+        /// (WatchAlerts.ResetSession), whose Alerts: row may just have been set back to All.
+        /// </summary>
+        public void Reset()
+        {
+            _started = false;
+        }
     }
 
     /// <summary>

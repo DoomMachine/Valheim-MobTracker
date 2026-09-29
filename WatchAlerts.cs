@@ -25,6 +25,15 @@ namespace MobTracker
         /// </summary>
         internal static StarSet EffectiveAlertStars { get; private set; }
 
+        /// <summary>
+        /// A game session ended or began (GameSession): the Alerts: row as it then stands is taken at once, not 1.5 s
+        /// later - with KeepBetweenSessions off, ModConfig.ResetSession has just set it back to All.
+        /// </summary>
+        internal static void ResetSession()
+        {
+            AlertStarsSettler.Reset();
+        }
+
         private void Update()
         {
             // Every frame, before the once-a-second return: the wait is timed from the text's last change, not from a poll.

@@ -99,6 +99,9 @@ $mutants = @(
     # The list's key (Rules.cs).
     @("U31 ListKey opens the list over the Barber Station", "Rules.cs", "return !gameTyping && !pauseMenu && !buildMenu && !inventory && !barber;", "return !gameTyping && !pauseMenu && !buildMenu && !inventory;"),
     @("U44 MayToggle opens the list only over the barber", "Rules.cs", "&& !inventory && !barber;", "&& !inventory && barber;"),
+    # A new game session starts the settler over (0.5.0).
+    @("U50 Reset does nothing - a new session's Alerts: row waits 1.5 s", "StarFilter.cs", "            _started = false;`n", ""),
+    @("U51 Reset makes All the settled set - a kept Alerts: row waits 1.5 s at the start of a session, with All in use", "StarFilter.cs", "            _started = false;`n", "            _settled = StarSet.All;`n"),
     @("U45 the barber stops the list closing", "Rules.cs", "return !(keyTypesText && (searchFocused || gameTyping));", "return !barber && !(keyTypesText && (searchFocused || gameTyping));")
 )
 $ids = @($mutants | ForEach-Object { ($_[0] -split " ")[0] })

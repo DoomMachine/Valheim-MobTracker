@@ -37,7 +37,12 @@
      the inventory or the Barber Station; the wheel
      is zeroed last; TomTom's and Wayfinder's typing test sees the real state (and the installed TomTom/Wayfinder,
      or the -Waypointer DLLs, still read the two flags only there); clicks on the list reach no uGUI element under it
-  7. every assembly the plugin references is in the game folder
+  7. the game session: GameSession, a component of the plugin's own object, starts a session whenever Game.instance
+     is another object (by reference) and resets through ModConfig.ResetSession and WatchAlerts.ResetSession, called
+     from nowhere else; unless KeepBetweenSessions (General, default false) is on, the reset writes each of the
+     watchlist and the two star filters back to its own default, saving the cfg once afterwards; the watchlist
+     entry's own change handler re-parses it; a Watch click still waiting with no player is dropped
+  8. every assembly the plugin references is in the game folder
   Run it after every Valheim update. Exits 1 on any failure. The number of checks depends on how many TomTom or
   Wayfinder DLLs it reads (one check each).
 
@@ -49,7 +54,7 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Plugin = "",
-    [string]$ExpectedVersion = "0.4.1",
+    [string]$ExpectedVersion = "0.5.0",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string[]]$Waypointer = @()   # TomTom / Wayfinder DLLs to check the carve-out against; default: the installed ones
 )
@@ -79,7 +84,7 @@ Write-Output "== identity =="
 $checks++
 $bep = $null
 foreach ($t in $plug.Types) { foreach ($ca in $t.CustomAttributes) { if ($ca.AttributeType.Name -eq "BepInPlugin") { $bep = @($ca.ConstructorArguments | ForEach-Object { "$($_.Value)" }) } } }
-if ($bep -and $bep[0] -eq "com.mobtracker.plugin" -and $bep[1] -eq "MobTracker" -and $bep[2] -eq $ExpectedVersion) { Ok ("BepInPlugin {0} / {1} / {2}" -f $bep[0], $bep[1], $bep[2]) }
+if ($bep -and $bep[0] -ceq "com.mobtracker.plugin" -and $bep[1] -ceq "MobTracker" -and $bep[2] -ceq $ExpectedVersion) { Ok ("BepInPlugin {0} / {1} / {2}" -f $bep[0], $bep[1], $bep[2]) }
 else { Fail ("BepInPlugin is '{0}', expected 'com.mobtracker.plugin / MobTracker / {1}'" -f ($bep -join " / "), $ExpectedVersion) }
 # The version is written in two places (Plugin.cs's Version constant, the csproj's <Version>); both must agree.
 $checks++
@@ -91,8 +96,9 @@ else { Fail ("assembly version {0}, file version {1}, expected {2}.0 - MobTracke
 $checks++
 $loadedLine = "MobTracker $ExpectedVersion loaded"
 $awake = $null
-foreach ($t in $plug.Types) { if ($t.Name -eq "MobTrackerPlugin") { $awake = $t.Methods | Where-Object { $_.Name -eq "Awake" -and $_.HasBody } | Select-Object -First 1 } }
-$hasLine = $awake -and @($awake.Body.Instructions | Where-Object { $_.OpCode.Name -eq "ldstr" -and "$($_.Operand)" -eq $loadedLine }).Count -gt 0
+# Case-sensitive, as Unity calls its messages: a method renamed awake is never called.
+foreach ($t in $plug.Types) { if ($t.Name -ceq "MobTrackerPlugin") { $awake = $t.Methods | Where-Object { $_.Name -ceq "Awake" -and $_.HasBody } | Select-Object -First 1 } }
+$hasLine = $awake -and @($awake.Body.Instructions | Where-Object { $_.OpCode.Name -eq "ldstr" -and "$($_.Operand)" -ceq $loadedLine }).Count -gt 0
 if ($hasLine) { Ok "Awake logs '$loadedLine'" } else { Fail "MobTrackerPlugin.Awake does not log '$loadedLine'" }
 
 Write-Output "== Harmony patch targets =="
@@ -114,7 +120,7 @@ foreach ($t in $plug.GetTypes()) {
             $gt = $m.GetType($typeName)
             if (-not $gt) { continue }
             foreach ($gm in $gt.Methods) {
-                if ($gm.Name -ne $method) { continue }
+                if ($gm.Name -cne $method) { continue }
                 if ($null -ne $want -and (@($gm.Parameters | ForEach-Object { $_.ParameterType.FullName }) -join ",") -ne ($want -join ",")) { continue }
                 $target = $gm; break
             }
@@ -124,12 +130,13 @@ foreach ($t in $plug.GetTypes()) {
         if ($null -ne $want) { $shown += "(" + ($want -join ", ") + ")" }
         if (-not $target) { Fail ("{0}: {1} not found in the game" -f $t.Name, $shown); continue }
         $badParams = @()
-        foreach ($pm in $t.Methods | Where-Object { @("Prefix", "Postfix", "Finalizer") -contains $_.Name }) {
+        foreach ($pm in $t.Methods | Where-Object { @("Prefix", "Postfix", "Finalizer") -ccontains $_.Name }) {
             foreach ($p in $pm.Parameters) {
-                if ($injected -contains $p.Name -or $p.Name -like "___*") { continue }
-                $tp = $target.Parameters | Where-Object { $_.Name -eq $p.Name } | Select-Object -First 1
+                # By exact case, as HarmonyX matches them: __Result is no injection, and Pos no parameter of RemovePin(pos, ...).
+                if ($injected -ccontains $p.Name -or $p.Name -clike "___*") { continue }
+                $tp = $target.Parameters | Where-Object { $_.Name -ceq $p.Name } | Select-Object -First 1
                 $pType = $p.ParameterType.FullName.TrimEnd('&')
-                if (-not $tp -or $tp.ParameterType.FullName -ne $pType) { $badParams += ("{0}({1} {2})" -f $pm.Name, $pType, $p.Name) }
+                if (-not $tp -or $tp.ParameterType.FullName -cne $pType) { $badParams += ("{0}({1} {2})" -f $pm.Name, $pType, $p.Name) }
             }
         }
         if ($badParams.Count -eq 0) { Ok ("{0} -> {1}, its parameters match" -f $t.Name, $shown) }
@@ -158,7 +165,7 @@ else { Fail ("[HarmonyPriority] on the class, which PatchAll(Type) ignores - put
 # The delete-gesture prefix must run after a default-priority co-patcher's (TomTom's), or one click removes two pins.
 $checks++
 $rpPrefix = $null
-foreach ($t in $patchClasses) { if ($t.Name -eq "RemoveAreaPinPatch") { $rpPrefix = $t.Methods | Where-Object { $_.Name -eq "Prefix" } | Select-Object -First 1 } }
+foreach ($t in $patchClasses) { if ($t.Name -ceq "RemoveAreaPinPatch") { $rpPrefix = $t.Methods | Where-Object { $_.Name -ceq "Prefix" } | Select-Object -First 1 } }
 $rpPriority = if ($rpPrefix) { Get-Priority $rpPrefix } else { $null }
 if ($null -ne $rpPriority -and $rpPriority -lt 400) { Ok "RemoveAreaPinPatch.Prefix runs at priority $rpPriority, after default-priority prefixes" }
 else { Fail ("RemoveAreaPinPatch.Prefix priority is {0}; it must be below 400 (Normal), set on the method" -f $(if ($null -eq $rpPriority) { "unset" } else { $rpPriority })) }
@@ -211,7 +218,8 @@ Write-Output "== the star filters read the right setting =="
 # alerts from the alerts' filter only, and both ask StarSets.Accepts. (Each field parsed from its own entry, and each
 # window row writing its own entry through StarSets.Format and Toggle: under "the star filters' entries" below.)
 function Get-Method($typeName, $methodName) {
-    foreach ($t in $plug.GetTypes()) { if ($t.FullName -eq $typeName) { return $t.Methods | Where-Object { $_.Name -eq $methodName -and $_.HasBody } | Select-Object -First 1 } }
+    # Names compared case-sensitively, as the runtime and Unity do: a method renamed update is not Update to them.
+    foreach ($t in $plug.GetTypes()) { if ($t.FullName -ceq $typeName) { return $t.Methods | Where-Object { $_.Name -ceq $methodName -and $_.HasBody } | Select-Object -First 1 } }
     return $null
 }
 function Get-Touches($m) {
@@ -692,17 +700,207 @@ foreach ($t in $plug.GetTypes()) {
 }
 if ($retrackLost.Count -eq 1 -and $retrackLost[0] -eq "NearestWatched.Lost") { Ok "Retrack.Lost is called once, from NearestWatched.Lost" }
 else { Fail ("Retrack.Lost must be called exactly once, from NearestWatched.Lost; found: {0}" -f $(if ($retrackLost.Count) { $retrackLost -join ", " } else { "none" })) }
-# A component nobody adds never runs: Awake must add NearestWatched (AddComponent<NearestWatched>).
+# A component nobody adds never runs: Awake must add NearestWatched and GameSession (AddComponent<T>) to the plugin's
+# own object (this.gameObject), which BepInEx keeps across scene loads - on an object of the scene, GameSession would
+# go with the first logout.
+foreach ($component in @("NearestWatched", "GameSession")) {
+    $checks++
+    $added = $false
+    if ($awake) {
+        $ai = @($awake.Body.Instructions)
+        for ($k = 0; $k -lt $ai.Count; $k++) {
+            $op = $ai[$k].Operand
+            if ($op -is [Mono.Cecil.GenericInstanceMethod] -and $op.Name -ceq "AddComponent" -and
+                @($op.GenericArguments | Where-Object { $_.FullName -ceq "MobTracker.$component" }).Count -gt 0) {
+                $src = Get-ArgumentSources $ai $k $awake.Body.ExceptionHandlers
+                if ($null -ne $src -and $src.Count -eq 1 -and (Get-SourceKey $awake $ai $src[0]) -ceq "Component::get_gameObject" -and
+                    $src[0] -ge 1 -and $ai[$src[0] - 1].OpCode.Name -eq "ldarg.0") { $added = $true }
+            }
+        }
+    }
+    if ($added) { Ok "MobTrackerPlugin.Awake adds the $component component to the plugin's own object" } else { Fail "MobTrackerPlugin.Awake never adds $component to this.gameObject" }
+}
+
+Write-Output "== the game session =="
+# With KeepBetweenSessions off (the default), the watchlist and both star filters last one game session: the life of
+# the world's Game object. A method's instructions as text, for the exact shapes below: branch targets as indexes,
+# locals by number, members as Type::Name, the short forms of opcodes as the long ones.
+function Get-Shape($m) {
+    $ins = @($m.Body.Instructions)
+    @(for ($k = 0; $k -lt $ins.Count; $k++) {
+        $i = $ins[$k]; $o = $i.Operand; $n = $i.OpCode.Name -replace '\.s$', ''
+        if ($n -match '^(st|ld)loc(\.\d)?$') { "{0}loc V{1}" -f $Matches[1], (Get-VarIndex $i) }
+        elseif ($o -is [Mono.Cecil.Cil.Instruction]) { "{0} ->{1}" -f $n, [array]::IndexOf($ins, $o) }
+        elseif ($o -is [Mono.Cecil.MethodReference] -or $o -is [Mono.Cecil.FieldReference]) { "{0} {1}::{2}" -f $n, $o.DeclaringType.Name, $o.Name }
+        elseif ($o -is [Mono.Cecil.TypeReference]) { "{0} {1}" -f $n, $o.FullName }
+        elseif ($null -ne $o) { "{0} {1}" -f $n, $o }
+        else { $n }
+    })
+}
+# GameSession.Update sees a session end or begin: Game.instance compared by reference with the Game of the last look
+# (bne.un - Unity's == would be a call of op_Equality, to which the destroyed Game of the world just left equals null,
+# so a logout would go unseen), and on a difference the new one stored, then ModConfig.ResetSession and
+# WatchAlerts.ResetSession. Nothing else. (Their order does not matter - the settler is asked only in
+# WatchAlerts.Update, after both - but an exact IL shape pins one.) Like the shapes above: a legitimate rewrite must be
+# re-read against the method's IL, not loosened. Compared case-sensitively.
 $checks++
-$added = $false
-if ($awake) {
-    foreach ($i in $awake.Body.Instructions) {
-        $op = $i.Operand
-        if ($op -is [Mono.Cecil.GenericInstanceMethod] -and $op.Name -eq "AddComponent" -and
-            @($op.GenericArguments | Where-Object { $_.FullName -eq "MobTracker.NearestWatched" }).Count -gt 0) { $added = $true }
+$gsUpdate = Get-Method "MobTracker.GameSession" "Update"
+$gsWant = @("call Game::get_instance", "stloc V0", "ldloc V0", "ldarg.0", "ldfld GameSession::_game", "bne.un ->7", "ret",
+    "ldarg.0", "ldloc V0", "stfld GameSession::_game", "call ModConfig::ResetSession", "call WatchAlerts::ResetSession", "ret")
+if (-not $gsUpdate) { Fail "GameSession.Update not found" }
+else {
+    $gsGot = Get-Shape $gsUpdate
+    if (($gsGot -join "`n") -ceq ($gsWant -join "`n")) { Ok "GameSession.Update: when Game.instance is not (by reference) the Game of the last look, stores it, then ModConfig.ResetSession, then WatchAlerts.ResetSession" }
+    else { Fail ("GameSession.Update is not: {0} - it is: {1}" -f ($gsWant -join "; "), ($gsGot -join "; ")) }
+}
+# The resets run from there only - one more caller (a per-frame one, say) would empty the choices within the session -
+# and the settler that WatchAlerts.ResetSession starts over is the alerts' own.
+$sessionCalls = New-Object System.Collections.Hashtable ([StringComparer]::Ordinal)
+foreach ($key in @("ModConfig::ResetSession", "WatchAlerts::ResetSession", "StarSetSettler::Reset")) { $sessionCalls[$key] = @() }
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($i in $m.Body.Instructions) {
+            $op = $i.Operand
+            if (($i.OpCode.Name -eq "call" -or $i.OpCode.Name -eq "callvirt") -and $op -is [Mono.Cecil.MethodReference]) {
+                $key = $op.DeclaringType.Name + "::" + $op.Name
+                if ($sessionCalls.ContainsKey($key)) { $sessionCalls[$key] += ("{0}.{1}" -f $t.Name, $m.Name) }
+            }
+        }
     }
 }
-if ($added) { Ok "MobTrackerPlugin.Awake adds the NearestWatched component" } else { Fail "MobTrackerPlugin.Awake never adds NearestWatched" }
+foreach ($pair in @(@("ModConfig::ResetSession", "GameSession.Update"), @("WatchAlerts::ResetSession", "GameSession.Update"), @("StarSetSettler::Reset", "WatchAlerts.ResetSession"))) {
+    $checks++
+    $found = @($sessionCalls[$pair[0]])
+    if ($found.Count -eq 1 -and $found[0] -ceq $pair[1]) { Ok ("{0} is called once, from {1}" -f $pair[0], $pair[1]) }
+    else { Fail ("{0} must be called exactly once, from {1}; found: {2}" -f $pair[0], $pair[1], $(if ($found.Count) { $found -join ", " } else { "none" })) }
+}
+# One row: the leading comma keeps PowerShell from unrolling it into its fields.
+Test-Calls @(,
+    @("MobTracker.WatchAlerts", "ResetSession", "StarSetSettler::Reset", @("WatchAlerts::AlertStarsSettler"), $null)
+)
+# ModConfig.ResetSession: KeepBetweenSessions on returns before anything is written; otherwise each of the three
+# entries - Watchlist, ListStarFilter, AlertStarFilter - is written once, with its own default, while the cfg's
+# SaveOnConfigSet is false (set false before the first write, put back in a finally around the writes), and the file
+# is saved once after them, in a try with a catch: BepInEx saves before it runs a setting's change handlers, so a save
+# that threw inside a write would leave a parsed view behind its entry for good.
+$checks++
+$why = @()
+$rs = Get-Method "MobTracker.ModConfig" "ResetSession"
+if (-not $rs) { $why += "not found" }
+else {
+    $shape = Get-Shape $rs
+    $writes = @()
+    $head = @("ldsfld ModConfig::KeepBetweenSessions", 'callvirt ConfigEntry`1::get_Value', "brfalse ->4", "ret")
+    if ($shape.Count -lt 4 -or (($shape[0..3]) -join "`n") -cne ($head -join "`n")) { $why += ("it does not start with: {0}" -f ($head -join "; ")) }
+    $written = @()
+    for ($k = 0; $k -lt $shape.Count; $k++) {
+        if ($shape[$k] -cne 'callvirt ConfigEntry`1::set_Value') { continue }
+        $field = if ($k -ge 4 -and $shape[$k - 4] -clike "ldsfld ModConfig::*") { $shape[$k - 4].Substring(7) } else { "?" }
+        if ($k -lt 4 -or $shape[$k - 3] -cne $shape[$k - 4] -or $shape[$k - 2] -cne "callvirt ConfigEntryBase::get_DefaultValue" -or $shape[$k - 1] -cne "castclass System.String") {
+            $why += "a write at $k is not <entry>.Value = (string)<the same entry>.DefaultValue"
+        }
+        $written += $field
+        $writes += $k
+    }
+    $expected = @("ModConfig::AlertStarsText", "ModConfig::ListStarsText", "ModConfig::WatchlistEntry")
+    if ((@($written | Sort-Object -CaseSensitive) -join ",") -cne ($expected -join ",")) { $why += ("it writes {0}, not each of {1} once" -f ($written -join ", "), ($expected -join ", ")) }
+    # The single save around the writes.
+    $rsIns = @($rs.Body.Instructions)
+    $off = @(for ($k = 1; $k -lt $shape.Count; $k++) { if ($shape[$k] -ceq 'callvirt ConfigFile::set_SaveOnConfigSet' -and (Test-LiteralZero $rsIns ($k - 1))) { $k } })
+    $back = @(for ($k = 1; $k -lt $shape.Count; $k++) { if ($shape[$k] -ceq 'callvirt ConfigFile::set_SaveOnConfigSet' -and $shape[$k - 1] -clike "ldloc V*") { $k } })
+    $saves = @(for ($k = 0; $k -lt $shape.Count; $k++) { if ($shape[$k] -ceq 'callvirt ConfigFile::Save') { $k } })
+    $first = if ($writes.Count) { ($writes | Measure-Object -Minimum).Minimum } else { -1 }
+    $last = if ($writes.Count) { ($writes | Measure-Object -Maximum).Maximum } else { -1 }
+    $fin = @($rs.Body.ExceptionHandlers | Where-Object { "$($_.HandlerType)" -eq "Finally" -and
+        [array]::IndexOf($rsIns, $_.TryStart) -le $first -and [array]::IndexOf($rsIns, $_.TryEnd) -gt $last -and
+        $back.Count -eq 1 -and [array]::IndexOf($rsIns, $_.HandlerStart) -le $back[0] -and [array]::IndexOf($rsIns, $_.HandlerEnd) -gt $back[0] })
+    $caught = @($rs.Body.ExceptionHandlers | Where-Object { "$($_.HandlerType)" -eq "Catch" -and $saves.Count -eq 1 -and
+        [array]::IndexOf($rsIns, $_.TryStart) -le $saves[0] -and [array]::IndexOf($rsIns, $_.TryEnd) -gt $saves[0] })
+    if ($off.Count -ne 1 -or $first -lt 0 -or $off[0] -gt $first) { $why += "SaveOnConfigSet is not set false once, before the first write" }
+    if ($fin.Count -ne 1) { $why += "SaveOnConfigSet is not put back (from a local) in a finally around the writes" }
+    if ($saves.Count -ne 1 -or $saves[0] -lt $last -or $caught.Count -ne 1) { $why += "the cfg is not saved once, after the writes, inside a try with a catch" }
+}
+if ($why.Count -eq 0) { Ok "ModConfig.ResetSession: returns first when KeepBetweenSessions is on; else writes Watchlist, ListStarFilter and AlertStarFilter each once, with its own default, with SaveOnConfigSet off (put back in a finally), then saves once, catching a failure" }
+else { Fail ("ModConfig.ResetSession: " + ($why -join "; ")) }
+# KeepBetweenSessions is General.KeepBetweenSessions, off unless the player turns it on.
+$checks++
+$why = @()
+$bind = Get-Method "MobTracker.ModConfig" "Bind"
+if (-not $bind) { $why += "ModConfig.Bind not found" }
+else {
+    $ins = @($bind.Body.Instructions)
+    $st = @(for ($k = 0; $k -lt $ins.Count; $k++) { $o = $ins[$k].Operand; if ($ins[$k].OpCode.Name -eq "stsfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.Name -ceq "KeepBetweenSessions") { $k } })
+    if ($st.Count -ne 1) { $why += ("KeepBetweenSessions is stored {0} time(s) in Bind, expected once" -f $st.Count) }
+    else {
+        $call = $st[0] - 1
+        $from = 0
+        for ($s = $call - 1; $s -ge 0; $s--) { if ($ins[$s].OpCode.Name -eq "stsfld") { $from = $s + 1; break } }
+        $op = $ins[$call].Operand
+        if (-not ($op -is [Mono.Cecil.MethodReference] -and $op.Name -eq "Bind" -and $op.DeclaringType.Name -eq "ConfigFile")) { $why += "KeepBetweenSessions is not stored straight from ConfigFile.Bind" }
+        else {
+            $src = Get-ArgumentSources $ins $call $bind.Body.ExceptionHandlers $from
+            if ($null -eq $src -or $src.Count -ne 5) { $why += "its Bind call's values could not be traced" }
+            else {
+                if ($ins[$src[1]].OpCode.Name -ne "ldstr" -or $ins[$src[1]].Operand -cne "General") { $why += "its section is not General" }
+                if ($ins[$src[2]].OpCode.Name -ne "ldstr" -or $ins[$src[2]].Operand -cne "KeepBetweenSessions") { $why += "its key is not KeepBetweenSessions" }
+                if (-not (Test-LiteralZero $ins $src[3])) { $why += "its default is not a literal false" }
+            }
+        }
+    }
+}
+if ($why.Count -eq 0) { Ok "ModConfig.Bind: General.KeepBetweenSessions, default false - the choices last one game session unless the player keeps them" }
+else { Fail ("KeepBetweenSessions: " + ($why -join "; ")) }
+# A Watch click is applied in the next Update while the list is open; one still waiting when the player is gone is
+# dropped there (ldnull; stsfld _pendingWatchToggle before the no-player Close), not carried into the next session.
+$checks++
+$why = @()
+$lwUpdate = Get-Method "MobTracker.EntityListWindow" "Update"
+if (-not $lwUpdate) { $why += "not found" }
+else {
+    $ins = @($lwUpdate.Body.Instructions)
+    $shape = Get-Shape $lwUpdate
+    $close = [array]::IndexOf($shape, "call EntityListWindow::Close")
+    if ($close -lt 6) { $why += "no Close call after the player test" }
+    else {
+        if ($shape[$close - 3] -cne "ldnull" -or $shape[$close - 2] -cne "stsfld EntityListWindow::_pendingWatchToggle" -or $shape[$close - 1] -cne "ldarg.0" -or $shape[$close + 1] -cne "ret") {
+            $why += "the first Close is not preceded by _pendingWatchToggle = null and followed by return"
+        }
+        $eq = $close - 5
+        if ($shape[$close - 4] -cnotlike "brfalse ->*" -or $shape[$eq] -cne "call Object::op_Equality") { $why += "the first Close is not in the branch of a == test" }
+        else {
+            $src = Get-ArgumentSources $ins $eq
+            if ($null -eq $src -or (Get-SourceKey $lwUpdate $ins $src[0]) -cne "loc <- Player::m_localPlayer" -or $ins[$src[1]].OpCode.Name -ne "ldnull") { $why += "the == test before the first Close is not Player.m_localPlayer == null" }
+        }
+    }
+}
+if ($why.Count -eq 0) { Ok "EntityListWindow.Update: with no local player, a Watch click still waiting is dropped before the list closes" }
+else { Fail ("EntityListWindow.Update: " + ($why -join "; ")) }
+# The parsed watchlist follows its entry: Bind adds exactly one SettingChanged handler to WatchlistEntry, and it is
+# Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value), nothing else. Without it, the reset (and every Watch click)
+# would change the cfg and leave the watchlist the alerts read as it was.
+$checks++
+$why = @()
+$wlBind = Get-Method "MobTracker.ModConfig" "Bind"
+$wlIns = if ($wlBind) { @($wlBind.Body.Instructions) } else { @() }
+$wHandlers = @()
+foreach ($q in @(Get-CallAt $wlIns 'ConfigEntry`1::add_SettingChanged')) {
+    $fn = -1; for ($k = $q - 1; $k -ge 0; $k--) { if ($wlIns[$k].OpCode.Name -eq "ldftn") { $fn = $k; break } }
+    $en = -1; for ($k = $fn - 1; $k -ge 0; $k--) { $o = $wlIns[$k].Operand; if ($wlIns[$k].OpCode.Name -eq "ldsfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.DeclaringType.Name -ceq "ModConfig" -and $o.FieldType.Name -ceq 'ConfigEntry`1') { $en = $k; break } }
+    if ($fn -lt 0 -or $en -lt 0) { $why += "a SettingChanged handler whose entry or method could not be read"; continue }
+    if ($wlIns[$en].Operand.Name -cne "WatchlistEntry") { continue }
+    $hd = $null; try { $hd = $wlIns[$fn].Operand.Resolve() } catch { }
+    $wHandlers += ,$hd
+}
+$wWant = @("ldsfld ModConfig::WatchlistEntry", 'callvirt ConfigEntry`1::get_Value', "call Rules::ParseWatchlist", "call ModConfig::set_Watchlist", "ret")
+if ($wHandlers.Count -ne 1) { $why += ("WatchlistEntry has {0} SettingChanged handler(s), expected 1" -f $wHandlers.Count) }
+elseif ($null -eq $wHandlers[0] -or -not $wHandlers[0].HasBody) { $why += "its handler could not be read" }
+else {
+    $wGot = Get-Shape $wHandlers[0]
+    if (($wGot -join "`n") -cne ($wWant -join "`n")) { $why += ("its handler is not: {0} - it is: {1}" -f ($wWant -join "; "), ($wGot -join "; ")) }
+}
+if ($why.Count -eq 0) { Ok "ModConfig.Bind: WatchlistEntry's one SettingChanged handler is Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value)" }
+else { Fail ("ModConfig.Bind: " + ($why -join "; ")) }
 
 Write-Output "== the star filters' entries =="
 # The two filters are the same types all the way from the cfg text to the test, so every link where they could be
@@ -1446,7 +1644,7 @@ foreach ($f in $wpDlls) {
         if (-not $wp) { $why += "no Waypointer.Plugin" } else {
             foreach ($ca in $wp.CustomAttributes) { if ($ca.AttributeType.Name -eq "BepInPlugin") { $wpGuid = "$($ca.ConstructorArguments[0].Value) $($ca.ConstructorArguments[2].Value)" } }
             if ($gl -cnotcontains $wpGuid.Split(' ')[0]) { $why += "its GUID '$wpGuid' is not one WaypointerCompat looks for" }
-            $ite = $wp.Methods | Where-Object { $_.Name -eq "IsTypingElsewhere" -and $_.Parameters.Count -eq 0 } | Select-Object -First 1
+            $ite = $wp.Methods | Where-Object { $_.Name -ceq "IsTypingElsewhere" -and $_.Parameters.Count -eq 0 } | Select-Object -First 1
             if (-not $ite -or -not $ite.IsPublic -or -not $ite.IsStatic -or $ite.ReturnType.FullName -ne "System.Boolean") { $why += "no 'public static bool IsTypingElsewhere()'" }
         }
         $readers = @()

@@ -90,6 +90,9 @@ namespace MobTracker
             Player player = Player.m_localPlayer;
             if (player == null)
             {
+                // A Watch click not yet applied is dropped with the player (dead or logged out), never carried into the
+                // next game session's watchlist.
+                _pendingWatchToggle = null;
                 Close();
                 return;
             }
@@ -286,7 +289,7 @@ namespace MobTracker
             try
             {
                 // With a list star filter on, the count is what it lets through, and the title names the categories
-                // marked - the filter is saved, so it may be one set in an earlier session.
+                // marked - with KeepBetweenSessions on, the filter may be one set in an earlier session.
                 string what = _appliedAllTypes ? " creature types"
                     : _appliedListStars == StarSet.All ? " creatures loaded"
                     : " creatures, " + StarSets.Label(_appliedListStars);
