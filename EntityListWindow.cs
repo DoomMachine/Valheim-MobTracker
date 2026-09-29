@@ -161,7 +161,7 @@ namespace MobTracker
             }
 
             if (ListKeys.MayToggle(IsOpen, Hotkeys.TypesText(ModConfig.ListKey.Value), _searchFocused, GameTyping.Any(),
-                    Menu.IsVisible(), Hud.IsPieceSelectionVisible(), InventoryGui.IsVisible())
+                    Menu.IsVisible(), Hud.IsPieceSelectionVisible(), InventoryGui.IsVisible(), PlayerCustomizaton.IsBarberGuiVisible())
                 && Hotkeys.Pressed(ModConfig.ListKey))
             {
                 if (IsOpen)
@@ -341,12 +341,14 @@ namespace MobTracker
             GUILayout.EndHorizontal();
 
             // Star filters: each row is five toggle buttons, All and the four categories. A click on a category adds it
-            // or takes it off (taking off the last one gives All), a click on All resets. The 0.2.0 review rejected a
-            // button that cycles through the choices: the alert poll runs every second and alerts each creature once,
-            // so every choice passed on the way alerts for real. Toggles are fine: growing a selection passes only
-            // through subsets of the goal (README, Known limits, for taking categories off). Five controls on every
-            // event, whatever is marked: IMGUI needs the same controls in its layout and its drawing.
-            // A type in the all-types view has no level, so the list's filter does not apply there and is greyed out.
+            // or takes it off (taking off the last one gives All), a click on All resets. Not a button that cycles
+            // through the choices: the alert poll runs every second and alerts each creature once,
+            // so every choice passed on the way alerts for real. Toggles pass through states too - taking off the only
+            // marked category passes through All - so the alerts do not read this row's set as it is, but as
+            // WatchAlerts.EffectiveAlertStars, once it has held still (AlertsRow). The row itself and the cfg change at
+            // once. Five controls on every event, whatever is marked: IMGUI needs the same controls in its layout and
+            // its drawing. A type in the all-types view has no level, so the list's filter does not apply there and is
+            // greyed out.
             GUILayout.BeginHorizontal();
             GUILayout.Label("List:", RowLabelWidth);
             bool enabled = GUI.enabled;
@@ -364,11 +366,12 @@ namespace MobTracker
             GUILayout.BeginHorizontal();
             GUILayout.Label("Alerts:", RowLabelWidth);
             StarSet alertStars = ModConfig.AlertStars;
+            bool emptyIsNothing = AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode);
             for (int i = 0; i < StarButtons.Length; i++)
             {
                 bool marked = StarSets.IsMarked(alertStars, StarButtons[i]);
                 if (GUILayout.Toggle(marked, StarChoices[i], GUI.skin.button) != marked)
-                    ModConfig.AlertStarsText.Value = StarSets.Format(StarSets.Toggle(alertStars, StarButtons[i]));
+                    ModConfig.AlertStarsText.Value = StarSets.Format(StarSets.Toggle(alertStars, StarButtons[i], emptyIsNothing));
             }
             GUILayout.EndHorizontal();
 

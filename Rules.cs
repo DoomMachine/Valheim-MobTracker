@@ -283,16 +283,17 @@ namespace MobTracker
         /// fields (whatever the key); not over the pause menu (Menu.Update closes it on the Escape that closes the list,
         /// with no text-input test, so one press would close both and unpause); not over the build menu (BuildUi closes
         /// it on a right click, Escape or B, whatever has the pointer or the keyboard, so a right click on the list would
-        /// close it); not over the inventory (the list would close again at once). Closing: always, except with a key
-        /// that types while a text field - the search box or one of the game's - has the keyboard, so a letter ListKey
-        /// never closes the list mid-word.
+        /// close it); not over the inventory (the list would close again at once); not over the Barber Station
+        /// (PlayerCustomizaton.Update cancels it on a raw Escape, so the Escape that closes the list would also put back
+        /// the hair and beard the player had). Closing: always, except with a key that types while a text field - the
+        /// search box or one of the game's - has the keyboard, so a letter ListKey never closes the list mid-word.
         /// </summary>
         public static bool MayToggle(bool open, bool keyTypesText, bool searchFocused, bool gameTyping, bool pauseMenu,
-            bool buildMenu, bool inventory)
+            bool buildMenu, bool inventory, bool barber)
         {
             if (open)
                 return !(keyTypesText && (searchFocused || gameTyping));
-            return !gameTyping && !pauseMenu && !buildMenu && !inventory;
+            return !gameTyping && !pauseMenu && !buildMenu && !inventory && !barber;
         }
 
         /// <summary>The left, right or middle mouse button, which ListKey may not be (Hotkeys).</summary>

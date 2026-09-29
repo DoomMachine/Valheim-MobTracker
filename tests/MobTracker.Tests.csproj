@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Tests the parts of MobTracker that need no game objects - the star filters and their cfg text (StarFilter.cs), and the search,
+    Tests the parts of MobTracker that need no game objects - the star filters, their cfg text and the Alerts: row's
+    settling (StarFilter.cs), and the search,
     watchlist, spacing, spawn-rule, alert-gate, re-track, dungeon-side, row-refresh, pointer and key rules
     (Rules.cs) - compiled from the real source files.
     Run with "dotnet run" from this folder.

@@ -11,20 +11,30 @@
      signature - including the private members it reaches (the ground-path guide's Pathfinding internals,
      Find area's SpawnSystem.m_instances), which it lists - and a deliberately
      wrong member fails to resolve, so the check cannot pass vacuously
-  4. the star filters read the right settings: each is parsed from its own cfg entry, at the start and when that entry
-     changes, the list and the alerts each read their own, and each window row writes its own entry through
-     StarSets.Format and Toggle; always-track-nearest-watched gives its tested decisions (Retrack)
+  4. the star filters read the right settings: each is parsed from its own cfg entry (the list's never allowing None, the
+     alerts' only as the Alerts: row's mode says), at the start and when that entry changes, and a bad value is warned
+     about; the list reads its own; the alerts, Auto-track and Always track nearest watched read the alerts' through
+     the settled set WatchAlerts works out every frame, whose wait restarts at every change of the alerts' entry (a
+     count kept only by that entry's change handler), and the build keeps the shipped mode (Settle); the alert poll
+     hands the alert gate its own star-and-watchlist answer and skips what the gate refuses; each window row shows
+     and writes its own entry, button by button and every button, through StarSets.IsMarked, Toggle and Format, and
+     writes only on a click; the List: row is greyed out in the all-types view (enabled && !all-types), and the title
+     names the list's categories exactly when one is marked; always-track-nearest-watched gives its tested decisions
+     (Retrack)
      the right values and branches on them the right way, and is started only from Tracker.LateUpdate; neither it
      nor Auto-track takes a creature on the other side of a dungeon entrance; Find area honours the spawn rules' key
      and event conditions, takes the map's delete gesture for its own pins after other mods' prefixes, and adds them
      local-only (save false, ownerID 0, and no Minimap method that adds pins of its own)
   5. a creature with no ZNetView is skipped by every creature loop, and one that throws cannot end the alert poll;
-     the window pauses its re-sorting under the pointer, stays on screen and puts GUI.matrix back, as the HUD label
-     does; the alert ding plays only through the game's GUI mixer group
+     the window pauses its re-sorting under the pointer, stays on screen (each coordinate clamped by its own bounds,
+     in GUI units) and puts GUI.matrix back, as the HUD label does; the alert ding plays only through the game's GUI
+     mixer group, of the game's mixer (its fallback requiring both)
   6. the list's input: the TextInput.IsVisible and Chat.HasFocus postfixes report the list open or closed this
      frame and only ever add true, the HasFocus one last; Escape and the gamepad's B are read in Update, not OnGUI,
-     and B is consumed; ListKey is read only through Hotkeys (caught, no warning spam, mouse buttons refused) and
-     never opens the list while the player types, over the pause menu, the build menu or the inventory; the wheel
+     and B is consumed; ListKey is read only through Hotkeys (caught, a refused key remembered and then not read, mouse
+     buttons refused before they are read) and never opens the list while the player types (a sign's open box
+     included), over the pause menu, the build menu,
+     the inventory or the Barber Station; the wheel
      is zeroed last; TomTom's and Wayfinder's typing test sees the real state (and the installed TomTom/Wayfinder,
      or the -Waypointer DLLs, still read the two flags only there); clicks on the list reach no uGUI element under it
   7. every assembly the plugin references is in the game folder
@@ -39,7 +49,7 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Plugin = "",
-    [string]$ExpectedVersion = "0.4.0",
+    [string]$ExpectedVersion = "0.4.1",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string[]]$Waypointer = @()   # TomTom / Wayfinder DLLs to check the carve-out against; default: the installed ones
 )
@@ -237,7 +247,7 @@ function Get-TouchesWithLambdas($typeName, $methodName) {
     return $out
 }
 $wiring = @(
-    @("MobTracker.WatchAlerts", "Update", @("ModConfig::AlertStars", "StarSets::Accepts", "Character::GetLevel"),
+    @("MobTracker.WatchAlerts", "Update", @("ModConfig::AlertStars", "ModConfig::AlertStarsRevision", "AlertsRow::Effective", "WatchAlerts::get_EffectiveAlertStars", "StarSets::Accepts", "Character::GetLevel"),
         @("ModConfig::ListStars", "ModConfig::ListStarsText", "ModConfig::AlertStarsText", "EntityListWindow::_appliedListStars")),
     @("MobTracker.EntityListWindow", "Refresh", @("EntityListWindow::_appliedListStars", "StarSets::Accepts", "Character::GetLevel"),
         @("ModConfig::AlertStars", "ModConfig::AlertStarsText", "ModConfig::ListStarsText")),
@@ -564,7 +574,7 @@ Test-Calls @(
     @("MobTracker.EntityListWindow", "Refresh", "Creature::IsListable", @("loc <- Enumerator::get_Current"), $brfalse),
     @("MobTracker.NearestWatched", "Update", "String::Equals", @("Creature::PrefabName", "Retrack::get_Prefab", $null), $null),
     @("MobTracker.NearestWatched", "Update", "ZDOID::op_Inequality", @("Character::GetZDOID", "ZDOID::None"), $null),
-    @("MobTracker.NearestWatched", "Update", "StarSets::Accepts", @("ModConfig::AlertStars", "Character::GetLevel"), $null),
+    @("MobTracker.NearestWatched", "Update", "StarSets::Accepts", @("WatchAlerts::get_EffectiveAlertStars", "Character::GetLevel"), $null),
     @("MobTracker.NearestWatched", "Update", "Rules::WithinRadius", @("loc <- Vector3::Distance", "ModConfig::AlertRadius.Value"), $null),
     # A watch alert for the type being waited for leaves the choice to the re-track (true skips the auto-track); the
     # window shows Stop tracking while a wait is on (false skips the button only when nothing is tracked either).
@@ -586,7 +596,7 @@ Test-Calls @(
 )
 Test-Wiring @(
     @("MobTracker.NearestWatched", "Update", @("Player::m_localPlayer", "Retrack::Cancel", "Tracker::Track"),
-        @("ModConfig::ListStars", "ModConfig::ListStarsText", "EntityListWindow::_appliedListStars")),
+        @("ModConfig::ListStars", "ModConfig::ListStarsText", "EntityListWindow::_appliedListStars", "ModConfig::AlertStars", "ModConfig::AlertStarsText")),
     @("MobTracker.Tracker", "Track", @("set Tracker::_targetPrefab", "set Tracker::_targetTamed", "Character::IsTamed"), @()),
     # Tamed is refreshed while tracking, but only while the creature is on the network (IsTamed says false after).
     @("MobTracker.Tracker", "LateUpdate", @("set Tracker::_targetTamed", "Character::GetZDOID", "ZDOID::op_Inequality"), @()),
@@ -696,16 +706,78 @@ if ($added) { Ok "MobTrackerPlugin.Awake adds the NearestWatched component" } el
 
 Write-Output "== the star filters' entries =="
 # The two filters are the same types all the way from the cfg text to the test, so every link where they could be
-# crossed is checked: what each Accepts is given, which entry each parsed field is filled from (at the start and when
-# the entry changes), and what each window row writes. The unit tests give Parse, Format, Toggle and Accepts in full.
+# crossed is checked: what each Accepts is given and which way the code branches on its answer, which entry each parsed
+# field is filled from (at the start and when the entry changes), and what each window row shows and writes. The unit
+# tests give Parse, Format, Toggle, IsMarked, Accepts, the settler and the two Alerts: row modes in full.
 Test-Calls @(
-    @("MobTracker.WatchAlerts", "Update", "StarSets::Accepts", @("ModConfig::AlertStars", "Character::GetLevel"), $null),
-    @("MobTracker.EntityListWindow", "Refresh", "StarSets::Accepts", @("EntityListWindow::_appliedListStars", "Character::GetLevel"), $null)
+    # A false answer leaves the creature out: in the alert poll it is then not watched (the && before the watchlist
+    # test), in the list it is skipped (the continue).
+    @("MobTracker.WatchAlerts", "Update", "StarSets::Accepts", @("WatchAlerts::get_EffectiveAlertStars", "Character::GetLevel"), $brfalse),
+    @("MobTracker.EntityListWindow", "Refresh", "StarSets::Accepts", @("EntityListWindow::_appliedListStars", "Character::GetLevel"), $brfalse),
+    # The alerts' set follows the Alerts: row through the one settler, restarted by every change of the row's text, on
+    # the game's clock, as the build's mode says.
+    @("MobTracker.WatchAlerts", "Update", "AlertsRow::Effective",
+        @("ModConfig::AlertStars", "ModConfig::AlertStarsRevision", "WatchAlerts::AlertStarsSettler", "Time::get_time", "AlertsRow::AlertsChangeMode"), $null),
+    # The window's title names the categories of the list's filter as last applied, not the alerts'.
+    @("MobTracker.EntityListWindow", "OnGUI", "StarSets::Label", @("EntityListWindow::_appliedListStars"), $null)
 )
+# The settled set is worked out on every frame - before the once-a-second return, so the wait is timed from the row's
+# last change - and stored straight into EffectiveAlertStars, which nothing but WatchAlerts.Update sets; nothing else
+# works it out or asks a settler.
+$checks++
+$why = @()
+$ef = @(Get-CallAt $wi "AlertsRow::Effective")
+$np = @(for ($k = 0; $k -lt $wi.Count; $k++) { $o = $wi[$k].Operand; if ($wi[$k].OpCode.Name -eq "ldfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.Name -eq "_nextPoll") { $k } })
+$rt = @(for ($k = 0; $k -lt $wi.Count; $k++) { if ($wi[$k].OpCode.Name -eq "ret") { $k } })
+if ($ef.Count -ne 1) { $why += "AlertsRow.Effective calls: $($ef.Count)" } else {
+    $nx = $wi[$ef[0] + 1].Operand
+    if (-not ($nx -is [Mono.Cecil.MethodReference] -and ($nx.DeclaringType.Name + "::" + $nx.Name) -eq "WatchAlerts::set_EffectiveAlertStars")) { $why += "its answer is not stored straight into EffectiveAlertStars" }
+    if ($np.Count -eq 0 -or $ef[0] -gt $np[0] -or ($rt.Count -gt 0 -and $ef[0] -gt $rt[0])) { $why += "it is not worked out before the once-a-second test and its return" }
+}
+$effUsers = @()
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($i in $m.Body.Instructions) {
+            $op = $i.Operand
+            if ($op -isnot [Mono.Cecil.MethodReference]) { continue }
+            $key = $op.DeclaringType.Name + "::" + $op.Name
+            if (@("WatchAlerts::set_EffectiveAlertStars", "AlertsRow::Effective", "StarSetSettler::Settled") -contains $key) { $effUsers += ("{0} in {1}.{2}" -f $key, $t.Name, $m.Name) }
+        }
+    }
+}
+$wantUsers = @("AlertsRow::Effective in WatchAlerts.Update", "StarSetSettler::Settled in AlertsRow.Effective", "WatchAlerts::set_EffectiveAlertStars in WatchAlerts.Update")
+if ((@($effUsers | Sort-Object) -join ", ") -ne ($wantUsers -join ", ")) { $why += ("the settled set is worked out or stored in: {0}; expected {1}" -f (@($effUsers | Sort-Object) -join ", "), ($wantUsers -join ", ")) }
+if ($why.Count -eq 0) { Ok "WatchAlerts.Update: EffectiveAlertStars = AlertsRow.Effective(...) on every frame, before the once-a-second return; set nowhere else, the settler asked nowhere else" }
+else { Fail ("the settled Alerts set: " + ($why -join "; ")) }
+# The build runs with the shipped mode, Settle: AlertsChange.Settle is 0 and AlertsRow.AlertsChangeMode is static
+# readonly and never set to anything else (C# leaves out an initializer that sets the default, so usually no store at all).
+$checks++
+$why = @()
+$acType = $null; $arType = $null
+foreach ($t in $plug.GetTypes()) { if ($t.FullName -eq "MobTracker.AlertsChange") { $acType = $t }; if ($t.FullName -eq "MobTracker.AlertsRow") { $arType = $t } }
+$settleField = if ($acType) { @($acType.Fields | Where-Object { $_.Name -eq "Settle" -and $_.HasConstant }) } else { @() }
+$modeField = if ($arType) { @($arType.Fields | Where-Object { $_.Name -eq "AlertsChangeMode" }) } else { @() }
+if ($settleField.Count -ne 1 -or [int]$settleField[0].Constant -ne 0) { $why += "AlertsChange.Settle is not the constant 0" }
+if ($modeField.Count -ne 1 -or -not $modeField[0].IsStatic -or -not $modeField[0].IsInitOnly -or $modeField[0].FieldType.FullName -ne "MobTracker.AlertsChange") { $why += "AlertsRow.AlertsChangeMode is not a static readonly AlertsChange" }
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        $ins = @($m.Body.Instructions)
+        for ($k = 0; $k -lt $ins.Count; $k++) {
+            $op = $ins[$k].Operand
+            if ($ins[$k].OpCode.Name -ne "stsfld" -or $op -isnot [Mono.Cecil.FieldReference] -or ($op.DeclaringType.Name + "::" + $op.Name) -ne "AlertsRow::AlertsChangeMode") { continue }
+            if (-not (Test-LiteralZero $ins ($k - 1))) { $why += ("{0}.{1} sets AlertsChangeMode to something other than Settle ({2})" -f $t.Name, $m.Name, $ins[$k - 1].OpCode.Name) }
+        }
+    }
+}
+if ($why.Count -eq 0) { Ok "AlertsRow.AlertsChangeMode is Settle (0) and static readonly: the Alerts: row's changes wait, and it empties to All" }
+else { Fail ("the Alerts: row's mode: " + ($why -join "; ")) }
 # Every store to ModConfig.ListStars or AlertStars is in ModConfig.Bind or a lambda written in it, and stores
-# ParseStars of the field's own entry (ListStars from ListStarsText); each field is stored in Bind and in a lambda.
-# An exact IL shape - ldsfld <entry>, call ParseStars, stsfld <field> - since Bind's cached lambdas leave the stack
-# replay (Get-ArgumentSources) too few values: a rewrite of these lines fails it, to be re-read, not loosened.
+# ParseStars(<the field's own entry>, <whether None may be read>): the list's never (a literal false), the alerts' as the
+# Alerts: row's mode says (AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode)); each field is stored in Bind and in a
+# lambda. The replay starts after the store before, a statement start: Bind's cached lambdas leave a replay from the
+# method's start too few values.
 $checks++
 $why = @()
 $starStores = @{ "ListStars" = @(); "AlertStars" = @() }
@@ -723,8 +795,20 @@ foreach ($t in $plug.GetTypes()) {
             if ($ins[$k - 1].OpCode.Name -ne "call" -or $prev -isnot [Mono.Cecil.MethodReference] -or ($prev.DeclaringType.Name + "::" + $prev.Name) -ne "ModConfig::ParseStars") {
                 $why += "$where stores ModConfig.$($op.Name) from something other than ModConfig.ParseStars"; continue
             }
-            $from = if ($k -ge 2 -and $ins[$k - 2].OpCode.Name -eq "ldsfld") { Get-SourceKey $m $ins ($k - 2) } else { $ins[$k - 2].OpCode.Name }
+            $start = 0
+            for ($s = $k - 2; $s -ge 0; $s--) { if ($ins[$s].OpCode.Name -eq "stsfld") { $start = $s + 1; break } }
+            $pa = Get-ArgumentSources $ins ($k - 1) $m.Body.ExceptionHandlers $start
+            if ($null -eq $pa -or $pa.Count -ne 2) { $why += "$where - ParseStars' values could not be traced"; continue }
+            $from = Get-SourceKey $m $ins $pa[0]
             if ($from -ne ("ModConfig::" + $op.Name + "Text")) { $why += "$where parses ModConfig.$($op.Name) from $from"; continue }
+            if ($op.Name -eq "ListStars") {
+                if (-not (Test-LiteralZero $ins $pa[1])) { $why += ("{0} lets ModConfig.ListStars read None ({1}, not a literal false)" -f $where, $ins[$pa[1]].OpCode.Name); continue }
+            }
+            else {
+                $allow = Get-SourceKey $m $ins $pa[1]
+                $ma = if ($allow -eq "AlertsRow::EmptyIsNothing") { Get-ArgumentSources $ins $pa[1] $m.Body.ExceptionHandlers $start } else { $null }
+                if ($null -eq $ma -or (Get-SourceKey $m $ins $ma[0]) -ne "AlertsRow::AlertsChangeMode") { $why += "$where lets ModConfig.AlertStars read None by $allow, not by AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode)"; continue }
+            }
             $starStores[$op.Name] += $(if ($m.Name -eq "Bind") { "Bind" } else { "lambda" })
         }
     }
@@ -732,8 +816,38 @@ foreach ($t in $plug.GetTypes()) {
 foreach ($f in @("ListStars", "AlertStars")) {
     if (@($starStores[$f]) -notcontains "Bind" -or @($starStores[$f]) -notcontains "lambda") { $why += ("ModConfig.{0} is parsed from {0}Text in: {1} - expected Bind and a lambda in it" -f $f, $(if ($starStores[$f].Count) { $starStores[$f] -join ", " } else { "nowhere" })) }
 }
-if ($why.Count -eq 0) { Ok "ModConfig.ListStars and AlertStars are each stored only as ParseStars(their own *Text entry), in Bind and in a lambda written in it" }
+if ($why.Count -eq 0) { Ok "ModConfig.ListStars and AlertStars are each stored only as ParseStars(their own *Text entry, None: never / as the mode says), in Bind and in a lambda written in it" }
 else { Fail ("the star filters' parsing: " + ($why -join "; ")) }
+# ParseStars returns what StarSets.Parse made of the entry's own value (not its default), with the caller's leave to read
+# None, as it is - stored once and returned - and warns exactly when Parse reported a problem: one LogWarning, jumped
+# over by 'problem == null' (ldloc problem; brfalse past it).
+$checks++
+$why = @()
+$ps = Get-Method "MobTracker.ModConfig" "ParseStars"
+if (-not $ps) { $why += "not found" } else {
+    $pi = @($ps.Body.Instructions)
+    $pc = @(Get-CallAt $pi "StarSets::Parse")
+    $pa = if ($pc.Count -eq 1) { Get-ArgumentSources $pi $pc[0] $ps.Body.ExceptionHandlers } else { $null }
+    if ($null -eq $pa -or $pa.Count -ne 3) { $why += ("StarSets.Parse calls: {0}, or its values could not be traced" -f $pc.Count) } else {
+        $value = Get-SourceKey $ps $pi $pa[0]
+        $va = if ($value -eq 'ConfigEntry`1::get_Value') { Get-ArgumentSources $pi $pa[0] $ps.Body.ExceptionHandlers } else { $null }
+        if ($null -eq $va -or (Get-SourceKey $ps $pi $va[0]) -ne "arg entry") { $why += "Parse is given $value, not entry.Value" }
+        $problemVar = if ($pi[$pa[1]].OpCode.Name -like "ldloca*") { Get-VarIndex $pi[$pa[1]] } else { -1 }
+        if ($problemVar -lt 0) { $why += "Parse's problem is not a local" }
+        if ((Get-SourceKey $ps $pi $pa[2]) -ne "arg allowNone") { $why += ("Parse is told whether None may be read by {0}, not allowNone" -f (Get-SourceKey $ps $pi $pa[2])) }
+        $setVar = if ($pi[$pc[0] + 1].OpCode.Name -like "stloc*") { Get-VarIndex $pi[$pc[0] + 1] } else { -1 }
+        $setStores = @(for ($k = 0; $k -lt $pi.Count; $k++) { if ($pi[$k].OpCode.Name -like "stloc*" -and (Get-VarIndex $pi[$k]) -eq $setVar) { $k } })
+        $rets = @(for ($k = 0; $k -lt $pi.Count; $k++) { if ($pi[$k].OpCode.Name -eq "ret") { $k } })
+        $returned = $rets.Count -eq 1 -and $rets[0] -ge 1 -and $pi[$rets[0] - 1].OpCode.Name -like "ldloc*" -and $pi[$rets[0] - 1].OpCode.Name -notlike "ldloca*" -and (Get-VarIndex $pi[$rets[0] - 1]) -eq $setVar
+        if ($setVar -lt 0 -or $setStores.Count -ne 1 -or -not $returned) { $why += "Parse's answer is not stored once and returned as it is" }
+        $lw = @(Get-CallAt $pi "ManualLogSource::LogWarning")
+        $guard = @(for ($k = 0; $k -lt $pi.Count - 1; $k++) { if ($pi[$k].OpCode.Name -like "ldloc*" -and $pi[$k].OpCode.Name -notlike "ldloca*" -and (Get-VarIndex $pi[$k]) -eq $problemVar -and $pi[$k + 1].OpCode.Name -like "brfalse*") { $k } })
+        if ($lw.Count -ne 1) { $why += "LogWarning calls: $($lw.Count)" }
+        elseif ($guard.Count -ne 1 -or $guard[0] -gt $lw[0] -or [array]::IndexOf($pi, $pi[$guard[0] + 1].Operand) -le $lw[0]) { $why += "the warning is not skipped exactly when Parse reports no problem" }
+    }
+}
+if ($why.Count -eq 0) { Ok "ModConfig.ParseStars: StarSets.Parse(entry.Value, out problem, allowNone), returned as it is, and a warning only when problem is not null" }
+else { Fail ("ModConfig.ParseStars: " + ($why -join "; ")) }
 # The lambda that re-parses a filter is the SettingChanged handler of that filter's own entry, and each entry has one:
 # for each add_SettingChanged in Bind, the handler (the ldftn before it) and the entry (the ConfigEntry field loaded
 # before that), read backwards so that the delegate-caching IL of one C# version or another does not matter.
@@ -742,6 +856,7 @@ $why = @()
 $bm = Get-Method "MobTracker.ModConfig" "Bind"
 $bi = if ($bm) { @($bm.Body.Instructions) } else { @() }
 $reparsed = @{ "ListStarsText" = 0; "AlertStarsText" = 0 }
+$alertHandler = $null   # the handler that re-parses AlertStars, for the revision check below
 foreach ($q in @(Get-CallAt $bi 'ConfigEntry`1::add_SettingChanged')) {
     $fn = -1; for ($k = $q - 1; $k -ge 0; $k--) { if ($bi[$k].OpCode.Name -eq "ldftn") { $fn = $k; break } }
     $en = -1; for ($k = $fn - 1; $k -ge 0; $k--) { $o = $bi[$k].Operand; if ($bi[$k].OpCode.Name -eq "ldsfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.DeclaringType.Name -eq "ModConfig" -and $o.FieldType.Name -eq 'ConfigEntry`1') { $en = $k; break } }
@@ -753,44 +868,121 @@ foreach ($q in @(Get-CallAt $bi 'ConfigEntry`1::add_SettingChanged')) {
     if ($reparsed.ContainsKey($entry)) {
         $want = $entry -replace 'Text$', ''
         if (($sets -join ",") -ne $want) { $why += ("{0}'s SettingChanged handler stores {1}, not {2} alone" -f $entry, $(if ($sets.Count) { $sets -join ", " } else { "neither filter" }), $want) }
-        else { $reparsed[$entry]++ }
+        else { $reparsed[$entry]++; if ($entry -eq "AlertStarsText") { $alertHandler = $hd.FullName } }
     }
     elseif ($sets.Count -gt 0) { $why += ("{0}'s SettingChanged handler stores {1}" -f $entry, ($sets -join ", ")) }
 }
 foreach ($e in @("ListStarsText", "AlertStarsText")) { if ($reparsed[$e] -ne 1) { $why += ("{0} has {1} handler(s) re-parsing its filter, expected 1" -f $e, $reparsed[$e]) } }
 if ($why.Count -eq 0) { Ok "ModConfig.Bind: ListStarsText's SettingChanged re-parses ListStars, AlertStarsText's AlertStars, one handler each" }
 else { Fail ("ModConfig.Bind: " + ($why -join "; ")) }
-# Each window row writes its own entry, once, as StarSets.Format(StarSets.Toggle(<its own filter>, ...)): Toggle is what
-# a click does to the marked set, Format the text that Parse reads back. The rows' ranges are the ones found above.
+# The settled set's wait restarts at every change of AlertStarsText, also one that leaves AlertStars as it was
+# (ConfigurationManager writes at every keystroke, and a text with no word it knows yet reads as All): ModConfig.AlertStarsRevision
+# counts the changes, and is stored exactly once in the plugin, as AlertStarsRevision++ (ldsfld; ldc.i4.1; add;
+# stsfld), in the handler found above to re-parse AlertStars. (What reads it: the AlertsRow.Effective row above.)
+$checks++
+$why = @()
+$revStores = @()
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        $ins = @($m.Body.Instructions)
+        for ($k = 0; $k -lt $ins.Count; $k++) {
+            $op = $ins[$k].Operand
+            if ($ins[$k].OpCode.Name -ne "stsfld" -or $op -isnot [Mono.Cecil.FieldReference] -or ($op.DeclaringType.Name + "::" + $op.Name) -ne "ModConfig::AlertStarsRevision") { continue }
+            $ld = if ($k -ge 3) { $ins[$k - 3].Operand } else { $null }
+            $shape = $k -ge 3 -and $ins[$k - 1].OpCode.Name -eq "add" -and $ins[$k - 2].OpCode.Name -eq "ldc.i4.1" -and $ins[$k - 3].OpCode.Name -eq "ldsfld" -and
+                $ld -is [Mono.Cecil.FieldReference] -and ($ld.DeclaringType.Name + "::" + $ld.Name) -eq "ModConfig::AlertStarsRevision"
+            $revStores += [pscustomobject]@{ Method = $m.FullName; Shape = $shape }
+        }
+    }
+}
+if ($revStores.Count -ne 1) { $why += ("ModConfig.AlertStarsRevision is stored {0} time(s) in the plugin, expected once" -f $revStores.Count) }
+elseif (-not $revStores[0].Shape) { $why += "ModConfig.AlertStarsRevision is not stored as AlertStarsRevision++" }
+elseif ($null -eq $alertHandler -or $revStores[0].Method -ne $alertHandler) { $why += ("ModConfig.AlertStarsRevision is counted in {0}, not in AlertStarsText's SettingChanged handler" -f $revStores[0].Method) }
+if ($why.Count -eq 0) { Ok "ModConfig.AlertStarsRevision++ only in AlertStarsText's SettingChanged handler: every change of the text restarts the Alerts: wait" }
+else { Fail ("the Alerts: text's revision: " + ($why -join "; ")) }
+# Each window row, button by button (the loop counter i): shows StarSets.IsMarked(<its own filter>, StarButtons[i]) as
+# GUILayout.Toggle(marked, StarChoices[i], ...), writes only when the toggle's answer differs from marked (beq skips the
+# write), and writes its own entry, once, as StarSets.Format(StarSets.Toggle(<its own filter>, StarButtons[i]...)):
+# the List: row with the two-value Toggle (taking off the last category gives All), the Alerts: row with the mode's
+# leave to empty to None (AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode), kept in a local). The rows' ranges are
+# the ones found above; each replay starts at the row's label, a statement start.
+function Get-ElementVar($ins, $at, $arrayKey) {
+    # The local that indexes <arrayKey>[local] when $ins[$at] is its ldelem; -1 otherwise.
+    if ($at -lt 2 -or $ins[$at].OpCode.Name -notlike "ldelem*" -or $ins[$at - 1].OpCode.Name -notlike "ldloc*" -or $ins[$at - 1].OpCode.Name -like "ldloca*") { return -1 }
+    $o = $ins[$at - 2].Operand
+    if ($ins[$at - 2].OpCode.Name -ne "ldsfld" -or $o -isnot [Mono.Cecil.FieldReference] -or ($o.DeclaringType.Name + "::" + $o.Name) -ne $arrayKey) { return -1 }
+    return (Get-VarIndex $ins[$at - 1])
+}
 $checks++
 $why = @()
 if ($iList -lt 0 -or $iAlerts -le $iList) { $why += "the 'List:' and 'Alerts:' row labels were not found in that order" }
 else {
-    foreach ($row in @(@("List:", "ListStars", $iList, $iAlerts), @("Alerts:", "AlertStars", $iAlerts, $dwIns.Count))) {
-        $writes = @(for ($k = $row[2]; $k -lt $row[3]; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and $o.Name -eq "set_Value" -and $o.DeclaringType.Name -eq 'ConfigEntry`1') { $k } })
-        if ($writes.Count -ne 1) { $why += ("the {0} row writes {1} settings, not one" -f $row[0], $writes.Count); continue }
-        # Replayed from the row's label, a statement start: the guide button's ?: above leaves the replay from the
-        # method's start too few values.
-        $a = Get-ArgumentSources $dwIns $writes[0] $dw.Body.ExceptionHandlers $row[2]
+    foreach ($row in @(@("List:", "ListStars", $iList, $iAlerts, 2), @("Alerts:", "AlertStars", $iAlerts, $dwIns.Count, 3))) {
+        $lo = $row[2]; $hi = $row[3]; $own = "ModConfig::" + $row[1]
+        $inRow = { param($key) @(for ($k = $lo; $k -lt $hi; $k++) { $o = $dwIns[$k].Operand; if (($dwIns[$k].OpCode.Name -eq "call" -or $dwIns[$k].OpCode.Name -eq "callvirt") -and $o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq $key) { $k } }) }
+        $writes = @(& $inRow 'ConfigEntry`1::set_Value')
+        $marks = @(& $inRow "StarSets::IsMarked")
+        $toggles = @(& $inRow "GUILayout::Toggle" | Where-Object { $dwIns[$_].Operand.Parameters.Count -ge 2 -and $dwIns[$_].Operand.Parameters[1].ParameterType.Name -eq "GUIContent" })
+        if ($writes.Count -ne 1 -or $marks.Count -ne 1 -or $toggles.Count -ne 1) { $why += ("the {0} row has {1} write(s), {2} IsMarked, {3} toggle button(s), not one each" -f $row[0], $writes.Count, $marks.Count, $toggles.Count); continue }
+        # What is written: its own entry, Format(Toggle(its own filter, StarButtons[i], ...)).
+        $a = Get-ArgumentSources $dwIns $writes[0] $dw.Body.ExceptionHandlers $lo
         if ($null -eq $a -or $a.Count -ne 2) { $why += "the $($row[0]) row's write could not be traced"; continue }
         $entry = Get-SourceKey $dw $dwIns $a[0]; $value = Get-SourceKey $dw $dwIns $a[1]
-        $toggle = "?"; $from = "?"
-        if ($value -eq "StarSets::Format") {
-            $fa = Get-ArgumentSources $dwIns $a[1] $dw.Body.ExceptionHandlers $row[2]
-            if ($null -ne $fa) { $toggle = Get-SourceKey $dw $dwIns $fa[0] }
-            if ($toggle -eq "StarSets::Toggle") {
-                $ta = Get-ArgumentSources $dwIns $fa[0] $dw.Body.ExceptionHandlers $row[2]
-                if ($null -ne $ta) { $from = Get-SourceKey $dw $dwIns $ta[0] }
-            }
+        $fa = if ($value -eq "StarSets::Format") { Get-ArgumentSources $dwIns $a[1] $dw.Body.ExceptionHandlers $lo } else { $null }
+        $toggle = if ($null -ne $fa) { Get-SourceKey $dw $dwIns $fa[0] } else { "?" }
+        $ta = if ($toggle -eq "StarSets::Toggle") { Get-ArgumentSources $dwIns $fa[0] $dw.Body.ExceptionHandlers $lo } else { $null }
+        if ($entry -ne ($own + "Text")) { $why += ("the {0} row writes {1}, not {2}Text" -f $row[0], $entry, $own); continue }
+        if ($value -ne "StarSets::Format") { $why += ("the {0} row writes {1}, not StarSets.Format(...)" -f $row[0], $value); continue }
+        if ($null -eq $ta) { $why += ("the {0} row formats {1}, not StarSets.Toggle(...)" -f $row[0], $toggle); continue }
+        if ($ta.Count -ne $row[4]) { $why += ("the {0} row's Toggle takes {1} values, not {2}" -f $row[0], $ta.Count, $row[4]); continue }
+        $from = Get-SourceKey $dw $dwIns $ta[0]
+        if (@($own, "loc <- $own") -notcontains $from) { $why += ("the {0} row toggles {1}, not {2}" -f $row[0], $from, $own); continue }
+        $iv = Get-ElementVar $dwIns $ta[1] "EntityListWindow::StarButtons"
+        if ($iv -lt 0) { $why += "the $($row[0]) row's Toggle is not given StarButtons[i]"; continue }
+        if ($row[4] -eq 3) {
+            $leave = Get-SourceKey $dw $dwIns $ta[2]
+            $lc = -1
+            if ($leave -eq "loc <- AlertsRow::EmptyIsNothing") { for ($s = $ta[2] - 1; $s -ge $lo; $s--) { if ($dwIns[$s].OpCode.Name -like "stloc*" -and (Get-VarIndex $dwIns[$s]) -eq (Get-VarIndex $dwIns[$ta[2]])) { $lc = $s - 1; break } } }
+            $la = if ($lc -ge $lo) { Get-ArgumentSources $dwIns $lc $dw.Body.ExceptionHandlers $lo } else { $null }
+            if ($null -eq $la -or (Get-SourceKey $dw $dwIns $la[0]) -ne "AlertsRow::AlertsChangeMode") { $why += "the $($row[0]) row's Toggle is told whether to empty to None by $leave, not by AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode)"; continue }
         }
-        $own = "ModConfig::" + $row[1]
-        if ($entry -ne ($own + "Text")) { $why += ("the {0} row writes {1}, not {2}Text" -f $row[0], $entry, $own) }
-        elseif ($value -ne "StarSets::Format") { $why += ("the {0} row writes {1}, not StarSets.Format(...)" -f $row[0], $value) }
-        elseif ($toggle -ne "StarSets::Toggle") { $why += ("the {0} row formats {1}, not StarSets.Toggle(...)" -f $row[0], $toggle) }
-        elseif (@($own, "loc <- $own") -notcontains $from) { $why += ("the {0} row toggles {1}, not {2}" -f $row[0], $from, $own) }
+        # What is shown: IsMarked(its own filter, StarButtons[i]) into the toggle, with StarChoices[i].
+        $ma = Get-ArgumentSources $dwIns $marks[0] $dw.Body.ExceptionHandlers $lo
+        $ga = Get-ArgumentSources $dwIns $toggles[0] $dw.Body.ExceptionHandlers $lo
+        if ($null -eq $ma -or $null -eq $ga) { $why += "the $($row[0]) row's IsMarked or toggle could not be traced"; continue }
+        if (@($own, "loc <- $own") -notcontains (Get-SourceKey $dw $dwIns $ma[0])) { $why += ("the {0} row marks the buttons from {1}, not {2}" -f $row[0], (Get-SourceKey $dw $dwIns $ma[0]), $own); continue }
+        if ((Get-ElementVar $dwIns $ma[1] "EntityListWindow::StarButtons") -ne $iv) { $why += "the $($row[0]) row does not mark button i as StarButtons[i]"; continue }
+        if ((Get-ElementVar $dwIns $ga[1] "EntityListWindow::StarChoices") -ne $iv) { $why += "the $($row[0]) row does not label button i with StarChoices[i]"; continue }
+        $mv = if ((Get-SourceKey $dw $dwIns $ga[0]) -eq "loc <- StarSets::IsMarked") { Get-VarIndex $dwIns[$ga[0]] } else { -1 }
+        if ($mv -lt 0) { $why += "the $($row[0]) row's toggle is not given the IsMarked answer"; continue }
+        $counted = @(for ($k = $lo; $k -lt $hi - 3; $k++) { if ($dwIns[$k].OpCode.Name -like "ldloc*" -and (Get-VarIndex $dwIns[$k]) -eq $iv -and $dwIns[$k + 1].OpCode.Name -eq "ldc.i4.1" -and $dwIns[$k + 2].OpCode.Name -eq "add" -and $dwIns[$k + 3].OpCode.Name -like "stloc*" -and (Get-VarIndex $dwIns[$k + 3]) -eq $iv) { $k } })
+        if ($counted.Count -ne 1) { $why += "the $($row[0]) row's index is not the loop's counter (i++)"; continue }
+        # Written only on a click: the toggle's answer compared with marked, equal skipping the write.
+        $t0 = $toggles[0]
+        $cmp = $dwIns[$t0 + 2]
+        $skip = if ($cmp.OpCode.Name -like "beq*") { [array]::IndexOf($dwIns, $cmp.Operand) } else { -1 }
+        if (-not ($dwIns[$t0 + 1].OpCode.Name -like "ldloc*" -and (Get-VarIndex $dwIns[$t0 + 1]) -eq $mv) -or $skip -le $writes[0] -or $writes[0] -lt $t0) { $why += ("the {0} row's write is not skipped when the toggle's answer equals marked ({1} {2})" -f $row[0], $dwIns[$t0 + 1].OpCode.Name, $cmp.OpCode.Name) }
     }
 }
-if ($why.Count -eq 0) { Ok "EntityListWindow.DrawWindow: each star row writes only its own *StarsText, as StarSets.Format(StarSets.Toggle(its own filter, button))" }
+if ($why.Count -eq 0) { Ok "EntityListWindow.DrawWindow: each star row shows IsMarked(its own filter, StarButtons[i]) and, on a click only, writes its own *StarsText as Format(Toggle(its own filter, StarButtons[i]) - the Alerts: row's with the mode's None rule)" }
+else { Fail ("EntityListWindow.DrawWindow: " + ($why -join "; ")) }
+# The List: row is greyed out in the all-types view: before its first button GUI.enabled is set from the state found and
+# !_allTypes (ldfld _allTypes; ldc.i4.0; ceq), and after its last one, before the Alerts: label, put back as found.
+$checks++
+$why = @()
+if ($iList -lt 0 -or $iAlerts -le $iList) { $why += "the row labels were not found" } else {
+    $en = @(for ($k = $iList; $k -lt $iAlerts; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "GUI::set_enabled") { $k } })
+    $firstButton = @(for ($k = $iList; $k -lt $iAlerts; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "GUILayout::Toggle") { $k } }) | Select-Object -First 1
+    if ($en.Count -ne 2 -or $null -eq $firstButton -or $en[0] -gt $firstButton -or $en[1] -lt $firstButton) { $why += ("GUI.enabled is set {0} time(s) in the List: row, expected once before its buttons and once after" -f $en.Count) } else {
+        $notAll = @(for ($k = $iList; $k -lt $en[0] - 2; $k++) { $o = $dwIns[$k].Operand; if ($dwIns[$k].OpCode.Name -eq "ldfld" -and $o -is [Mono.Cecil.FieldReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "EntityListWindow::_allTypes" -and $dwIns[$k + 1].OpCode.Name -eq "ldc.i4.0" -and $dwIns[$k + 2].OpCode.Name -eq "ceq") { $k } })
+        $found = @(for ($k = $iList; $k -lt $en[0]; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "GUI::get_enabled") { $k } })
+        if ($notAll.Count -ne 1 -or $found.Count -ne 1) { $why += "the List: row is not enabled as 'GUI.enabled && !_allTypes'" }
+        $back = Get-ArgumentSources $dwIns $en[1] $dw.Body.ExceptionHandlers $iList
+        if ($null -eq $back -or (Get-SourceKey $dw $dwIns $back[0]) -ne "loc <- GUI::get_enabled") { $why += "GUI.enabled is not put back as found after the List: row" }
+    }
+}
+if ($why.Count -eq 0) { Ok "EntityListWindow.DrawWindow: the List: row is enabled only as GUI.enabled && !_allTypes, and GUI.enabled is put back after it" }
 else { Fail ("EntityListWindow.DrawWindow: " + ($why -join "; ")) }
 
 Write-Output "== failure isolation =="
@@ -879,6 +1071,20 @@ $last = if ($ts.Count -gt 0) { $ts[-1] } else { -1 }
 $tsrc = if ($last -ge 0) { Get-ArgumentSources $ti $last $tm.Body.ExceptionHandlers } else { $null }
 if ($last -lt 0 -or $tl.Count -eq 0 -or $last -lt $tl[-1] -or -not $tsrc -or (Get-SourceKey $tm $ti $tsrc[0]) -ne "loc <- GUI::get_matrix") { $why += "Tracker.OnGUI does not put back, after its last Label, the GUI.matrix it found" }
 if ($why.Count -eq 0) { Ok "EntityListWindow.OnGUI and Tracker.OnGUI put back the GUI.matrix they found" } else { Fail ($why -join "; ") }
+# The clamp's bounds are in GUI units, as the rect is: the screen's width and height (pixels) divided by the scale OnGUI
+# drew with. In pixels, above 1080p the window could be dragged until no corner is on screen.
+$checks++
+$why = @()
+foreach ($name in @("Screen::get_width", "Screen::get_height")) {
+    $c = @(Get-CallAt $gi $name)
+    if ($c.Count -ne 1) { $why += "$name calls: $($c.Count)"; continue }
+    $q = $c[0]
+    if ($q + 3 -ge $gi.Count -or $gi[$q + 1].OpCode.Name -ne "conv.r4" -or $gi[$q + 2].OpCode.Name -notlike "ldloc*" -or (Get-SourceKey $gm $gi ($q + 2)) -ne "loc <- EntityListWindow::get_GuiScale" -or $gi[$q + 3].OpCode.Name -ne "div") {
+        $why += "$name is not divided by the drawing scale (EntityListWindow.GuiScale, read once)"
+    }
+}
+if ($why.Count -eq 0) { Ok "EntityListWindow.OnGUI: the clamp's bounds are Screen.width and Screen.height divided by the drawing scale - GUI units" }
+else { Fail ("EntityListWindow.OnGUI: " + ($why -join "; ")) }
 
 Write-Output "== the alert ding =="
 # The ding goes through the game's mixer, so the game's Volume and Effect volume apply (vanilla-behaviour.md section 17):
@@ -911,6 +1117,19 @@ foreach ($t in $plug.GetTypes()) {
 if ($plays.Count -ne 1 -or $plays[0] -ne "Ding.Play: PlayOneShot") { $why += ("sounds played: {0}; expected only Ding.Play: PlayOneShot" -f $(if ($plays.Count) { $plays -join ", " } else { "none" })) }
 if ($guiMixer.Count -gt 0) { $why += ("AudioMan.m_guiMixer (null in the game) is read in {0}" -f ($guiMixer -join ", ")) }
 if ($why.Count -eq 0) { Ok "the ding plays only from Ding.Play, through the mixer group Ding.FindGuiGroup finds by the name GUI" } else { Fail ($why -join "; ") }
+# The fallback lookup (every AudioMixerGroup loaded) takes a group named GUI only from the game's own master mixer:
+# group.audioMixer == the mixer read from AudioMan, a false answer skipping the group. Another mod's mixer can have a
+# group of that name, outside the game's volume settings.
+$checks++
+$mx = @()
+if ($fg) {
+    foreach ($q in @(Get-CallAt $fi "Object::op_Equality")) {
+        $s = Get-ArgumentSources $fi $q $fg.Body.ExceptionHandlers
+        if ($s -and $s.Count -eq 2 -and (Get-SourceKey $fg $fi $s[0]) -eq "AudioMixerGroup::get_audioMixer" -and (Get-SourceKey $fg $fi $s[1]) -eq "loc <- AudioMan::m_masterMixer" -and $fi[$q + 1].OpCode.Name -like "brfalse*") { $mx += $q }
+    }
+}
+if ($mx.Count -eq 1) { Ok "Ding.FindGuiGroup: the fallback takes a GUI group only when its audioMixer is the game's master mixer" }
+else { Fail "Ding.FindGuiGroup: the fallback does not test group.audioMixer == the game's master mixer (another mod's GUI group could take the ding)" }
 
 Write-Output "== the list's keys and what it blocks =="
 # A literal int an instruction pushes, or $null; the try/catch (System.Exception) blocks around an instruction whose
@@ -995,11 +1214,15 @@ Test-Calls @(
     @("MobTracker.EntityListWindow", "HandleKeys", "ListKeys::ClosesOnBack",
         @("EntityListWindow::get_IsOpen", "arg consoleVisible", "arg consoleWasVisible", "ZInput::GetKeyDown", "ZInput::GetButtonDown"), $brfalse),
     @("MobTracker.EntityListWindow", "HandleKeys", "ListKeys::MayToggle",
-        @("EntityListWindow::get_IsOpen", "Hotkeys::TypesText", "EntityListWindow::_searchFocused", "GameTyping::Any", "Menu::IsVisible", "Hud::IsPieceSelectionVisible", "InventoryGui::IsVisible"), $brfalse),
+        @("EntityListWindow::get_IsOpen", "Hotkeys::TypesText", "EntityListWindow::_searchFocused", "GameTyping::Any", "Menu::IsVisible", "Hud::IsPieceSelectionVisible", "InventoryGui::IsVisible", "PlayerCustomizaton::IsBarberGuiVisible"), $brfalse),
     @("MobTracker.EntityListWindow", "HandleKeys", "Hotkeys::TypesText", @("ModConfig::ListKey.Value"), $null),
     @("MobTracker.EntityListWindow", "HandleKeys", "Hotkeys::Pressed", @("ModConfig::ListKey"), $brfalse),
     @("MobTracker.EntityListWindow", "Update", "EntityListWindow::HandleKeys", @($null, "loc <- Console::IsVisible", "loc <- EntityListWindow::_consoleWasVisible"), $null),
-    @("MobTracker.Hotkeys", "Pressed", "ListKeys::IsClickButton", @($null), $brfalse)
+    @("MobTracker.Hotkeys", "Pressed", "ListKeys::IsClickButton", @($null), $brfalse),
+    # A refused key is remembered (Pressed tests Refused first), so it warns once, not on every frame.
+    @("MobTracker.Hotkeys", "Refuse", 'List`1::Add', @("Hotkeys::Refused", "arg key"), $null),
+    # A sign's, portal's or pet's name box counts as typing while its panel is active (a false answer goes on to chat).
+    @("MobTracker.GameTyping", "Any", "GameObject::get_activeSelf", @("TextInput::m_panel"), $brfalse)
 )
 # What Update keeps for the next frame is this frame's console visibility (read once, before anything else).
 $checks++
@@ -1261,6 +1484,137 @@ Test-Wiring @(
     @("MobTracker.EntityListWindow", "Covers", @("EntityListWindow::get_IsOpen", "EntityListWindow::_rect"), @()),
     @("MobTracker.EntityListWindow", "OnGUI", @("GUILayout::Window", "set EntityListWindow::_rect"), @())
 )
+
+Write-Output "== what the traced answers decide =="
+# The checks above trace what a call is given and which way the code branches on its answer. These follow the answers
+# one step further - where a stored answer goes, what a branch's true path does, how two tests combine, where a loop
+# starts and stops, which coordinate a bound clamps - each an exact IL shape read from the build, so a rewrite of these
+# lines fails here and is re-read against the IL rather than the check loosened. tools\mutants.ps1 rows in brackets.
+# The alert poll hands ShouldAlert its own values, and a false answer skips the creature; its second value, 'watched',
+# is the local stored once at the join of 'StarSets.Accepts(...) && Watchlist.Contains(...)' [A14, A15, A16].
+Test-Calls @(,
+    @("MobTracker.WatchAlerts", "Update", 'AlertGate`1::ShouldAlert',
+        @("WatchAlerts::_gate", "loc <- Character::GetZDOID", $null, "Character::IsTamed", "loc <- Vector3::Distance", "ModConfig::AlertRadius.Value"), $brtrue)
+)
+$checks++
+$why = @()
+$pwm = Get-Method "MobTracker.WatchAlerts" "Update"; $pwi = @($pwm.Body.Instructions)
+$psa = @(Get-CallAt $pwi 'AlertGate`1::ShouldAlert'); $pac = @(Get-CallAt $pwi "StarSets::Accepts")
+if ($psa.Count -ne 1 -or $pac.Count -ne 1) { $why += ("ShouldAlert / Accepts calls: {0} / {1}" -f $psa.Count, $pac.Count) } else {
+    $src = Get-ArgumentSources $pwi $psa[0] $pwm.Body.ExceptionHandlers
+    if ($null -eq $src -or $src.Count -ne 6) { $why += "ShouldAlert's values could not be traced" } else {
+        $w = $pwi[$src[2]]
+        $var = if ($w.OpCode.Name -like "ldloc*" -and $w.OpCode.Name -notlike "ldloca*") { Get-VarIndex $w } else { -1 }
+        $st = @(for ($k = 0; $k -lt $pwi.Count; $k++) { if ($pwi[$k].OpCode.Name -like "stloc*" -and (Get-VarIndex $pwi[$k]) -eq $var) { $k } })
+        $j = if ($var -ge 0 -and $st.Count -eq 1) { $st[0] } else { -1 }
+        $shape = $j -ge 3 -and $pwi[$pac[0] + 1].OpCode.Name -like "brfalse*" -and [array]::IndexOf($pwi, $pwi[$pac[0] + 1].Operand) -eq ($j - 1) -and
+            $pwi[$j - 1].OpCode.Name -eq "ldc.i4.0" -and @("br", "br.s") -contains $pwi[$j - 2].OpCode.Name -and [array]::IndexOf($pwi, $pwi[$j - 2].Operand) -eq $j -and
+            (Get-SourceKey $pwm $pwi ($j - 3)) -eq 'HashSet`1::Contains'
+        if (-not $shape) { $why += "ShouldAlert's second value is not the local stored once as StarSets.Accepts(...) && Watchlist.Contains(...)" }
+    }
+}
+if ($why.Count -eq 0) { Ok "WatchAlerts.Update: ShouldAlert is given watched = Accepts(...) && Watchlist.Contains(...), stored once at the && join" }
+else { Fail ("WatchAlerts.Update: " + ($why -join "; ")) }
+
+# Pressed answers false at once for a key in Refused (Contains(Refused, the key read), its true answer going straight
+# to 'return false'; the Count > 0 shortcut skipping only to where a key not refused goes), and for a mouse-button key
+# refuses it and answers false at once [K39, K40, K41].
+Test-Calls @(,
+    @("MobTracker.Hotkeys", "Pressed", 'List`1::Contains', @("Hotkeys::Refused", 'loc <- ConfigEntry`1::get_Value'), $brfalse)
+)
+$checks++
+$why = @()
+$phm = Get-Method "MobTracker.Hotkeys" "Pressed"; $phi = @($phm.Body.Instructions)
+$pco = @(Get-CallAt $phi 'List`1::Contains'); $pcn = @(Get-CallAt $phi 'List`1::get_Count'); $pic = @(Get-CallAt $phi "ListKeys::IsClickButton")
+if ($pco.Count -ne 1 -or $pic.Count -ne 1) { $why += ("Contains / IsClickButton calls: {0} / {1}" -f $pco.Count, $pic.Count) } else {
+    $q = $pco[0]
+    if (-not ($phi[$q + 1].OpCode.Name -like "brfalse*" -and $phi[$q + 2].OpCode.Name -eq "ldc.i4.0" -and $phi[$q + 3].OpCode.Name -eq "ret")) { $why += "a refused key does not answer false at once" }
+    $skip = [array]::IndexOf($phi, $phi[$q + 1].Operand)
+    foreach ($c in $pcn) { if (-not ($phi[$c + 1].OpCode.Name -eq "ldc.i4.0" -and $phi[$c + 2].OpCode.Name -like "ble*" -and [array]::IndexOf($phi, $phi[$c + 2].Operand) -eq $skip)) { $why += "Refused.Count is not tested as '> 0', skipping to where a key not refused goes" } }
+    $t = $pic[0] + 2
+    $rf = @(for ($k = $t; $k -lt [Math]::Min($t + 6, $phi.Count); $k++) { $o = $phi[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "Hotkeys::Refuse") { $k } })
+    if ($phi[$pic[0] + 1].OpCode.Name -notlike "brfalse*" -or $rf.Count -ne 1 -or $phi[$rf[0] + 1].OpCode.Name -ne "ldc.i4.0" -or $phi[$rf[0] + 2].OpCode.Name -ne "ret") { $why += "a mouse-button ListKey is not refused and answered false at once" }
+}
+if ($why.Count -eq 0) { Ok "Hotkeys.Pressed: a refused key, and a mouse-button key once refused, answer false at once" }
+else { Fail ("Hotkeys.Pressed: " + ($why -join "; ")) }
+
+# In the ding's fallback, the name test (group.name == "GUI") and the mixer test are both required: each false answer
+# skips to the same place [D8].
+$checks++
+$pfg = Get-Method "MobTracker.Ding" "FindGuiGroup"; $pfi = @($pfg.Body.Instructions)
+$both = 0
+foreach ($q in @(Get-CallAt $pfi "Object::op_Equality")) {
+    $s = Get-ArgumentSources $pfi $q $pfg.Body.ExceptionHandlers
+    if (-not ($s -and $s.Count -eq 2 -and (Get-SourceKey $pfg $pfi $s[0]) -eq "AudioMixerGroup::get_audioMixer" -and $pfi[$q + 1].OpCode.Name -like "brfalse*")) { continue }
+    $skip = [array]::IndexOf($pfi, $pfi[$q + 1].Operand)
+    foreach ($p in @(Get-CallAt $pfi "String::op_Equality" | Where-Object { $_ -lt $q -and $_ -gt $q - 8 })) {
+        $ns = Get-ArgumentSources $pfi $p $pfg.Body.ExceptionHandlers
+        if ($ns -and $ns.Count -eq 2 -and (Get-SourceKey $pfg $pfi $ns[0]) -eq "Object::get_name" -and $pfi[$ns[1]].OpCode.Name -eq "ldstr" -and "$($pfi[$ns[1]].Operand)" -eq "GUI" -and
+            $pfi[$p + 1].OpCode.Name -like "brfalse*" -and [array]::IndexOf($pfi, $pfi[$p + 1].Operand) -eq $skip) { $both++ }
+    }
+}
+if ($both -eq 1) { Ok "Ding.FindGuiGroup: the fallback takes a group only when its name is GUI AND its mixer is the game's" }
+else { Fail "Ding.FindGuiGroup: the fallback's name test and mixer test are not both required (each false answer skipping the group)" }
+
+# The List: row's GUI.enabled is exactly 'enabled && !_allTypes' [S31]:
+# ldloc <enabled>; brfalse L; ldarg.0; ldfld _allTypes; ldc.i4.0; ceq; br M; L: ldc.i4.0; M: call GUI::set_enabled.
+$checks++
+$pen = @(for ($k = $iList; $k -lt $iAlerts; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "GUI::set_enabled") { $k } })
+$e = if ($pen.Count -ge 1) { $pen[0] } else { -1 }
+$shape = $e -ge 8 -and $dwIns[$e - 1].OpCode.Name -eq "ldc.i4.0" -and @("br", "br.s") -contains $dwIns[$e - 2].OpCode.Name -and [array]::IndexOf($dwIns, $dwIns[$e - 2].Operand) -eq $e -and
+    $dwIns[$e - 3].OpCode.Name -eq "ceq" -and $dwIns[$e - 4].OpCode.Name -eq "ldc.i4.0" -and $dwIns[$e - 5].OpCode.Name -eq "ldfld" -and "$($dwIns[$e - 5].Operand.Name)" -eq "_allTypes" -and
+    $dwIns[$e - 7].OpCode.Name -like "brfalse*" -and [array]::IndexOf($dwIns, $dwIns[$e - 7].Operand) -eq ($e - 1) -and (Get-SourceKey $dw $dwIns ($e - 8)) -eq "loc <- GUI::get_enabled"
+if ($shape) { Ok "EntityListWindow.DrawWindow: the List: row's GUI.enabled is 'enabled && !_allTypes' (false when either is)" }
+else { Fail "EntityListWindow.DrawWindow: the List: row's GUI.enabled is not exactly 'enabled && !_allTypes'" }
+
+# The title names the list's categories exactly when a category is marked: _appliedListStars == All (0) branches
+# (brfalse) to " creatures loaded", and StarSets.Label sits on the other path [S32].
+$checks++
+$pgm = Get-Method "MobTracker.EntityListWindow" "OnGUI"; $pgi = @($pgm.Body.Instructions)
+$ld = @(for ($k = 0; $k -lt $pgi.Count; $k++) { if ($pgi[$k].OpCode.Name -eq "ldstr" -and "$($pgi[$k].Operand)" -eq " creatures loaded") { $k } })
+$lb = @(Get-CallAt $pgi "StarSets::Label")
+$tt = @(for ($k = 0; $k -lt $pgi.Count - 1; $k++) { $o = $pgi[$k].Operand; if ($pgi[$k].OpCode.Name -eq "ldfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.Name -eq "_appliedListStars" -and $pgi[$k + 1].OpCode.Name -like "br*") { $k } })
+if ($ld.Count -eq 1 -and $tt.Count -eq 1 -and $lb.Count -eq 1 -and $pgi[$tt[0] + 1].OpCode.Name -like "brfalse*" -and [array]::IndexOf($pgi, $pgi[$tt[0] + 1].Operand) -eq $ld[0] -and $lb[0] -gt $tt[0] -and $lb[0] -lt $ld[0]) {
+    Ok "EntityListWindow.OnGUI: the title says 'creatures loaded' only for _appliedListStars == All, and names the categories otherwise" }
+else { Fail "EntityListWindow.OnGUI: the title's test is not '_appliedListStars == All ? creatures loaded : Label(...)'" }
+
+# Each star row's loop runs i from 0 while i < StarButtons.Length, so it draws every button [S33, S34].
+$checks++
+$why = @()
+foreach ($row in @(@("List:", $iList, $iAlerts), @("Alerts:", $iAlerts, $dwIns.Count))) {
+    $lo = $row[1]; $hi2 = $row[2]
+    $cond = @(for ($k = $lo + 1; $k -lt $hi2 - 3; $k++) { $o = $dwIns[$k].Operand; if ($dwIns[$k].OpCode.Name -eq "ldsfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.Name -eq "StarButtons" -and $dwIns[$k + 1].OpCode.Name -eq "ldlen" -and $dwIns[$k + 2].OpCode.Name -eq "conv.i4" -and $dwIns[$k + 3].OpCode.Name -like "blt*" -and $dwIns[$k - 1].OpCode.Name -like "ldloc*") { $k } })
+    if ($cond.Count -ne 1) { $why += "the $($row[0]) row's loop does not run while i < StarButtons.Length"; continue }
+    $iv = Get-VarIndex $dwIns[$cond[0] - 1]
+    $st = @(for ($k = $lo; $k -lt $cond[0]; $k++) { if ($dwIns[$k].OpCode.Name -like "stloc*" -and (Get-VarIndex $dwIns[$k]) -eq $iv) { $k } })
+    $zero = @($st | Where-Object { $dwIns[$_ - 1].OpCode.Name -eq "ldc.i4.0" })
+    if ($st.Count -ne 2 -or $zero.Count -ne 1) { $why += "the $($row[0]) row's loop does not start at i = 0" }
+}
+if ($why.Count -eq 0) { Ok "EntityListWindow.DrawWindow: each star row draws buttons 0 to StarButtons.Length - 1" }
+else { Fail ("EntityListWindow.DrawWindow: " + ($why -join "; ")) }
+
+# A sign's text box open answers true: get_activeSelf; brfalse; ldc.i4.1; ret [K38].
+$checks++
+$pgt = Get-Method "MobTracker.GameTyping" "Any"; $pgti = @($pgt.Body.Instructions)
+$pas = @(Get-CallAt $pgti "GameObject::get_activeSelf")
+if ($pas.Count -eq 1 -and $pgti[$pas[0] + 1].OpCode.Name -like "brfalse*" -and $pgti[$pas[0] + 2].OpCode.Name -eq "ldc.i4.1" -and $pgti[$pas[0] + 3].OpCode.Name -eq "ret") { Ok "GameTyping.Any: an active text-input panel answers true at once" }
+else { Fail "GameTyping.Any: an active text-input panel does not answer true at once" }
+
+# Each clamp keeps its own coordinate: Clamp(_rect.x, ...) into set_x, Clamp(_rect.y, ...) into set_y [G14].
+$checks++
+$why = @()
+foreach ($pair in @(@("Rect::get_x", "Rect::set_x"), @("Rect::get_y", "Rect::set_y"))) {
+    $hit = 0
+    foreach ($q in @(Get-CallAt $pgi "Mathf::Clamp")) {
+        $o = $pgi[$q + 1].Operand
+        if (-not ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq $pair[1])) { continue }
+        $s = Get-ArgumentSources $pgi $q $pgm.Body.ExceptionHandlers
+        if ($s -and $s.Count -eq 3 -and (Get-SourceKey $pgm $pgi $s[0]) -eq $pair[0]) { $hit++ }
+    }
+    if ($hit -ne 1) { $why += ("{0} is not Clamp({1}, ...)" -f $pair[1], $pair[0]) }
+}
+if ($why.Count -eq 0) { Ok "EntityListWindow.OnGUI: _rect.x = Clamp(_rect.x, ...), _rect.y = Clamp(_rect.y, ...)" }
+else { Fail ("EntityListWindow.OnGUI: " + ($why -join "; ")) }
 
 Write-Output "== assembly references =="
 foreach ($ar in $plug.AssemblyReferences) {

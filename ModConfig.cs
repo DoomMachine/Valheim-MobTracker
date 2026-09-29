@@ -26,10 +26,16 @@ namespace MobTracker
         public static ConfigEntry<string> ListStarsText;
         public static ConfigEntry<string> AlertStarsText;
 
-        // Parsed views of the two texts, re-parsed whenever an entry changes. Fields, read once per creature by the
-        // alert poll; tools\preflight.ps1 checks who reads and writes each of them.
+        // Parsed views of the two texts, re-parsed whenever an entry changes; tools\preflight.ps1 checks who reads and
+        // writes each of them. The window's rows show them as they are; the alerts, Auto-track and Always track nearest
+        // watched use AlertStars only through WatchAlerts.EffectiveAlertStars, which follows it once it holds still.
         public static StarSet ListStars;
         public static StarSet AlertStars;
+
+        // How many times AlertStarsText has changed since the start: the settler behind EffectiveAlertStars restarts its
+        // wait at every change of the text, also one that leaves AlertStars as it was (ConfigurationManager writes the
+        // setting at each keystroke, and a word typed so far reads as All until it is one Parse knows).
+        public static int AlertStarsRevision;
 
         /// <summary>Parsed view of <see cref="WatchlistEntry"/>; rebuilt whenever the entry changes.</summary>
         public static HashSet<string> Watchlist { get; private set; }
@@ -39,8 +45,8 @@ namespace MobTracker
             ListKey = config.Bind("General", "ListKey", KeyCode.F7,
                 "Opens and closes the creature list; Escape or the gamepad's B also close it. It does not open the list while " +
                 "you type in chat, a sign or a map pin's name, while the console is open, or over the pause menu, the build " +
-                "menu or the inventory. A key that types (a letter, a digit...) does not close the list while its search box " +
-                "has the keyboard. A key the game cannot read (WheelUp, F13, Plus...) and the left, right and middle mouse " +
+                "menu, the inventory or the Barber Station. A key that types (a letter, a digit...) does not close the list " +
+                "while its search box has the keyboard. A key the game cannot read (WheelUp, F13, Plus...) and the left, right and middle mouse " +
                 "buttons do nothing, and the log says so once; keys the game ignores outright - Mouse5, Mouse6, F16 to F24 " +
                 "and the numbered-joystick buttons - never fire, with no warning.");
             // A new key is tried afresh, and warned about again if it cannot be used either.
@@ -72,7 +78,8 @@ namespace MobTracker
                 "side of a dungeon entrance (its alert still shows).");
             AlwaysTrackNearest = config.Bind("Alerts", "AlwaysTrackNearestWatched", false,
                 "When a tracked creature of a watched type is lost - killed, or no longer loaded on your client - wait 5 " +
-                "seconds, then track the nearest creature of that type that AlertStarFilter accepts, within AlertRadius, on " +
+                "seconds, then track the nearest creature of that type that AlertStarFilter accepts (as the alerts use it), " +
+                "within AlertRadius, on " +
                 "your side of a dungeon entrance and never a tamed one, looking again once a second until there is one. A watch alert that names that type leaves the " +
                 "choice to this. Tracking something else (by hand, Find area, or AutoTrack on an alert for another watched " +
                 "type), Stop tracking, turning this off, taking the type off the watchlist or dying ends the wait. Losing a " +
@@ -94,25 +101,39 @@ namespace MobTracker
                 "'OneStar, TwoStars' alerts only for one- and two-star creatures. Names in any case; the window's labels " +
                 "(No star, 1 star, 2 stars, 2+ stars) work too, and a number counts stars: 0 = NoStars, 1 = OneStar, " +
                 "2 = TwoStars, 3 = TwoOrMoreStars, 4 = All. All anywhere in the list means All. The window's 'Alerts:' " +
-                "row sets it: a click on a category adds or removes it, a click on All resets. A creature left out now " +
-                "can still alert later if the filter changes. Anything else is ignored with a warning in the log; with " +
+                "row sets it: a click on a category adds or removes it, a click on All resets. A change made in the " +
+                "window or in ConfigurationManager takes effect once the filter has stayed the same for 1.5 seconds of " +
+                "game time, so what it passes through while you click the row or type in ConfigurationManager - a text " +
+                "with no word it knows yet reads as All - never takes effect as long as each click or keystroke comes " +
+                "within 1.5 seconds of the one before. To edit it in this file, close the game first: the file is read " +
+                "at the start, and while the game runs a setting changed in the window rewrites it. A creature left out now can " +
+                "still alert later if the filter changes. Anything else is ignored with a warning in the log; with " +
                 "nothing valid, it works as All.");
             // Each parsed view from its own entry, now and whenever that entry changes (the window's rows, or
-            // ConfigurationManager, which also raises SettingChanged).
-            ListStars = ParseStars(ListStarsText);
-            AlertStars = ParseStars(AlertStarsText);
-            ListStarsText.SettingChanged += (sender, args) => ListStars = ParseStars(ListStarsText);
-            AlertStarsText.SettingChanged += (sender, args) => AlertStars = ParseStars(AlertStarsText);
+            // ConfigurationManager, which also raises SettingChanged). The list's never reads None; the alerts' only
+            // under AlertsChange.EmptyAlertsNothing, which is not the mode MobTracker runs with (AlertsRow). Each change
+            // of the alerts' text is counted after it is parsed (AlertStarsRevision).
+            ListStars = ParseStars(ListStarsText, false);
+            AlertStars = ParseStars(AlertStarsText, AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode));
+            ListStarsText.SettingChanged += (sender, args) => ListStars = ParseStars(ListStarsText, false);
+            AlertStarsText.SettingChanged += (sender, args) =>
+            {
+                AlertStars = ParseStars(AlertStarsText, AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode));
+                AlertStarsRevision++;
+            };
 
             Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value);
             WatchlistEntry.SettingChanged += (sender, args) => Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value);
         }
 
-        /// <summary>A star filter entry's set; what it could not read is said in the log, naming the setting.</summary>
-        private static StarSet ParseStars(ConfigEntry<string> entry)
+        /// <summary>
+        /// A star filter entry's set; what it could not read is said in the log, naming the setting. None is read only
+        /// with <paramref name="allowNone"/>.
+        /// </summary>
+        private static StarSet ParseStars(ConfigEntry<string> entry, bool allowNone)
         {
             string problem;
-            StarSet set = StarSets.Parse(entry.Value, out problem);
+            StarSet set = StarSets.Parse(entry.Value, out problem, allowNone);
             if (problem != null)
                 MobTrackerPlugin.Log.LogWarning(entry.Definition.Section + "." + entry.Definition.Key + " is '" + entry.Value + "': " + problem);
             return set;

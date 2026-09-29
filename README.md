@@ -17,7 +17,8 @@ https://github.com/DoomMachine/Valheim-MobTracker
   the map, a trader or another game window under it; the map still takes clicks and drags beside the
   window. The rows hold still while the pointer is on the window, so Track and Watch act on the row you
   aimed at; they catch up as soon as it leaves. F7 does not open the list while you type in chat, a sign or a
-  map pin's name, while the console is open, or over the pause menu, the build menu or the inventory.
+  map pin's name, while the console is open, or over the pause menu, the build menu, the inventory or the Barber
+  Station.
 - **With TomTom or Wayfinder** installed, their window key (F11 by default) and skip key (if you bound one) keep
   working while the list is open, and F7 opens the list over TomTom's window.
 - **Star filters**: two rows of toggle buttons in the window, *All*, *No star*, *1 star*, *2 stars* and
@@ -27,10 +28,11 @@ https://github.com/DoomMachine/Valheim-MobTracker
   The categories you mark combine: mark *No star* and *1 star* to list, or be alerted for, both, or *1 star*
   and *2 stars* for only those two. The marked buttons show as selected. With *All* marked, a click on a
   category marks it alone; a click on a marked category takes it off, and taking off the last one returns
-  the row to *All*; a click on *All* resets the row. With categories marked, the window's title names them
-  ("MobTracker - 12 creatures, No star + 1 star"). The two rows are independent, so you can browse every star
-  level while being alerted only for, say, two-star Trolls. Stars are shown as asterisks: `Deer` has none,
-  `Deer *` one.
+  the row to *All*; a click on *All* resets the row. A change on the **Alerts:** row takes effect once the row
+  has stayed the same for 1.5 seconds (see Known limits). With categories marked on the **List:** row, the nearby
+  view's title names them ("MobTracker - 12 creatures, No star + 1 star"). The two rows are independent, so
+  you can browse every star level while being alerted only for, say, two-star Trolls. Stars are shown as
+  asterisks: `Deer` has none, `Deer *` one.
 - **Track** follows that one creature: a 3D arrow over your head, or with `GuideMode = GroundPath`
   a walkable line on the ground. The path builds over a few seconds on long distances; while it
   is missing or incomplete (flying/swimming targets, cliffs) the arrow shows as well. Beyond 250 m
@@ -102,7 +104,7 @@ a new version adds its own with their defaults. When the game starts, `BepInEx/L
 | `Alerts.AlertRadius` | `0` | Only alert (or re-track, below) within this many metres; 0 = anywhere loaded |
 | `Alerts.AlertVolume` | `0.8` | Ding volume; the game's Volume and Effect volume settings apply on top of it |
 | `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor the choice Always track nearest watched is waiting to make for that type, nor takes a creature on the other side of a dungeon entrance |
-| `Alerts.AlertStarFilter` | `All` | The alerts' star filter (also the **Alerts:** row), written the same way: e.g. `OneStar, TwoStars` alerts only for one- and two-star creatures. A text setting since 0.4.0, like `ListStarFilter` |
+| `Alerts.AlertStarFilter` | `All` | The alerts' star filter (also the **Alerts:** row), written the same way: e.g. `OneStar, TwoStars` alerts only for one- and two-star creatures. A text setting since 0.4.0, like `ListStarFilter`, except that a change in the window or in ConfigurationManager takes effect only once the filter has stayed the same for 1.5 seconds (see Known limits); edit the file by hand with the game closed, as for `Watchlist` |
 | `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature of a watched type, not a tamed one, is lost, track the nearest one of that type that passes the watch alert's filters and is on your side of a dungeon entrance: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window) |
 
 ## Known limits
@@ -113,18 +115,23 @@ a new version adds its own with their defaults. When the game starts, `BepInEx/L
   "Lost track of" comes only when it is removed; and its tamed state reaches your game up to about a second late,
   so with an `AlertRadius` set one tamed just before it comes within the radius can alert, and losing one just
   tamed can start Always track nearest watched.
-- Over the Barber Station, Escape closes the list and the barber together, and the barber puts back the hair and
-  beard you had.
 - A watched creature inside a dungeon still alerts while you are outside it, and the other way round, but is not
   auto-tracked; with `AlertRadius` at 0 it has then had its alert, so going in does not alert it again.
 - While the pointer rests on the window its rows do not update: a creature killed meanwhile keeps its row, and
   its Track button does nothing, until the pointer leaves the window.
-- Each click on the **Alerts:** row applies at once, and watched creatures are checked every second. While you
-  take categories off, a creature of a category you are taking off can alert before your last click, and has
-  then had its alert; taking off the only marked category returns the row to *All*, so until your next click
-  any watched creature can. To go from one category to another, mark the new one first, then take the old one
-  off. Typed in ConfigurationManager, `AlertStarFilter` applies at every keystroke too: a half-typed value can
-  work as All for a moment, and each value it cannot read logs a warning.
+- A change on the **Alerts:** row reaches the alerts, Auto-track and Always track nearest watched once the row
+  has stayed the same for 1.5 seconds - 1.5 seconds after your last click that changed it (seconds of game time,
+  which stands still while the game is paused); the buttons and the cfg change at once, and watched creatures
+  are checked every second. So what the row passes through while you click is not seen, as long as each click
+  comes within 1.5 seconds of the one before: taking off the only marked category, which returns the row to
+  *All*, no longer lets every watched creature alert before your next click. Pause for 1.5 seconds or more
+  between two clicks, though, and the row as it stands then applies: a creature it lets through can alert, and
+  has then had its alert. Marking the new category before taking the old one off never passes through *All*.
+  Typed in ConfigurationManager, which changes the setting at every keystroke, `AlertStarFilter` works the same
+  way: the text applies 1.5 seconds after it last changed, so a half-typed value (a text with no word it knows
+  yet reads as *All*) is not seen as long as each keystroke comes within 1.5 seconds of the one before. Pause that
+  long while typing, though, and what is typed so far applies (*All*, for text it cannot read). Each value it
+  cannot read logs a warning.
 - Over a runestone's or a readable item's text, Escape closes the list and the text together, and typing `e` in
   the search closes the text.
 - With TomTom's, Wayfinder's or MeasurementTracker's window open as well, one Escape closes both windows. F5
@@ -155,7 +162,9 @@ has a space). `tools/mutants.ps1` plants the defects preflight is there to catch
 `build/`, and checks that each one fails it. `tools/package.ps1` makes a release's zip from a clean checkout.
 Run in Windows PowerShell 5.1, in a plain shell, with the same .NET SDK and against the same Valheim and
 BepInEx files, the same commit gives the same bytes, so a downloaded zip can be checked against its tag; each
-release's notes name the versions used. `tests/` holds the rules that need no game (`dotnet run` there).
+release's notes name the versions used. `tests/` holds the rules that need no game (`dotnet run` there), and
+`tools/unit-mutants.ps1` plants defects in those rules, one at a time in a copy under `build/`, and checks that
+the tests fail on each.
 
 ## Credits
 
@@ -172,6 +181,12 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **0.4.1** - fixes. Taking off the only marked category on the **Alerts:** row no longer lets every watched
+  creature alert until your next click: a change on that row, or to `AlertStarFilter` in ConfigurationManager,
+  now takes effect once it has stayed the same for 1.5 seconds, so what the row passes through while you click,
+  or a half-typed value, is not seen. F7 no longer opens the list over the Barber Station, where the Escape that
+  closed the list also cancelled the barber and put back the hair and beard you had. The safety checks catch more
+  planted defects, and `tools/unit-mutants.ps1` checks the unit tests the same way. Not yet played in the game.
 - **0.4.0** - star filters take several categories at once: the **List:** and **Alerts:** rows are five toggle
   buttons each, so you can list or be alerted for, say, no-star and one-star creatures together, or only one-
   and two-star ones; a click on *All* resets a row, and the window's title names the categories the list shows.

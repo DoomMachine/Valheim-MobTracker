@@ -10,12 +10,26 @@ namespace MobTracker
     /// </summary>
     internal class WatchAlerts : MonoBehaviour
     {
+        private static readonly StarSetSettler AlertStarsSettler = new StarSetSettler();
+
         private readonly AlertGate<ZDOID> _gate = new AlertGate<ZDOID>();
         private float _nextPoll;
         private bool _failureLogged;
 
+        /// <summary>
+        /// The Alerts: row's set as the alerts, Auto-track and Always track nearest watched use it: under the shipped
+        /// AlertsChange.Settle, ModConfig.AlertStars once its cfg text has stayed the same for
+        /// StarSetSettler.SettleSeconds (the first value at once; ModConfig.AlertStarsRevision counts the writes), so
+        /// the states the row passes through while it is clicked, and a value half-typed in ConfigurationManager, never
+        /// alert.
+        /// </summary>
+        internal static StarSet EffectiveAlertStars { get; private set; }
+
         private void Update()
         {
+            // Every frame, before the once-a-second return: the wait is timed from the text's last change, not from a poll.
+            EffectiveAlertStars = AlertsRow.Effective(ModConfig.AlertStars, ModConfig.AlertStarsRevision, AlertStarsSettler, Time.time, AlertsRow.AlertsChangeMode);
+
             if (Time.time < _nextPoll)
                 return;
 
@@ -55,7 +69,7 @@ namespace MobTracker
                     float distance = Vector3.Distance(from, character.transform.position);
                     // Outside the alert star filter counts as not watched, so the gate does not remember it: it can
                     // still alert if the filter changes. The level test goes first; it allocates no name string.
-                    bool watched = StarSets.Accepts(ModConfig.AlertStars, character.GetLevel())
+                    bool watched = StarSets.Accepts(EffectiveAlertStars, character.GetLevel())
                                    && ModConfig.Watchlist.Contains(Creature.PrefabName(character));
                     if (!_gate.ShouldAlert(id, watched, character.IsTamed(), distance, ModConfig.AlertRadius.Value))
                         continue;

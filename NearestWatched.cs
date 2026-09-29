@@ -6,7 +6,8 @@ namespace MobTracker
     /// <summary>
     /// "Always track nearest watched": when the tracker loses a creature of a watched type - killed, or gone from this
     /// client (out of range, despawned) - wait five seconds, then track the nearest creature of that type that passes a
-    /// watch alert's filters (Alerts stars, AlertRadius, never tamed) and is on the player's side of a dungeon entrance
+    /// watch alert's filters (Alerts stars as the alerts use them, WatchAlerts.EffectiveAlertStars; AlertRadius; never
+    /// tamed) and is on the player's side of a dungeon entrance
     /// (both inside a dungeon, or both outside), looking again once a second, without a message,
     /// until there is one. A watch alert for that type leaves the choice to this; tracking anything else (a click, Find
     /// area, an auto-tracked alert for another type), Stop tracking, turning the option off, unwatching the type,
@@ -73,7 +74,7 @@ namespace MobTracker
                 float distance = Vector3.Distance(from, character.transform.position);
                 if (Retrack.IsCandidate(string.Equals(Creature.PrefabName(character), Pending.Prefab, StringComparison.Ordinal),
                         character.GetZDOID() != ZDOID.None, character.IsTamed(),
-                        StarSets.Accepts(ModConfig.AlertStars, character.GetLevel()),
+                        StarSets.Accepts(WatchAlerts.EffectiveAlertStars, character.GetLevel()),
                         Rules.WithinRadius(distance, ModConfig.AlertRadius.Value),
                         Rules.SameLayer(character.InInterior(), playerInside))
                     && distance < nearestDistance)

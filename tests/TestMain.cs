@@ -12,6 +12,9 @@ namespace MobTracker
         {
             StarFilterTests();
             StarSetTests();
+            NoneTests();
+            SettleTests();
+            AlertsRowTests();
             RulesTests();
             SpacingTests();
             OpenRuleTests();
@@ -118,8 +121,8 @@ namespace MobTracker
                 StarSets.Accepts(noOrOne, 1) && StarSets.Accepts(noOrOne, 2) && !StarSets.Accepts(noOrOne, 3), "");
             Check("sets: '1 star + 2 stars' takes one- and two-star creatures, not a plain one nor a modded three-star",
                 !StarSets.Accepts(oneOrTwo, 1) && StarSets.Accepts(oneOrTwo, 2) && StarSets.Accepts(oneOrTwo, 3) && !StarSets.Accepts(oneOrTwo, 4), "");
-            StarSet stray = (StarSet)16;
-            Check("sets: bits outside the four categories are ignored - alone they behave, show and are written as All",
+            StarSet stray = (StarSet)32;
+            Check("sets: bits outside the four categories and None are ignored - alone they behave, show and are written as All",
                 StarSets.Accepts(stray, 1) && StarSets.Accepts(stray, 3) && StarSets.IsMarked(stray, StarFilter.All)
                 && !StarSets.IsMarked(stray, StarFilter.OneStar) && StarSets.Format(stray) == "All" && StarSets.Label(stray) == "All"
                 && StarSets.Format(stray | StarSet.OneStar) == "OneStar" && !StarSets.Accepts(stray | StarSet.OneStar, 1)
@@ -224,6 +227,178 @@ namespace MobTracker
             return got == want && problem == null ? "" : "'" + text + "' -> " + StarSets.Format(got) + (problem != null ? " (" + problem + ")" : "") + "; ";
         }
 
+        // None: the Alerts: row's empty selection under AlertsChange.EmptyAlertsNothing, which is built but not the mode
+        // MobTracker runs with. Under the shipped mode nothing produces it, and the cfg cannot name it.
+        private static void NoneTests()
+        {
+            bool nothing = true;
+            for (int level = -1; level <= 10; level++)
+                nothing &= !StarSets.Accepts(StarSet.None, level);
+            Check("none: None lets no level through", nothing, "");
+            bool unmarked = true;
+            foreach (StarFilter button in StarFilters.Buttons())
+                unmarked &= !StarSets.IsMarked(StarSet.None, button);
+            Check("none: None marks no button, not even All", unmarked, "");
+            StarSet noneAndOne = StarSet.None | StarSet.OneStar;
+            Check("none: beside a marked category None counts for nothing - the category decides",
+                StarSets.Accepts(noneAndOne, 2) && !StarSets.Accepts(noneAndOne, 1) && StarSets.IsMarked(noneAndOne, StarFilter.OneStar)
+                && !StarSets.IsMarked(noneAndOne, StarFilter.All) && StarSets.Format(noneAndOne) == "OneStar", StarSets.Format(noneAndOne));
+
+            // The Alerts: row's clicks under EmptyAlertsNothing: 2 stars -> off -> None -> 1 star -> 1 star alone.
+            StarSet off = StarSets.Toggle(StarSet.TwoStars, StarFilter.TwoStars, true);
+            StarSet on = StarSets.Toggle(off, StarFilter.OneStar, true);
+            Check("none: with emptyIsNothing, taking off the last category gives None; a category clicked then is marked alone",
+                off == StarSet.None && on == StarSet.OneStar, StarSets.Format(off) + " / " + StarSets.Format(on));
+            Check("none: a click on All resets None, and resets any set with emptyIsNothing too",
+                StarSets.Toggle(StarSet.None, StarFilter.All, true) == StarSet.All && StarSets.Toggle(StarSet.None, StarFilter.All) == StarSet.All
+                && StarSets.Toggle(StarSet.OneStar | StarSet.TwoStars, StarFilter.All, true) == StarSet.All, "");
+            bool fromNone = true;
+            for (int c = 0; c < 4; c++)
+                fromNone &= StarSets.Toggle(StarSet.None, Categories[c], true) == Singles[c] && StarSets.Toggle(StarSet.None, Categories[c]) == Singles[c];
+            Check("none: from None, each category gives that category alone", fromNone, "");
+            bool onlyTheLast = true;
+            foreach (StarSet set in EverySet())
+            {
+                foreach (StarFilter button in StarFilters.Buttons())
+                {
+                    StarSet plain = StarSets.Toggle(set, button), withNone = StarSets.Toggle(set, button, true);
+                    onlyTheLast &= plain == StarSet.All && button != StarFilter.All ? withNone == StarSet.None : withNone == plain;
+                }
+            }
+            Check("none: emptyIsNothing changes only the click that takes off the last category (None, not All)", onlyTheLast, "");
+            Check("none: without emptyIsNothing - the List: row, and the Alerts: row as shipped - the last one off still gives All",
+                StarSets.Toggle(StarSet.TwoStars, StarFilter.TwoStars) == StarSet.All && StarSets.Toggle(StarSet.TwoStars, StarFilter.TwoStars, false) == StarSet.All, "");
+
+            // Its text.
+            string problem;
+            Check("none: Format and Label write None", StarSets.Format(StarSet.None) == "None" && StarSets.Label(StarSet.None) == "None", StarSets.Format(StarSet.None));
+            bool reads = StarSets.Parse("None", out problem, true) == StarSet.None && problem == null
+                         && StarSets.Parse(" nONE ", out problem, true) == StarSet.None && problem == null
+                         && StarSets.Parse(StarSets.Format(StarSet.None), out problem, true) == StarSet.None && problem == null;
+            Check("none: allowed, 'None' in any case reads as None, cleanly, and Format(None) reads back", reads, problem ?? "");
+            bool beside = StarSets.Parse("None, OneStar", out problem, true) == StarSet.OneStar && problem == null
+                          && StarSets.Parse("All; none", out problem, true) == StarSet.All && problem == null;
+            Check("none: allowed, None beside a category gives the category, beside All gives All", beside, problem ?? "");
+            StarSet refused = StarSets.Parse("None", out problem);
+            Check("none: not allowed (the shipped mode), 'None' alone is an unknown token: All, with a problem naming it",
+                refused == StarSet.All && problem != null && problem.Contains("'None'"), problem ?? "no problem");
+            refused = StarSets.Parse("None", out problem, false);
+            Check("none: ... the same with allowNone false", refused == StarSet.All && problem != null && problem.Contains("'None'"), problem ?? "no problem");
+            Check("none: not allowed, None beside a category is ignored, and named",
+                StarSets.Parse("OneStar, None", out problem) == StarSet.OneStar && problem != null && problem.Contains("'None'"), problem ?? "no problem");
+            string shipped, built;
+            StarSets.Parse("Foo", out shipped);
+            StarSets.Parse("Foo", out built, true);
+            Check("none: the problem text offers None only where it may be written",
+                shipped != null && !shipped.Contains("None") && built != null && built.Contains("Write All, None, or one or more"), shipped + " | " + built);
+            bool unchanged = true;
+            foreach (string text in new[] { "All", "OneStar, TwoStars", "2 stars; 2+ stars", "3", "Foo", "", "OneStar, Foo" })
+            {
+                string p1, p2;
+                unchanged &= StarSets.Parse(text, out p1, true) == StarSets.Parse(text, out p2) && (p1 == null) == (p2 == null);
+            }
+            Check("none: allowing None changes nothing for text without it", unchanged, "");
+        }
+
+        // The Alerts: row's settling: the set the alerts use follows the filter once its cfg text has held still for
+        // 1.5 s. The second value of Settled is the text's revision, which changes at every write of it.
+        private static void SettleTests()
+        {
+            Check("settle: the wait is 1.5 seconds", StarSetSettler.SettleSeconds == 1.5f, StarSetSettler.SettleSeconds.ToString());
+            var s = new StarSetSettler();
+            Check("settle: the first set is taken at once - nothing waits at the start", s.Settled(StarSet.TwoStars, 0, 0f) == StarSet.TwoStars, "");
+            Check("settle: ... whenever the first one comes", new StarSetSettler().Settled(StarSet.OneStar, 7, 5000f) == StarSet.OneStar, "");
+            Check("settle: a change is not taken before it has held for 1.5 s",
+                s.Settled(StarSet.OneStar, 1, 10f) == StarSet.TwoStars && s.Settled(StarSet.OneStar, 1, 11.49f) == StarSet.TwoStars, "");
+            Check("settle: ... and is taken once it has (at exactly 1.5 s)", s.Settled(StarSet.OneStar, 1, 11.5f) == StarSet.OneStar, "");
+            Check("settle: ... and then kept", s.Settled(StarSet.OneStar, 1, 100f) == StarSet.OneStar && s.Settled(StarSet.OneStar, 1, 100.1f) == StarSet.OneStar, "");
+
+            // '2 stars' off at 10.0 (the row shows All), '1 star' on at 10.8: timed from the last click.
+            var r = new StarSetSettler();
+            r.Settled(StarSet.TwoStars, 0, 0f);
+            bool allHeld = r.Settled(StarSet.All, 1, 10f) == StarSet.TwoStars && r.Settled(StarSet.All, 1, 10.7f) == StarSet.TwoStars;
+            bool oneHeld = r.Settled(StarSet.OneStar, 2, 10.8f) == StarSet.TwoStars && r.Settled(StarSet.OneStar, 2, 11.6f) == StarSet.TwoStars
+                           && r.Settled(StarSet.OneStar, 2, 12.29f) == StarSet.TwoStars;
+            bool oneTaken = r.Settled(StarSet.OneStar, 2, 12.3f) == StarSet.OneStar;
+            Check("settle: '2 stars' off at 10.0, '1 star' on at 10.8 - All is never taken, '1 star' from 12.3 (1.5 s after the last click)",
+                allHeld && oneHeld && oneTaken, allHeld + "/" + oneHeld + "/" + oneTaken);
+
+            // A pause of 1.5 s or more between two clicks: what the row shows in between is taken (README, Known limits).
+            var p = new StarSetSettler();
+            p.Settled(StarSet.TwoStars, 0, 0f);
+            p.Settled(StarSet.All, 1, 10f);
+            bool allTaken = p.Settled(StarSet.All, 1, 11.5f) == StarSet.All;
+            p.Settled(StarSet.OneStar, 2, 12f);
+            bool oneLater = p.Settled(StarSet.OneStar, 2, 13.49f) == StarSet.All && p.Settled(StarSet.OneStar, 2, 13.5f) == StarSet.OneStar;
+            Check("settle: a pause of 1.5 s between two clicks takes the set in between (Known limits)", allTaken && oneLater, allTaken + "/" + oneLater);
+
+            // Back to the set in use before 1.5 s: the change is off; made again, it is timed afresh.
+            var c = new StarSetSettler();
+            c.Settled(StarSet.TwoStars, 0, 0f);
+            c.Settled(StarSet.All, 1, 10f);
+            bool cancelled = c.Settled(StarSet.TwoStars, 2, 11f) == StarSet.TwoStars && c.Settled(StarSet.TwoStars, 2, 12f) == StarSet.TwoStars;
+            c.Settled(StarSet.All, 3, 12.5f);
+            bool afresh = c.Settled(StarSet.All, 3, 13.9f) == StarSet.TwoStars && c.Settled(StarSet.All, 3, 14f) == StarSet.All;
+            Check("settle: a return to the set in use calls the change off; made again, it waits 1.5 s from then", cancelled && afresh, cancelled + "/" + afresh);
+
+            // A change to a third set restarts the wait.
+            var t = new StarSetSettler();
+            t.Settled(StarSet.All, 0, 0f);
+            t.Settled(StarSet.OneStar, 1, 10f);
+            bool restarted = t.Settled(StarSet.TwoStars, 2, 11f) == StarSet.All && t.Settled(StarSet.TwoStars, 2, 12.4f) == StarSet.All
+                             && t.Settled(StarSet.TwoStars, 2, 12.5f) == StarSet.TwoStars;
+            Check("settle: every change restarts the wait", restarted, "");
+
+            // A write that leaves the set as it was restarts the wait too: ConfigurationManager writes the setting at every
+            // keystroke, and a word typed so far ('T', 'Tw' ... of 'TwoStars') reads as All. The same write seen again on
+            // the next frames does not restart it.
+            var w = new StarSetSettler();
+            w.Settled(StarSet.OneStar, 0, 0f);
+            w.Settled(StarSet.All, 1, 10f);
+            bool keptThrough = w.Settled(StarSet.All, 2, 11f) == StarSet.OneStar && w.Settled(StarSet.All, 2, 12.49f) == StarSet.OneStar;
+            bool takenAfter = w.Settled(StarSet.All, 2, 12.5f) == StarSet.All;
+            Check("settle: a write that leaves the set as it was restarts the wait too (a keystroke); the same write seen again does not",
+                keptThrough && takenAfter, keptThrough + "/" + takenAfter);
+
+            // The set is compared as well as the revision: fed one revision throughout, a change of the set alone still
+            // restarts the wait, and a return to the set in use still calls a change off (so that change, made again,
+            // waits from then, not from the first time).
+            var o = new StarSetSettler();
+            o.Settled(StarSet.TwoStars, 0, 0f);
+            bool firstWaits = o.Settled(StarSet.All, 0, 10f) == StarSet.TwoStars;
+            bool calledOff = o.Settled(StarSet.TwoStars, 0, 11f) == StarSet.TwoStars;
+            bool againWaits = o.Settled(StarSet.All, 0, 12.5f) == StarSet.TwoStars && o.Settled(StarSet.All, 0, 13.9f) == StarSet.TwoStars;
+            bool setRestarts = o.Settled(StarSet.OneStar, 0, 13.95f) == StarSet.TwoStars && o.Settled(StarSet.OneStar, 0, 15.4f) == StarSet.TwoStars
+                               && o.Settled(StarSet.OneStar, 0, 15.5f) == StarSet.OneStar;
+            Check("settle: fed one revision throughout, a change of the set alone restarts the wait, and a return to the set in use calls it off",
+                firstWaits && calledOff && againWaits && setRestarts, firstWaits + "/" + calledOff + "/" + againWaits + "/" + setRestarts);
+        }
+
+        // The mode and what it switches (AlertsRow): the shipped Settle, and EmptyAlertsNothing, built but not shipped.
+        private static void AlertsRowTests()
+        {
+            Check("mode: MobTracker runs with Settle", AlertsRow.AlertsChangeMode == AlertsChange.Settle, AlertsRow.AlertsChangeMode.ToString());
+            Check("mode: only EmptyAlertsNothing empties the Alerts: row to None",
+                AlertsRow.EmptyIsNothing(AlertsChange.EmptyAlertsNothing) && !AlertsRow.EmptyIsNothing(AlertsChange.Settle), "");
+            var settler = new StarSetSettler();
+            bool first = AlertsRow.Effective(StarSet.TwoStars, 0, settler, 0f, AlertsChange.Settle) == StarSet.TwoStars;
+            bool waits = AlertsRow.Effective(StarSet.All, 1, settler, 10f, AlertsChange.Settle) == StarSet.TwoStars;
+            bool follows = AlertsRow.Effective(StarSet.All, 1, settler, 11.5f, AlertsChange.Settle) == StarSet.All;
+            Check("mode: under Settle the alerts use the settled set", first && waits && follows, first + "/" + waits + "/" + follows);
+            var typed = new StarSetSettler();
+            AlertsRow.Effective(StarSet.OneStar, 0, typed, 0f, AlertsChange.Settle);
+            AlertsRow.Effective(StarSet.All, 1, typed, 10f, AlertsChange.Settle);
+            bool revisionPassed = AlertsRow.Effective(StarSet.All, 2, typed, 11f, AlertsChange.Settle) == StarSet.OneStar
+                                  && AlertsRow.Effective(StarSet.All, 2, typed, 12.49f, AlertsChange.Settle) == StarSet.OneStar
+                                  && AlertsRow.Effective(StarSet.All, 2, typed, 12.5f, AlertsChange.Settle) == StarSet.All;
+            Check("mode: under Settle the text's revision reaches the settler - a keystroke restarts the wait", revisionPassed, "");
+            var bypassed = new StarSetSettler();
+            bool at0 = AlertsRow.Effective(StarSet.TwoStars, 0, bypassed, 0f, AlertsChange.EmptyAlertsNothing) == StarSet.TwoStars;
+            bool atOnce = AlertsRow.Effective(StarSet.None, 1, bypassed, 10f, AlertsChange.EmptyAlertsNothing) == StarSet.None
+                          && AlertsRow.Effective(StarSet.OneStar, 2, bypassed, 10.1f, AlertsChange.EmptyAlertsNothing) == StarSet.OneStar;
+            Check("mode: under EmptyAlertsNothing the alerts use the row's set at once", at0 && atOnce, at0 + "/" + atOnce);
+        }
+
         // What the search box and the watchlist already did before the star filter.
         private static void RulesTests()
         {
@@ -261,7 +436,7 @@ namespace MobTracker
         // Which rules Find area searches with: SpawnSystem.UpdateSpawnList's key and event conditions.
         private static void OpenRuleTests()
         {
-            // The review's case, Charred_Archer: a key-gated rule for the other biomes and a plain Ashlands one.
+            // Charred_Archer: a key-gated rule for the other biomes and a plain Ashlands one.
             var archer = new List<SpawnRule> { new SpawnRule("Meadows|BlackForest|...", "defeated_fader", ""), new SpawnRule("AshLands", "", "") };
             var keys = new List<string>(); var events = new List<string>();
             List<SpawnRule> open = Open(archer, k => false, keys, events);
@@ -337,7 +512,7 @@ namespace MobTracker
             Check("alert stars: with 'No star + 1 star', a plain and a one-star Troll alert, a two-star one does not",
                 Decide(both, 14, 1, noOrOne, true) && Decide(both, 15, 2, noOrOne, true) && !Decide(both, 16, 3, noOrOne, true), "");
 
-            // Why toggles, and not the cycling button the 0.2.0 review rejected: every state a click passes through is
+            // Why toggles, and not a button that cycles through the choices: every state a click passes through is
             // live for the once-a-second poll, which alerts each creature once. Watching Troll with '2 stars' marked,
             // the player wants '1 star'. Clicking '1 star' first passes only through '1 star + 2 stars' - nothing
             // outside what was and what will be - so the plain Troll never alerts and the one-star Troll alerts once.
@@ -353,13 +528,114 @@ namespace MobTracker
                 goal == StarSet.OneStar && !plainBefore && !plainBetween && !plainAfter && oneStarAfter,
                 plainBefore + "/" + plainBetween + "/" + plainAfter + "/" + oneStarAfter);
 
-            // The other order is the README's known limit: clicking the only marked category off first gives All, so
-            // until the next click every watched creature can alert - the plain Troll's one alert is used up.
+            // The other order: clicking the only marked category off first gives All on the row, where the plain Troll
+            // would alert and use up its one alert. So the alerts do not use the row's set as it is (AlertsRow).
             StarSet removed = StarSets.Toggle(start, StarFilter.TwoStars);
             var other = new AlertGate<int>();
             bool plainInAll = Decide(other, 31, 1, removed, true);
-            Check("alert stars: '2 stars' clicked off first passes through All, where the plain Troll alerts (Known limits)",
+            Check("alert stars: '2 stars' clicked off first leaves the row at All, where the plain Troll would alert",
                 removed == StarSet.All && plainInAll && StarSets.Toggle(removed, StarFilter.OneStar) == StarSet.OneStar, "");
+
+            // Frame by frame, as WatchAlerts does it: the settled set worked out every frame, the poll once a second.
+            // Shipped (Settle): '2 stars' off at 10.2 and '1 star' on at 10.9 - All never reaches the poll, so the plain
+            // Troll never alerts, and the one-star Troll alerts at the first poll after 12.4.
+            float[] a = Simulate(AlertsChange.Settle, new[] { 0f, 10.2f, 10.9f }, new[] { StarSet.TwoStars, StarSet.All, StarSet.OneStar });
+            Check("alert stars: shipped, two quick clicks through All - the plain Troll never alerts, the one-star one once '1 star' has held",
+                a[0] < 0f && a[1] >= 12.4f && a[1] < 13.5f, a[0] + " / " + a[1]);
+            // A pause of 1.5 s or more between the clicks: All is taken, and the plain Troll alerts (README, Known limits).
+            a = Simulate(AlertsChange.Settle, new[] { 0f, 10.2f, 12.2f }, new[] { StarSet.TwoStars, StarSet.All, StarSet.OneStar });
+            Check("alert stars: shipped, a 2 s pause at All between the clicks - All is taken and the plain Troll alerts (Known limits)",
+                a[0] >= 11.7f && a[0] < 12.8f, a[0] + " / " + a[1]);
+            // A change that ends where it began (a category clicked off and on again) changes nothing.
+            a = Simulate(AlertsChange.Settle, new[] { 0f, 10.2f, 11.0f }, new[] { StarSet.TwoStars, StarSet.All, StarSet.TwoStars });
+            Check("alert stars: shipped, '2 stars' clicked off and on again within 1.5 s - nothing but two stars ever alerts",
+                a[0] < 0f && a[1] < 0f, a[0] + " / " + a[1]);
+            // EmptyAlertsNothing (built, not shipped): the row goes through None, which alerts on nothing, even slowly.
+            StarSet emptied = StarSets.Toggle(start, StarFilter.TwoStars, true);
+            a = Simulate(AlertsChange.EmptyAlertsNothing, new[] { 0f, 10.2f, 12.2f }, new[] { StarSet.TwoStars, emptied, StarSets.Toggle(emptied, StarFilter.OneStar, true) });
+            Check("alert stars: EmptyAlertsNothing, a 2 s pause at None between the clicks - the plain Troll never alerts, the one-star one at once",
+                emptied == StarSet.None && a[0] < 0f && a[1] >= 12.2f && a[1] < 13.3f, a[0] + " / " + a[1]);
+
+            // Typed in ConfigurationManager: 'TwoStars' over a selected 'OneStar' at 4 keys a second. 'T' ... 'TwoStar'
+            // each read as All, for 1.75 s together - longer than the wait - yet each keystroke restarts it: the plain
+            // Troll never alerts, and two stars apply 1.5 s after the last key (11.75), at the first poll from 13.25.
+            float[] at;
+            StarSet[] sets;
+            Typing(StarSet.OneStar, "TwoStars", 10f, 0.25f, -1, 0f, out at, out sets);
+            bool halfTypedAll = sets[sets.Length - 1] == StarSet.TwoStars;
+            for (int k = 1; k < sets.Length - 1; k++)
+                halfTypedAll &= sets[k] == StarSet.All;
+            a = Simulate(AlertsChange.Settle, at, sets);
+            Check("alert stars: shipped, 'TwoStars' typed over 'OneStar' at 4 keys a second - the half-typed word (All) never alerts the plain Troll; two stars from 1.5 s after the last key",
+                halfTypedAll && a[0] < 0f && a[2] >= 13.25f && a[2] < 14.3f, halfTypedAll + " " + a[0] + " / " + a[2]);
+            // Slowly, a key every 1.4 s: still never, and two stars from 1.5 s after the last key (19.8).
+            Typing(StarSet.OneStar, "TwoStars", 10f, 1.4f, -1, 0f, out at, out sets);
+            a = Simulate(AlertsChange.Settle, at, sets);
+            Check("alert stars: shipped, 'TwoStars' typed at a key every 1.4 s - the plain Troll never alerts; two stars from 1.5 s after the last key",
+                a[0] < 0f && a[2] >= 21.3f && a[2] < 22.4f, a[0] + " / " + a[2]);
+            // A pause of 1.5 s or more while typing: what is typed so far applies - All, for 'Tw' (README, Known limits).
+            Typing(StarSet.OneStar, "TwoStars", 10f, 0.25f, 2, 2f, out at, out sets);
+            a = Simulate(AlertsChange.Settle, at, sets);
+            Check("alert stars: shipped, a 2 s pause after 'Tw' - All is taken and the plain Troll alerts (Known limits)",
+                a[0] >= 11.7f && a[0] < 12.8f, a[0] + " / " + a[2]);
+        }
+
+        // ConfigurationManager (F1) writes a text setting at every keystroke that changes it. The Alerts: filter is
+        // 'before' from 0 s; from 'start' 'word' is typed over it, one key every 'perKey' seconds, with 'pause' seconds
+        // more before key number 'pauseBefore' (0 = the first; -1 = no pause). Each keystroke is one write: the text so
+        // far, read as ModConfig reads it in the shipped mode.
+        private static void Typing(StarSet before, string word, float start, float perKey, int pauseBefore, float pause,
+            out float[] at, out StarSet[] sets)
+        {
+            at = new float[word.Length + 1];
+            sets = new StarSet[word.Length + 1];
+            sets[0] = before;
+            float time = start;
+            for (int k = 1; k <= word.Length; k++)
+            {
+                if (k - 1 == pauseBefore)
+                    time += pause;
+                string problem;
+                at[k] = time;
+                sets[k] = StarSets.Parse(word.Substring(0, k), out problem, AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode));
+                time += perKey;
+            }
+        }
+
+        // 60 frames a second from 0 to 40 s. The Alerts: filter's set is sets[k] from at[k] on (at[0] = 0), each one a
+        // write of its text, so its revision is k; each frame the alerts' set is worked out as WatchAlerts.Update does,
+        // and once a second the poll decides for a plain (level 1), a one-star (level 2) and a two-star (level 3) watched
+        // Troll. The time of each one's alert, or -1.
+        private static float[] Simulate(AlertsChange mode, float[] at, StarSet[] sets)
+        {
+            var settler = new StarSetSettler();
+            var gate = new AlertGate<int>();
+            float[] alertAt = { -1f, -1f, -1f };
+            float nextPoll = 0f;
+            for (int frame = 0; frame <= 40 * 60; frame++)
+            {
+                float now = frame / 60f;
+                StarSet row = sets[0];
+                int revision = 0;
+                for (int k = 0; k < at.Length; k++)
+                {
+                    if (now >= at[k])
+                    {
+                        row = sets[k];
+                        revision = k;
+                    }
+                }
+                StarSet effective = AlertsRow.Effective(row, revision, settler, now, mode);
+                if (now < nextPoll)
+                    continue;
+                nextPoll = now + 1f;
+                for (int level = 1; level <= 3; level++)
+                {
+                    if (alertAt[level - 1] < 0f && Decide(gate, level, level, effective, true))
+                        alertAt[level - 1] = now;
+                }
+            }
+            return alertAt;
         }
 
         // "Always track nearest watched": the waiting and cancelling that NearestWatched does around the game's objects.
@@ -411,7 +687,7 @@ namespace MobTracker
             Check("retrack: one outside AlertRadius is not", !Retrack.IsCandidate(true, true, false, true, false, true), "");
             Check("retrack: one on the other side of a dungeon entrance is not", !Retrack.IsCandidate(true, true, false, true, true, false), "");
 
-            // The review's case (P1): a Skeleton inside a Burial Chamber, some 5 km up, while the player is outside -
+            // A Skeleton inside a Burial Chamber, some 5 km up, while the player is outside -
             // and the mirror image from inside.
             Check("layer: outside and outside, inside and inside are the same side",
                 Rules.SameLayer(false, false) && Rules.SameLayer(true, true), "");
@@ -425,7 +701,7 @@ namespace MobTracker
                 && Retrack.IsCandidate(true, true, false, true, true, Rules.SameLayer(true, true)), "");
         }
 
-        // The creature list's rows: ShouldRefresh(playerChanged, due, pointerOverWindow, mouseHeld). The review's case (P3):
+        // The creature list's rows: ShouldRefresh(playerChanged, due, pointerOverWindow, mouseHeld). The case it is for:
         // the rows re-sorted by distance between aiming at a row's Track and releasing the button.
         private static void RefreshTests()
         {
@@ -475,7 +751,7 @@ namespace MobTracker
         }
 
         // ClosesOnBack(open, consoleVisible, consoleWasVisible, escape, back);
-        // MayToggle(open, keyTypesText, searchFocused, gameTyping, pauseMenu, buildMenu, inventory).
+        // MayToggle(open, keyTypesText, searchFocused, gameTyping, pauseMenu, buildMenu, inventory, barber).
         private static void ListKeyTests()
         {
             Check("keys: Escape closes the open list", ListKeys.ClosesOnBack(true, false, false, true, false), "");
@@ -485,18 +761,19 @@ namespace MobTracker
             Check("keys: not while the console is open (Escape is closing it)", !ListKeys.ClosesOnBack(true, true, false, true, true), "");
             Check("keys: not while the console was open last frame (it closed itself first)", !ListKeys.ClosesOnBack(true, false, true, true, true), "");
 
-            Check("keys: ListKey opens the list", ListKeys.MayToggle(false, false, false, false, false, false, false), "");
-            Check("keys: ListKey closes the list, even while the search box has the keyboard", ListKeys.MayToggle(true, false, true, false, false, false, false), "");
-            Check("keys: ListKey does not open the list while the player types in a game text field", !ListKeys.MayToggle(false, false, false, true, false, false, false), "");
-            Check("keys: ... whatever the key", !ListKeys.MayToggle(false, true, false, true, false, false, false), "");
-            Check("keys: ListKey does not open the list over the pause menu", !ListKeys.MayToggle(false, false, false, false, true, false, false), "");
-            Check("keys: ListKey does not open the list over the build menu (its right click would reach it)", !ListKeys.MayToggle(false, false, false, false, false, true, false), "");
-            Check("keys: ListKey does not open the list over the inventory", !ListKeys.MayToggle(false, false, false, false, false, false, true), "");
-            Check("keys: a ListKey that types does not close the list while its search box has the keyboard", !ListKeys.MayToggle(true, true, true, false, false, false, false), "");
-            Check("keys: ... nor while a game text field has it", !ListKeys.MayToggle(true, true, false, true, false, false, false), "");
-            Check("keys: a ListKey that types closes the list when no text field has the keyboard", ListKeys.MayToggle(true, true, false, false, false, false, false), "");
-            Check("keys: a ListKey that does not type closes the list while a game text field has the keyboard", ListKeys.MayToggle(true, false, false, true, false, false, false), "");
-            Check("keys: the pause menu, the build menu and the inventory do not stop ListKey closing the list", ListKeys.MayToggle(true, false, false, false, true, true, true), "");
+            Check("keys: ListKey opens the list", ListKeys.MayToggle(false, false, false, false, false, false, false, false), "");
+            Check("keys: ListKey closes the list, even while the search box has the keyboard", ListKeys.MayToggle(true, false, true, false, false, false, false, false), "");
+            Check("keys: ListKey does not open the list while the player types in a game text field", !ListKeys.MayToggle(false, false, false, true, false, false, false, false), "");
+            Check("keys: ... whatever the key", !ListKeys.MayToggle(false, true, false, true, false, false, false, false), "");
+            Check("keys: ListKey does not open the list over the pause menu", !ListKeys.MayToggle(false, false, false, false, true, false, false, false), "");
+            Check("keys: ListKey does not open the list over the build menu (its right click would reach it)", !ListKeys.MayToggle(false, false, false, false, false, true, false, false), "");
+            Check("keys: ListKey does not open the list over the inventory", !ListKeys.MayToggle(false, false, false, false, false, false, true, false), "");
+            Check("keys: ListKey does not open the list over the Barber Station (the Escape that closes the list would cancel it)", !ListKeys.MayToggle(false, false, false, false, false, false, false, true), "");
+            Check("keys: a ListKey that types does not close the list while its search box has the keyboard", !ListKeys.MayToggle(true, true, true, false, false, false, false, false), "");
+            Check("keys: ... nor while a game text field has it", !ListKeys.MayToggle(true, true, false, true, false, false, false, false), "");
+            Check("keys: a ListKey that types closes the list when no text field has the keyboard", ListKeys.MayToggle(true, true, false, false, false, false, false, false), "");
+            Check("keys: a ListKey that does not type closes the list while a game text field has the keyboard", ListKeys.MayToggle(true, false, false, true, false, false, false, false), "");
+            Check("keys: the pause menu, the build menu, the inventory and the Barber Station do not stop ListKey closing the list", ListKeys.MayToggle(true, false, false, false, true, true, true, true), "");
 
             // UnityEngine.KeyCode: Mouse0 = 323 ... Mouse6 = 329 (preflight checks the three against Unity).
             Check("keys: the left, right and middle mouse buttons are refused",
