@@ -317,6 +317,8 @@ namespace MobTracker
                 };
             }
 
+            // Put back afterwards: GUI.matrix is IMGUI's global state, and other plugins draw after this one.
+            Matrix4x4 matrix = GUI.matrix;
             GUI.matrix = Matrix4x4.Scale(Vector3.one * EntityListWindow.GuiScale);
             float width = Screen.width / EntityListWindow.GuiScale;
             string text = "Tracking: " + _targetName + " - " + Mathf.RoundToInt(_distance) + "m";
@@ -325,6 +327,7 @@ namespace MobTracker
             GUI.Label(new Rect(1f, 71f, width, 30f), text, _hudStyle);
             _hudStyle.normal.textColor = GuideColor;
             GUI.Label(new Rect(0f, 70f, width, 30f), text, _hudStyle);
+            GUI.matrix = matrix;
         }
 
         /// <summary>

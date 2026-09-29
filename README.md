@@ -7,8 +7,19 @@ https://github.com/DoomMachine/Valheim-MobTracker
 - **F7** opens the list of every creature loaded around you - creatures further away do not exist on your
   client. How far that reaches follows the game's "Draw distance" graphics setting: roughly 130 to 290 m at
   the default and one step up. Creatures inside a dungeon above or below you are loaded too, and show about
-  5 km away, because distances are measured in 3D. Type to search by name or prefab name. **Esc** or F7
-  closes it.
+  5 km away, because distances are measured in 3D. They alert like any other watched creature, but Auto-track
+  and Always track nearest watched only ever take a creature on your side of the dungeon's entrance; a row's
+  Track button still takes any. Type to search by name or prefab name. **Esc** or F7 closes it (the
+  gamepad's B too).
+- **While the list is open** your character and camera stand still: Tab does not open the inventory, the
+  mouse wheel does not zoom, and the keys you type in the search do not reach a trader or the build
+  controls (a few exceptions are under Known limits). A click, drag or scroll on the window never reaches
+  the map, a trader or another game window under it; the map still takes clicks and drags beside the
+  window. The rows hold still while the pointer is on the window, so Track and Watch act on the row you
+  aimed at; they catch up as soon as it leaves. F7 does not open the list while you type in chat, a sign or a
+  map pin's name, while the console is open, or over the pause menu, the build menu or the inventory.
+- **With TomTom or Wayfinder** installed, their window key (F11 by default) and skip key (if you bound one) keep
+  working while the list is open, and F7 opens the list over TomTom's window.
 - **Star filters**: two rows in the window, each a choice of *All*, *No star*, *1 star*, *2 stars* and
   *2+ stars* (two stars and above - natural spawns stop at two; the spawn command and mods can go higher).
   **List:** filters the nearby list; **Alerts:** filters which watched creatures alert, are auto-tracked and are
@@ -47,14 +58,16 @@ https://github.com/DoomMachine/Valheim-MobTracker
   lava, player bases, water depth) is not checked, so an area is "can spawn here", not "will".
 - **Guide: 3D arrow / ground path** switches the tracking guide from the window (the choice is saved
   as `Tracking.GuideMode`).
-- **Watch** alerts on that creature *type*: a centre-screen message and a ding whenever one
+- **Watch** alerts on that creature *type*: a centre-screen message and a ding (`AlertVolume`, under the
+  game's Volume and Effect volume settings) whenever one
   starts existing near you (spawned or walked into range - the same thing to a client). Tamed
   creatures never alert. Watched types are listed at the bottom of the window; click one to remove it.
 - **Always track nearest watched** (a checkbox in the window, off by default) is for hunting one kind of
   creature for its drops. When the creature you are tracking is of a watched type and is lost - killed, or no
   longer loaded on your client (out of range, despawned) - the tracker says "Lost track of" as always, waits 5
   seconds, then points at the nearest creature of that type that passes the watch alert's filters: the
-  **Alerts:** stars, `AlertRadius`, never a tamed one. If there is none yet, it keeps looking once a second,
+  **Alerts:** stars, `AlertRadius`, never a tamed one, and only on your side of a dungeon entrance. If there
+  is none yet, it keeps looking once a second,
   without a message, and points at the nearest one as soon as one turns up. A watch alert that names that type
   during the wait still shows and dings, but leaves the choice to the wait; with an `AlertRadius` set, a creature
   that alerted and has walked out of the radius by then is taken only once it is back inside. The wait ends when
@@ -76,21 +89,52 @@ a new version adds its own with their defaults. When the game starts, `BepInEx/L
 
 | Setting | Default | |
 |---|---|---|
-| `General.ListKey` | `F7` | Toggle the list |
+| `General.ListKey` | `F7` | Toggle the list (Escape or the gamepad's B also close it). A key the game cannot read (WheelUp, F13, Plus...), or the left, right or middle mouse button, does nothing and says so once in the log; keys the game ignores outright - Mouse5, Mouse6, F16 to F24 and the numbered-joystick buttons - never fire, with no warning |
 | `General.ListStarFilter` | `All` | The list's star filter: `All`, `NoStars`, `OneStar`, `TwoStars` or `TwoOrMoreStars` (any case), or a number of stars: 0-3, 3 = two or more, 4 = All (also the **List:** row) |
 | `Tracking.GuideMode` | `Arrow` | `Arrow` or `GroundPath` |
 | `Tracking.ArrowSize` / `ArrowHeight` | `0.6` / `2.6` | Metres |
 | `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows, Guide, the two tracking checkboxes) rewrites the file |
 | `Alerts.AlertRadius` | `0` | Only alert (or re-track, below) within this many metres; 0 = anywhere loaded |
-| `Alerts.AlertVolume` | `0.8` | Ding volume |
-| `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor the choice Always track nearest watched is waiting to make for that type |
+| `Alerts.AlertVolume` | `0.8` | Ding volume; the game's Volume and Effect volume settings apply on top of it |
+| `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor the choice Always track nearest watched is waiting to make for that type, nor takes a creature on the other side of a dungeon entrance |
 | `Alerts.AlertStarFilter` | `All` | The alerts' star filter, same choices (also the **Alerts:** row) |
-| `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature of a watched type, not a tamed one, is lost, track the nearest one of that type that passes the watch alert's filters: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window) |
+| `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature of a watched type, not a tamed one, is lost, track the nearest one of that type that passes the watch alert's filters and is on your side of a dungeon entrance: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window) |
+
+## Known limits
+
+- The list, alerts and tracking see only what your client has loaded (see **F7**); a creature near the edge of
+  that range can be out of sight.
+- In multiplayer, for a creature another player's game runs: it stays listed through its death animation, and
+  "Lost track of" comes only when it is removed; and its tamed state reaches your game up to about a second late,
+  so with an `AlertRadius` set one tamed just before it comes within the radius can alert, and losing one just
+  tamed can start Always track nearest watched.
+- Over the Barber Station, Escape closes the list and the barber together, and the barber puts back the hair and
+  beard you had.
+- A watched creature inside a dungeon still alerts while you are outside it, and the other way round, but is not
+  auto-tracked; with `AlertRadius` at 0 it has then had its alert, so going in does not alert it again.
+- While the pointer rests on the window its rows do not update: a creature killed meanwhile keeps its row, and
+  its Track button does nothing, until the pointer leaves the window.
+- Over a runestone's or a readable item's text, Escape closes the list and the text together, and typing `e` in
+  the search closes the text.
+- With TomTom's, Wayfinder's or MeasurementTracker's window open as well, one Escape closes both windows. F5
+  opens the console over the list; the first Escape then closes the console, the next one the list.
+- A TomTom or Wayfinder key bound to a letter, a digit or another key that types also acts while you type that
+  character in the list's search (their default keys - F11, and no skip key - are not such keys).
+- A drag begun on the map beside the window and let go over it at once counts as a click on the map where you
+  let go.
+- With a gamepad, the left stick still pans an open map under the list, and the alternative layouts' alternate
+  placement toggle still reaches the game.
+- With `GuideMode = GroundPath`, the game's navigation tiles along the line are kept from being rebuilt while you
+  track, so a change made meanwhile - a wall built, ground levelled, a tree cut - may not show in the line, nor in
+  how creatures on those tiles find their way. The arrow (the default) leaves them alone.
+- The window and the tracking label grow with your screen height above 1080p; they do not follow the game's GUI
+  scale setting. The window's size and place are not kept from one start of the game to the next.
 
 ## Building
 
 `dotnet build MobTracker.csproj -c Release` (needs the game with BepInEx; see the comment at the top of
-`MobTracker.csproj`). `tools/preflight.ps1` checks a build against the installed game - run it after every
+`MobTracker.csproj`; run it from Windows PowerShell or cmd - from a PowerShell 7 session the build's publicize
+step fails). `tools/preflight.ps1` checks a build against the installed game - run it after every
 Valheim update - and `tools/deploy.ps1` installs one, moving the DLL it replaces into `retired/` in this folder
 (`-KeepDir` to choose another). The tools find the game the way the build does: `-ValheimDir`, else the
 `VALHEIM` environment variable; they take named arguments only, and reject a misspelt one. When a tool is
@@ -117,8 +161,19 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **0.3.1** - fixes. While the list is open: the mouse wheel no longer zooms the camera, Tab no longer opens
+  the inventory, and a click on the window no longer reaches the map or a game window under it (on the map a
+  right click deleted a pin, a middle click pinged everyone, a double click left a pin the Cartography Table
+  shares); Escape now closes the list, as this README already said, and so does the gamepad's B; F7 no longer
+  opens the list while you type or over the pause menu, the build menu or the inventory; TomTom's and Wayfinder's
+  keys work. A ListKey the game cannot read no longer throws on every frame. Auto-track and Always track nearest
+  watched no longer point the arrow at a creature on the other side of a dungeon entrance; the rows hold still
+  under the pointer; the window keeps a corner on screen; the ding follows the game's Volume and Effect volume;
+  a creature another mod broke can no longer stop the alerts; setting descriptions corrected or brought up to date. Not yet
+  played in the game.
 - **0.3.0** - Always track nearest watched (an option, off by default): when a tracked creature of a watched
-  type is lost, the tracker moves on to the nearest one of that type. Not yet played in the game.
+  type is lost, the tracker moves on to the nearest one of that type. Ran through play sessions without errors;
+  the new option has not yet been seen acting in the game.
 - **0.2.0** - star filters for the list and for watch alerts. Find area follows boss progression and
   events, names the rule that placed the nearest pin, and its pins can be cleared; a right click on one
   used to delete the nearest pin of yours instead. Ran through a play session without errors; its new features

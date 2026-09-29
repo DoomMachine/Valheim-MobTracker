@@ -18,6 +18,9 @@ namespace MobTracker
             AlertGateTests();
             AlertStarFilterTests();
             RetrackTests();
+            RefreshTests();
+            PointerTests();
+            ListKeyTests();
             Console.WriteLine(_failures == 0
                 ? "ALL TESTS PASSED (" + _passes + ")"
                 : _failures + " TEST(S) FAILED, " + _passes + " passed");
@@ -255,14 +258,109 @@ namespace MobTracker
             Check("retrack: turning the option off ends the wait", Retrack.EndsWait(false, false, false, true), "");
             Check("retrack: unwatching the type ends the wait", Retrack.EndsWait(false, false, true, false), "");
 
-            // IsCandidate(sameType, networked, tamed, starsAccepted, withinRadius).
-            Check("retrack: a wild creature of the type, on the network, accepted stars, in range is taken",
-                Retrack.IsCandidate(true, true, false, true, true), "");
-            Check("retrack: another type is not", !Retrack.IsCandidate(false, true, false, true, true), "");
-            Check("retrack: one the game is removing this frame is not", !Retrack.IsCandidate(true, false, false, true, true), "");
-            Check("retrack: a tamed one is not", !Retrack.IsCandidate(true, true, true, true, true), "");
-            Check("retrack: one the Alerts star filter leaves out is not", !Retrack.IsCandidate(true, true, false, false, true), "");
-            Check("retrack: one outside AlertRadius is not", !Retrack.IsCandidate(true, true, false, true, false), "");
+            // IsCandidate(sameType, networked, tamed, starsAccepted, withinRadius, sameLayer).
+            Check("retrack: a wild creature of the type, on the network, accepted stars, in range, on the player's side is taken",
+                Retrack.IsCandidate(true, true, false, true, true, true), "");
+            Check("retrack: another type is not", !Retrack.IsCandidate(false, true, false, true, true, true), "");
+            Check("retrack: one the game is removing this frame is not", !Retrack.IsCandidate(true, false, false, true, true, true), "");
+            Check("retrack: a tamed one is not", !Retrack.IsCandidate(true, true, true, true, true, true), "");
+            Check("retrack: one the Alerts star filter leaves out is not", !Retrack.IsCandidate(true, true, false, false, true, true), "");
+            Check("retrack: one outside AlertRadius is not", !Retrack.IsCandidate(true, true, false, true, false, true), "");
+            Check("retrack: one on the other side of a dungeon entrance is not", !Retrack.IsCandidate(true, true, false, true, true, false), "");
+
+            // The review's case (P1): a Skeleton inside a Burial Chamber, some 5 km up, while the player is outside -
+            // and the mirror image from inside.
+            Check("layer: outside and outside, inside and inside are the same side",
+                Rules.SameLayer(false, false) && Rules.SameLayer(true, true), "");
+            Check("layer: a creature inside a dungeon while the player is outside is not, nor the other way round",
+                !Rules.SameLayer(true, false) && !Rules.SameLayer(false, true), "");
+            Check("retrack: with the player outside, the one inside the dungeon is never taken, the one outside is",
+                !Retrack.IsCandidate(true, true, false, true, true, Rules.SameLayer(true, false))
+                && Retrack.IsCandidate(true, true, false, true, true, Rules.SameLayer(false, false)), "");
+            Check("retrack: with the player inside, the one outside is never taken, the one inside is",
+                !Retrack.IsCandidate(true, true, false, true, true, Rules.SameLayer(false, true))
+                && Retrack.IsCandidate(true, true, false, true, true, Rules.SameLayer(true, true)), "");
+        }
+
+        // The creature list's rows: ShouldRefresh(playerChanged, due, pointerOverWindow, mouseHeld). The review's case (P3):
+        // the rows re-sorted by distance between aiming at a row's Track and releasing the button.
+        private static void RefreshTests()
+        {
+            Check("list: a due refresh runs while the pointer is off the window and no button is held",
+                Rules.ShouldRefresh(false, true, false, false), "");
+            Check("list: a due refresh waits while the pointer is over the window", !Rules.ShouldRefresh(false, true, true, false), "");
+            Check("list: a due refresh waits while a mouse button is held, even off the window (a drag)",
+                !Rules.ShouldRefresh(false, true, false, true), "");
+            Check("list: nothing is refreshed before it is due", !Rules.ShouldRefresh(false, false, false, false), "");
+            Check("list: the player's own change (search, view, list stars, opening) refreshes at once, pointer or button",
+                Rules.ShouldRefresh(true, false, true, true) && Rules.ShouldRefresh(true, false, false, false), "");
+
+            // Frame by frame: due at 0.5 s, the pointer over the window from 0.3 s to 2.0 s, then off it.
+            var refreshedAt = new List<float>();
+            float next = 0.5f;
+            for (int frame = 1; frame <= 150; frame++)
+            {
+                float now = frame / 60f;
+                bool over = now >= 0.3f && now < 2.0f;
+                if (Rules.ShouldRefresh(false, now >= next, over, false))
+                {
+                    refreshedAt.Add(now);
+                    next = now + 0.5f;
+                }
+            }
+            Check("list: rows held still while the pointer rests on them, refreshed in the first frame after it leaves",
+                refreshedAt.Count >= 2 && Math.Abs(refreshedAt[0] - 2.0f) < 0.02f && Math.Abs(refreshedAt[1] - 2.5f) < 0.02f,
+                string.Join(", ", refreshedAt.ConvertAll(t => t.ToString("0.000"))));
+        }
+
+        // The list's pointer test: a screen point (pixels, y up) against the window's rect in GUI units (y down), drawn
+        // under GUI.matrix = Scale(GuiScale). The default window (60, 60, 480, 560) covers, at 1080p, x 60..540 and
+        // 60..620 px from the top = 460..1020 px from the bottom; at 2160p (scale 2), x 120..1080.
+        private static void PointerTests()
+        {
+            Func<float, int, float, float, bool> over = (scale, height, px, py) => Rules.PointerOverWindow(60f, 60f, 480f, 560f, scale, height, px, py);
+            Check("pointer: on the window at 1080p", over(1f, 1080, 300f, 700f), "");
+            Check("pointer: the top-left corner is on it, the right and bottom edges are not (Rect.Contains)",
+                over(1f, 1080, 60f, 1020f) && !over(1f, 1080, 540f, 700f) && !over(1f, 1080, 300f, 460f), "");
+            Check("pointer: left of it and above it is off", !over(1f, 1080, 59f, 700f) && !over(1f, 1080, 300f, 1021f), "");
+            Check("pointer: y counts up from the bottom - 400 px up is 680 px down, below the window", !over(1f, 1080, 300f, 400f), "");
+            Check("pointer: at 2160p the window is twice as large and starts at 120 px",
+                over(2f, 2160, 1000f, 1160f) && over(2f, 2160, 1079f, 1160f) && !over(2f, 2160, 1081f, 1160f) && !over(2f, 2160, 100f, 1160f), "");
+            Check("pointer: at 1440p (scale 4/3) a point TomTom's unscaled test would miss is on it", over(1440f / 1080f, 1440, 700f, 740f), "");
+            Check("pointer: a window dragged partly off the left edge", Rules.PointerOverWindow(-100f, 60f, 480f, 560f, 1f, 1080, 10f, 700f), "");
+            Check("pointer: a scale not above 0 counts as 1", over(0f, 1080, 300f, 700f) && over(float.NaN, 1080, 300f, 700f), "");
+        }
+
+        // ClosesOnBack(open, consoleVisible, consoleWasVisible, escape, back);
+        // MayToggle(open, keyTypesText, searchFocused, gameTyping, pauseMenu, buildMenu, inventory).
+        private static void ListKeyTests()
+        {
+            Check("keys: Escape closes the open list", ListKeys.ClosesOnBack(true, false, false, true, false), "");
+            Check("keys: the gamepad's B closes the open list", ListKeys.ClosesOnBack(true, false, false, false, true), "");
+            Check("keys: nothing pressed closes nothing", !ListKeys.ClosesOnBack(true, false, false, false, false), "");
+            Check("keys: Escape does nothing to a closed list", !ListKeys.ClosesOnBack(false, false, false, true, true), "");
+            Check("keys: not while the console is open (Escape is closing it)", !ListKeys.ClosesOnBack(true, true, false, true, true), "");
+            Check("keys: not while the console was open last frame (it closed itself first)", !ListKeys.ClosesOnBack(true, false, true, true, true), "");
+
+            Check("keys: ListKey opens the list", ListKeys.MayToggle(false, false, false, false, false, false, false), "");
+            Check("keys: ListKey closes the list, even while the search box has the keyboard", ListKeys.MayToggle(true, false, true, false, false, false, false), "");
+            Check("keys: ListKey does not open the list while the player types in a game text field", !ListKeys.MayToggle(false, false, false, true, false, false, false), "");
+            Check("keys: ... whatever the key", !ListKeys.MayToggle(false, true, false, true, false, false, false), "");
+            Check("keys: ListKey does not open the list over the pause menu", !ListKeys.MayToggle(false, false, false, false, true, false, false), "");
+            Check("keys: ListKey does not open the list over the build menu (its right click would reach it)", !ListKeys.MayToggle(false, false, false, false, false, true, false), "");
+            Check("keys: ListKey does not open the list over the inventory", !ListKeys.MayToggle(false, false, false, false, false, false, true), "");
+            Check("keys: a ListKey that types does not close the list while its search box has the keyboard", !ListKeys.MayToggle(true, true, true, false, false, false, false), "");
+            Check("keys: ... nor while a game text field has it", !ListKeys.MayToggle(true, true, false, true, false, false, false), "");
+            Check("keys: a ListKey that types closes the list when no text field has the keyboard", ListKeys.MayToggle(true, true, false, false, false, false, false), "");
+            Check("keys: a ListKey that does not type closes the list while a game text field has the keyboard", ListKeys.MayToggle(true, false, false, true, false, false, false), "");
+            Check("keys: the pause menu, the build menu and the inventory do not stop ListKey closing the list", ListKeys.MayToggle(true, false, false, false, true, true, true), "");
+
+            // UnityEngine.KeyCode: Mouse0 = 323 ... Mouse6 = 329 (preflight checks the three against Unity).
+            Check("keys: the left, right and middle mouse buttons are refused",
+                ListKeys.IsClickButton(323) && ListKeys.IsClickButton(324) && ListKeys.IsClickButton(325), "");
+            Check("keys: the side buttons, F7, None and the keys around them are not",
+                !ListKeys.IsClickButton(322) && !ListKeys.IsClickButton(326) && !ListKeys.IsClickButton(327)
+                && !ListKeys.IsClickButton(288) && !ListKeys.IsClickButton(0), "");
         }
 
         private static void Check(string label, bool condition, string detail)

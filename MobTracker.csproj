@@ -12,7 +12,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>MobTracker</AssemblyName>
     <RootNamespace>MobTracker</RootNamespace>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <!-- The file properties' copyright, as in LICENSE; the README's Credits say who made what. -->
     <Copyright>Copyright (c) 2026 DoomMachine</Copyright>
     <!-- Emits SecurityPermission(SkipVerification) and UnverifiableCode, as the publicizer package did: part of
@@ -54,6 +54,7 @@
     <Reference Include="UnityEngine.AIModule"><HintPath>$(Managed)\UnityEngine.AIModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.AudioModule"><HintPath>$(Managed)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(Managed)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(Managed)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(Managed)\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="netstandard"><HintPath>$(Managed)\netstandard.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>

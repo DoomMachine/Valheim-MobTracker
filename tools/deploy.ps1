@@ -18,7 +18,7 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Dll = "",       # default: build\MobTracker.dll in this repository (set below)
-    [string]$ExpectedVersion = "0.3.0",
+    [string]$ExpectedVersion = "0.3.1",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string]$KeepDir = ""    # default: retired\ in this repository (set below)
 )
@@ -71,6 +71,11 @@ Copy-Item -LiteralPath $Dll -Destination $target
 $installedHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
 if ($installedHash -ne $newHash) { throw "installed hash $installedHash differs from the build's $newHash" }
 Write-Output ("installed {0}  SHA-256 {1}" -f $target, $installedHash)
+# The installed file, checked the way the build was above (Continue around the child, its output shown as text), so a
+# caller that redirects 2>&1 sees the check rather than a NativeCommandError; a check that could not run fails.
 $global:LASTEXITCODE = $null
-& $self -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "preflight.ps1") -Plugin $target -ExpectedVersion $ExpectedVersion -ValheimDir $ValheimDir
-exit $global:LASTEXITCODE
+$ErrorActionPreference = "Continue"
+& $self -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "preflight.ps1") -Plugin $target -ExpectedVersion $ExpectedVersion -ValheimDir $ValheimDir 2>&1 | ForEach-Object { "$_" }
+$postCode = $global:LASTEXITCODE
+$ErrorActionPreference = "Stop"
+exit $(if ($postCode -eq 0) { 0 } else { 1 })

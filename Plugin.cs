@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace MobTracker
 {
@@ -11,7 +13,7 @@ namespace MobTracker
         public const string PluginId = "com.mobtracker.plugin";
 
         /// <summary>Also MobTracker.csproj's Version; tools/preflight.ps1 checks that the two agree.</summary>
-        public const string Version = "0.3.0";
+        public const string Version = "0.3.1";
 
         internal static ManualLogSource Log;
 
@@ -33,9 +35,28 @@ namespace MobTracker
             // down the patches that still fit. tools/preflight.ps1 checks that every patch class is listed here.
             _harmony = new Harmony(PluginId);
             Patch(typeof(TextInputVisiblePatch));
+            Patch(typeof(ChatHasFocusPatch));
+            Patch(typeof(MouseWheelPatch));
             Patch(typeof(RemoveAreaPinPatch));
+            Patch(typeof(UiRaycastPatch));
 
             Log.LogInfo("MobTracker " + Version + " loaded");
+        }
+
+        /// <summary>
+        /// TomTom's (or Wayfinder's) keys over the open list (WaypointerCompat). Here, not in Awake: BepInEx creates
+        /// every plugin, in GUID order, before Unity calls any Start, and DoomMachine.* sorts after com.mobtracker.
+        /// </summary>
+        private void Start()
+        {
+            try
+            {
+                WaypointerCompat.Apply(_harmony);
+            }
+            catch (System.Exception e)
+            {
+                Log.LogError("TomTom and Wayfinder compatibility could not be set up: " + e.Message);
+            }
         }
 
         private void Patch(System.Type patchClass)
@@ -59,14 +80,58 @@ namespace MobTracker
     /// <summary>
     /// The game already reads "a text input is up" as "free the cursor, stop player input, keep
     /// the pause menu shut" (GameCamera.UpdateMouseCapture, PlayerController.TakeInput,
-    /// Menu.Update), which is exactly what the list window needs.
+    /// Menu.Update), which is exactly what the list window needs. Reported while the list is open and
+    /// for the rest of the frame in which it closed, so the Escape that closed it cannot also open the
+    /// pause menu (Menu.Update reads this flag, not Chat.HasFocus). Only ever adds true. Not while TomTom or
+    /// Wayfinder asks whether the player is typing (WaypointerCompat): the list is not a text field their keys must
+    /// give way to.
     /// </summary>
     [HarmonyPatch(typeof(TextInput), nameof(TextInput.IsVisible))]
     internal static class TextInputVisiblePatch
     {
         private static void Postfix(ref bool __result)
         {
-            __result |= EntityListWindow.IsOpen;
+            if (WaypointerCompat.SuspendDepth == 0)
+                __result |= EntityListWindow.BlocksGameInput;
+        }
+    }
+
+    /// <summary>
+    /// The other half of the same signal (TomTom's, MapPatches.cs). InventoryGui.Update (Tab and gamepad Y),
+    /// GameCamera.UpdateCamera (the camera zoom, by wheel and gamepad), HotkeyBar.Update (the gamepad hotbar),
+    /// Player.UpdatePlacementGhost (Q and E cycling the build snap point), StoreGui.Update and TextInput.Update
+    /// (E, Escape and B closing a trader or a sign's box) read Chat.HasFocus, not TextInput.IsVisible.
+    /// Last, on the method: Chatter's postfix assigns __result outright at the default priority and loads after
+    /// this plugin, so at equal priority it would run later and undo this. Only ever sets true. Stands aside inside
+    /// TomTom's typing test, as the TextInput one does (WaypointerCompat).
+    /// </summary>
+    [HarmonyPatch(typeof(Chat), nameof(Chat.HasFocus))]
+    internal static class ChatHasFocusPatch
+    {
+        [HarmonyPriority(Priority.Last)]
+        private static void Postfix(ref bool __result)
+        {
+            if (WaypointerCompat.SuspendDepth == 0 && EntityListWindow.BlocksGameInput)
+                __result = true;
+        }
+    }
+
+    /// <summary>
+    /// Keeps the mouse wheel from the game while the list is open - TomTom's patch for its own window. The camera zoom
+    /// already stands still (GameCamera.UpdateCamera asks Chat.HasFocus, which ChatHasFocusPatch holds true), but
+    /// ZInput's wheel has readers that ask neither flag: the free-fly debug camera and Server Devcommands' wheel binds.
+    /// A postfix, not a prefix, so ZInput still runs its input-source switch. The list's own scroll view reads
+    /// Event.current, not ZInput, so it still scrolls. Last, on the method, so other mods' postfixes see the real wheel
+    /// first (MeasurementTracker records it). Only ever sets 0.
+    /// </summary>
+    [HarmonyPatch(typeof(ZInput), nameof(ZInput.GetMouseScrollWheel))]
+    internal static class MouseWheelPatch
+    {
+        [HarmonyPriority(Priority.Last)]
+        private static void Postfix(ref float __result)
+        {
+            if (EntityListWindow.BlocksGameInput)
+                __result = 0f;
         }
     }
 
@@ -101,12 +166,42 @@ namespace MobTracker
         }
     }
 
+    /// <summary>
+    /// Keeps clicks on the list off the game's own UI underneath. The list is IMGUI, which the game's uGUI cannot see,
+    /// so without this a click on the list also lands on what is under it: on the large map a right click deletes a pin,
+    /// a middle click pings every player and a double click leaves a saved pin a Cartography Table shares; the buttons
+    /// of a trader or the map are pressed. Every uGUI pointer event - hover, press, click, drag start, drop, wheel -
+    /// goes to what EventSystem.RaycastAll found under the pointer (the game's InputSystemUIInputModule,
+    /// PerformRaycast), so finding nothing while the pointer is on the list stops them all.
+    ///
+    /// Left as it is: a press that began outside the list keeps its release and its drag, which the input module sends
+    /// to what was pressed, not to what is under the pointer - a map drag that ends over the list ends; keyboard and
+    /// gamepad navigation, which do not raycast; and the list's own controls, which IMGUI feeds from Event.current.
+    /// The list handed in is the input module's own cache, so it is emptied, never replaced. Last, so it has the final
+    /// word over any other postfix; the priority sits on the method, where PatchAll(Type) reads it.
+    /// </summary>
+    [HarmonyPatch(typeof(EventSystem), nameof(EventSystem.RaycastAll))]
+    internal static class UiRaycastPatch
+    {
+        [HarmonyPriority(Priority.Last)]
+        private static void Postfix(PointerEventData eventData, List<RaycastResult> raycastResults)
+        {
+            if (eventData != null && EntityListWindow.Covers(eventData.position))
+                raycastResults.Clear();
+        }
+    }
+
     internal static class Creature
     {
-        /// <summary>Everything loaded that is not a player. Dead and destroyed entries skipped.</summary>
+        /// <summary>
+        /// Everything loaded that is not a player. Dead and destroyed entries skipped, and so is a creature with no
+        /// ZNetView: Character.Awake puts a creature on the game's list before the step that fails without one, so a
+        /// broken one stays listed, and each of its network reads (GetZDOID, IsTamed) would throw - ending the alert
+        /// poll, list refresh or re-track look it was met in. Tested before anything else is asked of the creature.
+        /// </summary>
         public static bool IsListable(Character character)
         {
-            return character != null && !character.IsPlayer() && !character.IsDead();
+            return character != null && character.m_nview != null && !character.IsPlayer() && !character.IsDead();
         }
 
         public static string PrefabName(Character character)

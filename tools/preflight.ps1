@@ -12,21 +12,34 @@
      Find area's SpawnSystem.m_instances), which it lists - and a deliberately
      wrong member fails to resolve, so the check cannot pass vacuously
   4. the star filters read the right settings; always-track-nearest-watched gives its tested decisions (Retrack)
-     the right values and branches on them the right way, and is started only from Tracker.LateUpdate; Find area
-     honours the spawn rules' key and event conditions, takes the map's delete gesture for its own pins after other
-     mods' prefixes, and adds them local-only (save false, ownerID 0, and no Minimap method that adds pins of its own)
-  5. every assembly the plugin references is in the game folder
-  Run it after every Valheim update. Exits 1 on any failure.
+     the right values and branches on them the right way, and is started only from Tracker.LateUpdate; neither it
+     nor Auto-track takes a creature on the other side of a dungeon entrance; Find area honours the spawn rules' key
+     and event conditions, takes the map's delete gesture for its own pins after other mods' prefixes, and adds them
+     local-only (save false, ownerID 0, and no Minimap method that adds pins of its own)
+  5. a creature with no ZNetView is skipped by every creature loop, and one that throws cannot end the alert poll;
+     the window pauses its re-sorting under the pointer, stays on screen and puts GUI.matrix back, as the HUD label
+     does; the alert ding plays only through the game's GUI mixer group
+  6. the list's input: the TextInput.IsVisible and Chat.HasFocus postfixes report the list open or closed this
+     frame and only ever add true, the HasFocus one last; Escape and the gamepad's B are read in Update, not OnGUI,
+     and B is consumed; ListKey is read only through Hotkeys (caught, no warning spam, mouse buttons refused) and
+     never opens the list while the player types, over the pause menu, the build menu or the inventory; the wheel
+     is zeroed last; TomTom's and Wayfinder's typing test sees the real state (and the installed TomTom/Wayfinder,
+     or the -Waypointer DLLs, still read the two flags only there); clicks on the list reach no uGUI element under it
+  7. every assembly the plugin references is in the game folder
+  Run it after every Valheim update. Exits 1 on any failure. The number of checks depends on how many TomTom or
+  Wayfinder DLLs it reads (one check each).
 
 .EXAMPLE
   .\tools\preflight.ps1                                  # the installed BepInEx\plugins\MobTracker.dll
   .\tools\preflight.ps1 -Plugin build\MobTracker.dll
+  .\tools\preflight.ps1 -Plugin build\MobTracker.dll -Waypointer "<TomTom.dll>,<Wayfinder.dll>"
 #>
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Plugin = "",
-    [string]$ExpectedVersion = "0.3.0",
-    [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" })
+    [string]$ExpectedVersion = "0.3.1",
+    [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
+    [string[]]$Waypointer = @()   # TomTom / Wayfinder DLLs to check the carve-out against; default: the installed ones
 )
 $ErrorActionPreference = "Stop"
 # Drop a trailing \, and the " that powershell.exe -File leaves when a quoted path ending in
@@ -463,19 +476,23 @@ function Get-VarIndex($i) {
     return -1
 }
 function Test-Calls($table) {
-    # Each row: type, method, the call ("Type::Member", exactly one in the method), where each value it consumes must
-    # come from (the instance first; $null = anything; @() = not checked), and the branches that may follow it ($null =
-    # not checked).
+    # Each row: type, method, the call ("Type::Member", exactly one in the method; "Type::Member(ParamType,...)" names
+    # one overload, "Type::Member()" the one without parameters), where each value it consumes must come from (the
+    # instance first; $null = anything; @() = not checked), and the branches that may follow it ($null = not checked).
     foreach ($c in $table) {
         $script:checks++
         $where = "{0}.{1}" -f $c[0].Split('.')[-1], $c[1]
         $m = Get-Method $c[0] $c[1]
         if (-not $m) { Fail ("{0} not found" -f $where); continue }
         $ins = @($m.Body.Instructions)
+        $withTypes = "$($c[2])".Contains("(")
         $at = @(for ($k = 0; $k -lt $ins.Count; $k++) {
             $op = $ins[$k].Operand
-            if (($ins[$k].OpCode.Name -eq "call" -or $ins[$k].OpCode.Name -eq "callvirt") -and $op -is [Mono.Cecil.MethodReference] -and
-                ($op.DeclaringType.Name + "::" + $op.Name) -eq $c[2]) { $k }
+            if (($ins[$k].OpCode.Name -eq "call" -or $ins[$k].OpCode.Name -eq "callvirt") -and $op -is [Mono.Cecil.MethodReference]) {
+                $key = $op.DeclaringType.Name + "::" + $op.Name
+                if ($withTypes) { $key += "(" + (@($op.Parameters | ForEach-Object { $_.ParameterType.FullName }) -join ",") + ")" }
+                if ($key -eq $c[2]) { $k }
+            }
         })
         if ($at.Count -ne 1) { Fail ("{0}: expected one call of {1}, found {2}" -f $where, $c[2], $at.Count); continue }
         $k = $at[0]
@@ -520,7 +537,21 @@ Test-Calls @(
     # Which creature: listable first (the null and dead check), then the candidate test, a false answer skipping it.
     @("MobTracker.NearestWatched", "Update", "Creature::IsListable", @($null), $brfalse),
     @("MobTracker.NearestWatched", "Update", "Retrack::IsCandidate",
-        @("String::Equals", "ZDOID::op_Inequality", "Character::IsTamed", "StarFilters::Accepts", "Rules::WithinRadius"), $brfalse),
+        @("String::Equals", "ZDOID::op_Inequality", "Character::IsTamed", "StarFilters::Accepts", "Rules::WithinRadius", "Rules::SameLayer"), $brfalse),
+    # The same side of a dungeon entrance: the loop's creature (the overload without parameters) against the player's
+    # side, read once before the loop from the player's position (the Vector3 overload).
+    @("MobTracker.NearestWatched", "Update", "Rules::SameLayer", @("Character::InInterior", "loc <- Character::InInterior"), $null),
+    @("MobTracker.NearestWatched", "Update", "Character::InInterior()", @("loc <- Enumerator::get_Current"), $null),
+    @("MobTracker.NearestWatched", "Update", "Character::InInterior(UnityEngine.Vector3)", @("loc <- Transform::get_position"), $null),
+    # Auto-track never crosses a dungeon entrance either (a false answer skips the Track): the alerting creature kept as
+    # the nearest, against the player's position read before the loop. Which local the creature is: the deferral check.
+    @("MobTracker.WatchAlerts", "Update", "Rules::SameLayer", @("Character::InInterior", "Character::InInterior"), $brfalse),
+    @("MobTracker.WatchAlerts", "Update", "Character::InInterior()", @("loc <- loc <- Enumerator::get_Current"), $null),
+    @("MobTracker.WatchAlerts", "Update", "Character::InInterior(UnityEngine.Vector3)", @("loc <- Transform::get_position"), $null),
+    # Every creature loop asks IsListable first (it skips a creature with no ZNetView, below), a false answer skipping
+    # the creature: in WatchAlerts a true answer jumps over the leave out of its per-creature try.
+    @("MobTracker.WatchAlerts", "Update", "Creature::IsListable", @("loc <- Enumerator::get_Current"), $brtrue),
+    @("MobTracker.EntityListWindow", "Refresh", "Creature::IsListable", @("loc <- Enumerator::get_Current"), $brfalse),
     @("MobTracker.NearestWatched", "Update", "String::Equals", @("Creature::PrefabName", "Retrack::get_Prefab", $null), $null),
     @("MobTracker.NearestWatched", "Update", "ZDOID::op_Inequality", @("Character::GetZDOID", "ZDOID::None"), $null),
     @("MobTracker.NearestWatched", "Update", "StarFilters::Accepts", @("ModConfig::AlertStars.Value", "Character::GetLevel"), $null),
@@ -602,9 +633,13 @@ if ($pf.Count -ne 1 -or $tr.Count -ne 1) { $why += ("IsPendingFor / Track calls:
         $pa = Get-ArgumentSources $wi $pn $wau.Body.ExceptionHandlers
         $ta = Get-ArgumentSources $wi $tr[0] $wau.Body.ExceptionHandlers
         if (-not $pa -or -not $ta -or $wi[$pa[0]].OpCode.Name -notmatch '^ldloc' -or (Get-VarIndex $wi[$pa[0]]) -ne (Get-VarIndex $wi[$ta[0]])) { $why += "IsPendingFor asks about another creature than the one Tracker.Track is given" }
+        # The layer test too: the creature asked Character.InInterior() is the one Tracker.Track is given.
+        $ii = @(Get-CallAt $wi "Character::InInterior" | Where-Object { $wi[$_].Operand.Parameters.Count -eq 0 })
+        $ia = if ($ii.Count -eq 1) { Get-ArgumentSources $wi $ii[0] $wau.Body.ExceptionHandlers } else { $null }
+        if (-not $ia -or -not $ta -or $wi[$ia[0]].OpCode.Name -notmatch '^ldloc' -or (Get-VarIndex $wi[$ia[0]]) -ne (Get-VarIndex $wi[$ta[0]])) { $why += "the dungeon-entrance test asks about another creature than the one Tracker.Track is given" }
     }
 }
-if ($why.Count -eq 0) { Ok "WatchAlerts.Update: the deferral asks about the type of the creature Tracker.Track would take" } else { Fail ("WatchAlerts.Update: " + ($why -join "; ")) }
+if ($why.Count -eq 0) { Ok "WatchAlerts.Update: the deferral and the dungeon-entrance test ask about the creature Tracker.Track would take" } else { Fail ("WatchAlerts.Update: " + ($why -join "; ")) }
 # Only Tracker.LateUpdate starts a wait: one call of NearestWatched.Lost in the plugin, there, and one of Retrack.Lost,
 # in NearestWatched.Lost. Which branch of LateUpdate the call sits in is not checked.
 $checks++
@@ -648,6 +683,475 @@ if ($awake) {
     }
 }
 if ($added) { Ok "MobTrackerPlugin.Awake adds the NearestWatched component" } else { Fail "MobTrackerPlugin.Awake never adds NearestWatched" }
+
+Write-Output "== failure isolation =="
+# A creature with no ZNetView (its Awake failed after it went on the game's list) throws on every network read, ending the
+# loop that met it. Creature.IsListable - asked first by every creature loop (rows above) - skips it: m_nview != null, a
+# false answer returning false, before any Character method is asked.
+$checks++
+$lm = Get-Method "MobTracker.Creature" "IsListable"
+$why = @()
+if (-not $lm) { $why += "not found" } else {
+    $li = @($lm.Body.Instructions)
+    $nv = @(for ($k = 0; $k -lt $li.Count; $k++) { $o = $li[$k].Operand; if ($li[$k].OpCode.Name -eq "ldfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.DeclaringType.Name -eq "Character" -and $o.Name -eq "m_nview") { $k } })
+    $asked = @(for ($k = 0; $k -lt $li.Count; $k++) { $o = $li[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and $o.DeclaringType.Name -eq "Character") { $k } })
+    if ($nv.Count -ne 1) { $why += "Character.m_nview is read $($nv.Count) times, not once" }
+    else {
+        $k = $nv[0]
+        $shape = ($k + 3 -lt $li.Count) -and $li[$k + 1].OpCode.Name -eq "ldnull" -and $li[$k + 2].Operand -is [Mono.Cecil.MethodReference] -and
+            $li[$k + 2].Operand.Name -eq "op_Inequality" -and $li[$k + 3].OpCode.Name -like "brfalse*"
+        $to = if ($shape) { [array]::IndexOf($li, $li[$k + 3].Operand) } else { -1 }
+        if (-not $shape) { $why += "not 'm_nview != null' followed by a false branch" }
+        elseif ($to -lt 0 -or $to + 1 -ge $li.Count -or $li[$to].OpCode.Name -ne "ldc.i4.0" -or $li[$to + 1].OpCode.Name -ne "ret") { $why += "a null m_nview does not lead to 'return false'" }
+        if ($asked.Count -eq 0 -or $asked[0] -lt $k) { $why += "a Character method is asked before the m_nview test" }
+    }
+}
+if ($why.Count -eq 0) { Ok "Creature.IsListable: a creature whose m_nview is null is not listable, before anything is asked of it" } else { Fail ("Creature.IsListable: " + ($why -join "; ")) }
+# One creature that throws is skipped and the poll goes on, so the alerts the gate recorded before it are still shown: in
+# WatchAlerts.Update the creature's reads and the gate's ShouldAlert sit in a try inside the loop (not holding the
+# enumerator's MoveNext) whose handler catches System.Exception, does not throw again, and logs once (_failureLogged).
+$checks++
+$why = @()
+function Test-InTry($h, $i) { return $h.TryStart.Offset -le $i.Offset -and ($null -eq $h.TryEnd -or $i.Offset -lt $h.TryEnd.Offset) }
+$sa = @(Get-CallAt $wi 'AlertGate`1::ShouldAlert'); $mn = @(Get-CallAt $wi "Enumerator::MoveNext"); $gz = @(Get-CallAt $wi "Character::GetZDOID")
+if ($sa.Count -ne 1 -or $mn.Count -ne 1 -or $gz.Count -ne 1) { $why += ("ShouldAlert / MoveNext / GetZDOID calls: {0} / {1} / {2}" -f $sa.Count, $mn.Count, $gz.Count) }
+else {
+    $guard = @($wau.Body.ExceptionHandlers | Where-Object { "$($_.HandlerType)" -eq "Catch" -and "$($_.CatchType.FullName)" -eq "System.Exception" -and
+        (Test-InTry $_ $wi[$gz[0]]) -and (Test-InTry $_ $wi[$sa[0]]) -and -not (Test-InTry $_ $wi[$mn[0]]) })
+    if ($guard.Count -ne 1) { $why += "no catch (System.Exception) around one creature's reads and ShouldAlert, inside the loop" }
+    else {
+        $h = $guard[0]
+        $body = @($wi | Where-Object { $_.Offset -ge $h.HandlerStart.Offset -and ($null -eq $h.HandlerEnd -or $_.Offset -lt $h.HandlerEnd.Offset) })
+        if (@($body | Where-Object { $_.OpCode.Name -eq "rethrow" -or $_.OpCode.Name -eq "throw" }).Count -gt 0) { $why += "the handler throws again" }
+        $flag = @($body | Where-Object { $_.Operand -is [Mono.Cecil.FieldReference] -and $_.Operand.Name -eq "_failureLogged" } | ForEach-Object { $_.OpCode.Name })
+        if (-not ($flag -contains "ldfld" -and $flag -contains "stfld")) { $why += "the handler does not log only once (_failureLogged)" }
+    }
+}
+if ($why.Count -eq 0) { Ok "WatchAlerts.Update: a creature that throws is skipped and logged once; the poll goes on" } else { Fail ("WatchAlerts.Update: " + ($why -join "; ")) }
+
+Write-Output "== the window =="
+# The twice-a-second refresh re-sorts the rows by distance; it waits while the pointer is over the window or a mouse button
+# is held, since an IMGUI button fires for whatever row is in its place when the mouse comes up. The pointer test divides by
+# the GUI scale (the window is drawn scaled). After drawing, the rect is clamped so a corner stays on screen.
+# Rules.ShouldRefresh decides (the tests drive it); here, what it is given, and that a false answer returns before the rows
+# change: the player's own change, "due" (Time.time >= _nextRefresh: clt.un, then not), the pointer test, a held button
+# (hotControl != 0: cgt.un).
+Test-Calls @(,   # one row: the comma keeps it a row, not the table
+    @("MobTracker.EntityListWindow", "Update", "Rules::ShouldRefresh",
+        @("EntityListWindow::PlayerChanged", "ceq", "EntityListWindow::Covers", "cgt.un"), $brtrue)
+)
+Test-Wiring @(
+    @("MobTracker.EntityListWindow", "Update", @("GUIUtility::get_hotControl", "EntityListWindow::_nextRefresh"), @()),
+    @("MobTracker.EntityListWindow", "PlayerChanged", @("EntityListWindow::_refreshNow", "EntityListWindow::_query", "EntityListWindow::_appliedQuery",
+        "EntityListWindow::_allTypes", "EntityListWindow::_appliedAllTypes", "ModConfig::ListStars", "EntityListWindow::_appliedListStars"), @("ModConfig::AlertStars")),
+    @("MobTracker.EntityListWindow", "OnGUI", @("Mathf::Clamp", "Rect::set_x", "Rect::set_y", "Screen::get_width", "Screen::get_height"), @())
+)
+# GUI.matrix is IMGUI's global state: each OnGUI that scales puts back the matrix it found - the window's in a finally around
+# GUILayout.Window, the HUD label's after its last Label.
+$checks++
+$why = @()
+$gm = Get-Method "MobTracker.EntityListWindow" "OnGUI"
+$gi = @($gm.Body.Instructions)
+$gw = @(Get-CallAt $gi "GUILayout::Window")
+$restored = $false
+foreach ($h in @($gm.Body.ExceptionHandlers | Where-Object { "$($_.HandlerType)" -eq "Finally" })) {
+    if ($gw.Count -ne 1 -or -not (Test-InTry $h $gi[$gw[0]])) { continue }
+    foreach ($q in @(Get-CallAt $gi "GUI::set_matrix")) {
+        if ($gi[$q].Offset -lt $h.HandlerStart.Offset -or ($null -ne $h.HandlerEnd -and $gi[$q].Offset -ge $h.HandlerEnd.Offset)) { continue }
+        $src = Get-ArgumentSources $gi $q $gm.Body.ExceptionHandlers
+        if ($src -and (Get-SourceKey $gm $gi $src[0]) -eq "loc <- GUI::get_matrix") { $restored = $true }
+    }
+}
+if (-not $restored) { $why += "EntityListWindow.OnGUI does not put back, in a finally around GUILayout.Window, the GUI.matrix it found" }
+$tm = Get-Method "MobTracker.Tracker" "OnGUI"
+$ti = @($tm.Body.Instructions)
+$ts = @(Get-CallAt $ti "GUI::set_matrix"); $tl = @(Get-CallAt $ti "GUI::Label")
+$last = if ($ts.Count -gt 0) { $ts[-1] } else { -1 }
+$tsrc = if ($last -ge 0) { Get-ArgumentSources $ti $last $tm.Body.ExceptionHandlers } else { $null }
+if ($last -lt 0 -or $tl.Count -eq 0 -or $last -lt $tl[-1] -or -not $tsrc -or (Get-SourceKey $tm $ti $tsrc[0]) -ne "loc <- GUI::get_matrix") { $why += "Tracker.OnGUI does not put back, after its last Label, the GUI.matrix it found" }
+if ($why.Count -eq 0) { Ok "EntityListWindow.OnGUI and Tracker.OnGUI put back the GUI.matrix they found" } else { Fail ($why -join "; ") }
+
+Write-Output "== the alert ding =="
+# The ding goes through the game's mixer, so the game's Volume and Effect volume apply (vanilla-behaviour.md section 17):
+# Ding.Play plays only when Ding.Routed says so; Routed puts the source on the group FindGuiGroup found; FindGuiGroup finds
+# it by the name "GUI" alone and never reads AudioMan.m_guiMixer (null in the game); nothing else plays a sound.
+Test-Calls @(
+    @("MobTracker.Ding", "Play", "Ding::Routed", @(), $brtrue),
+    @("MobTracker.Ding", "Routed", "AudioSource::set_outputAudioMixerGroup", @("Ding::_source", "loc <- Ding::FindGuiGroup"), $null)
+)
+$checks++
+$why = @()
+$fg = Get-Method "MobTracker.Ding" "FindGuiGroup"
+if (-not $fg) { $why += "Ding.FindGuiGroup not found" } else {
+    $fi = @($fg.Body.Instructions)
+    $eqs = @(Get-CallAt $fi "String::op_Equality")
+    $gui = @($eqs | Where-Object { $s = Get-ArgumentSources $fi $_ $fg.Body.ExceptionHandlers; $s -and $fi[$s[1]].OpCode.Name -eq "ldstr" -and "$($fi[$s[1]].Operand)" -ceq "GUI" })
+    if ($eqs.Count -lt 1 -or $gui.Count -ne $eqs.Count) { $why += "Ding.FindGuiGroup does not find the group by the name GUI alone" }
+}
+$plays = @(); $guiMixer = @()
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($i in $m.Body.Instructions) {
+            $op = $i.Operand
+            if ($op -is [Mono.Cecil.MethodReference] -and $op.DeclaringType.Name -eq "AudioSource" -and $op.Name -like "Play*") { $plays += ("{0}.{1}: {2}" -f $t.Name, $m.Name, $op.Name) }
+            if ($op -is [Mono.Cecil.FieldReference] -and $op.DeclaringType.Name -eq "AudioMan" -and $op.Name -eq "m_guiMixer") { $guiMixer += ("{0}.{1}" -f $t.Name, $m.Name) }
+        }
+    }
+}
+if ($plays.Count -ne 1 -or $plays[0] -ne "Ding.Play: PlayOneShot") { $why += ("sounds played: {0}; expected only Ding.Play: PlayOneShot" -f $(if ($plays.Count) { $plays -join ", " } else { "none" })) }
+if ($guiMixer.Count -gt 0) { $why += ("AudioMan.m_guiMixer (null in the game) is read in {0}" -f ($guiMixer -join ", ")) }
+if ($why.Count -eq 0) { Ok "the ding plays only from Ding.Play, through the mixer group Ding.FindGuiGroup finds by the name GUI" } else { Fail ($why -join "; ") }
+
+Write-Output "== the list's keys and what it blocks =="
+# A literal int an instruction pushes, or $null; the try/catch (System.Exception) blocks around an instruction whose
+# handler neither throws nor rethrows (TomTom's preflight).
+function Get-LiteralInt($i) {
+    $n = $i.OpCode.Name
+    if ($n -match '^ldc\.i4\.([0-8])$') { return [int]$Matches[1] }
+    if ($n -eq "ldc.i4.m1") { return -1 }
+    if ($n -eq "ldc.i4" -or $n -eq "ldc.i4.s") { return [int]"$($i.Operand)" }
+    return $null
+}
+function Get-CatchTries($m, $i) {
+    $found = @()
+    $all = @($m.Body.Instructions)
+    foreach ($h in $m.Body.ExceptionHandlers) {
+        if ($h.HandlerType -ne [Mono.Cecil.Cil.ExceptionHandlerType]::Catch -or $h.CatchType.FullName -ne "System.Exception") { continue }
+        $end = [int]::MaxValue; if ($h.TryEnd) { $end = $h.TryEnd.Offset }
+        if ($i.Offset -lt $h.TryStart.Offset -or $i.Offset -ge $end) { continue }
+        $hEnd = [int]::MaxValue; if ($h.HandlerEnd) { $hEnd = $h.HandlerEnd.Offset }
+        $throws = @($all | Where-Object { $_.Offset -ge $h.HandlerStart.Offset -and $_.Offset -lt $hEnd -and ($_.OpCode.Name -eq "throw" -or $_.OpCode.Name -eq "rethrow") })
+        if ($throws.Count -eq 0) { $found += ,$h }
+    }
+    return ,$found
+}
+
+# Both input postfixes report BlocksGameInput - open, or closed this frame - never IsOpen alone: Menu.Update reads
+# TextInput.IsVisible, not Chat.HasFocus, so with IsOpen alone the Escape that closes the list opens the pause menu
+# whenever Menu.Update runs after this plugin's Update. And they only ever add true: each bool they store is a literal
+# true or an OR with the value already there, so another mod's true (or real chat focus) is never cleared.
+foreach ($pc in @("MobTracker.TextInputVisiblePatch", "MobTracker.ChatHasFocusPatch")) {
+    $checks++
+    $pm = Get-Method $pc "Postfix"
+    if (-not $pm) { Fail "$pc.Postfix not found"; continue }
+    $touch = Get-Touches $pm
+    $pins = @($pm.Body.Instructions)
+    $stores = @(for ($k = 0; $k -lt $pins.Count; $k++) { if ($pins[$k].OpCode.Name -eq "stind.i1") { $k } })
+    $badStores = @($stores | Where-Object { $_ -lt 1 -or ($pins[$_ - 1].OpCode.Name -ne "ldc.i4.1" -and $pins[$_ - 1].OpCode.Name -ne "or") })
+    $why = @()
+    if (-not $touch.ContainsKey("EntityListWindow::get_BlocksGameInput")) { $why += "does not read EntityListWindow.BlocksGameInput" }
+    if ($touch.ContainsKey("EntityListWindow::get_IsOpen")) { $why += "reads EntityListWindow.IsOpen (the closing frame is lost)" }
+    if ($stores.Count -eq 0) { $why += "stores nothing into __result" }
+    if ($badStores.Count -gt 0) { $why += "stores a value that is neither true nor an OR with __result - it can clear another mod's true" }
+    if ($why.Count -eq 0) { Ok ("{0}.Postfix reports BlocksGameInput and only ever adds true" -f $pc.Split('.')[-1]) }
+    else { Fail ("{0}.Postfix: {1}" -f $pc.Split('.')[-1], ($why -join "; ")) }
+}
+# Chatter's Chat.HasFocus postfix assigns __result outright at the default priority and loads after MobTracker, so at
+# any priority it outranks this one would be undone. Priority.Last (0), on the method.
+$checks++
+$hfp = Get-Method "MobTracker.ChatHasFocusPatch" "Postfix"
+$hfPriority = if ($hfp) { Get-Priority $hfp } else { $null }
+if ($null -ne $hfPriority -and $hfPriority -eq 0) { Ok "ChatHasFocusPatch.Postfix runs last (HarmonyPriority 0 = Priority.Last), after Chatter's" }
+else { Fail ("ChatHasFocusPatch.Postfix priority is {0}; it must be 0 (Priority.Last), set on the method" -f $(if ($null -eq $hfPriority) { "unset" } else { $hfPriority })) }
+# The closing frame: BlocksGameInput is IsOpen or the frame Close recorded; every way the list closes goes through
+# Close (only Open and Close set IsOpen); OnGUI reads no key any more (the focused search box took Escape's event
+# there first, so the list never closed on it).
+Test-Wiring @(
+    @("MobTracker.EntityListWindow", "get_BlocksGameInput", @("EntityListWindow::get_IsOpen", "EntityListWindow::_closedFrame", "Time::get_frameCount"), @()),
+    @("MobTracker.EntityListWindow", "Close", @("set EntityListWindow::_closedFrame", "Time::get_frameCount", "set EntityListWindow::_searchFocused"), @()),
+    @("MobTracker.EntityListWindow", "OnGUI", @(), @("Event::get_keyCode", "EntityListWindow::set_IsOpen", "EntityListWindow::Close", "ZInput::GetKeyDown")),
+    @("MobTracker.EntityListWindow", "Update", @("EntityListWindow::HandleKeys", "Console::IsVisible", "set EntityListWindow::_consoleWasVisible", "InventoryGui::IsVisible", "EntityListWindow::Close"), @("ZInput::GetKeyDown")),
+    @("MobTracker.EntityListWindow", "HandleKeys", @("ZInput::ResetButtonStatus", "PlayerController::SetTakeInputDelay", "EntityListWindow::Open", "EntityListWindow::Close"), @()),
+    @("MobTracker.EntityListWindow", "DrawWindow", @("GUIUtility::get_keyboardControl", "set EntityListWindow::_searchFocused"), @()),
+    # Typing is read from the game's own fields, not from the two flags this plugin and TomTom force.
+    @("MobTracker.GameTyping", "Any", @("TextInput::m_panel", "Chat::m_wasFocused", "BuildUi::get_SearchFieldFocused", "Minimap::InTextInput", "Console::IsVisible"), @("TextInput::IsVisible", "Chat::HasFocus"))
+)
+$checks++
+$setters = @()
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($i in $m.Body.Instructions) {
+            $op = $i.Operand
+            if ($op -is [Mono.Cecil.MethodReference] -and $op.Name -eq "set_IsOpen" -and $op.DeclaringType.FullName -eq "MobTracker.EntityListWindow") { $setters += ("{0}.{1}" -f $t.Name, $m.Name) }
+        }
+    }
+}
+$otherSetters = @($setters | Where-Object { $_ -ne "EntityListWindow.Open" -and $_ -ne "EntityListWindow.Close" })
+if ($otherSetters.Count -eq 0 -and $setters -contains "EntityListWindow.Open" -and $setters -contains "EntityListWindow.Close") { Ok "only EntityListWindow.Open and Close set IsOpen, so every close records its frame" }
+else { Fail ("IsOpen is set outside Open and Close: {0}" -f $(if ($otherSetters.Count) { ($otherSetters | Sort-Object -Unique) -join ", " } else { "(Open or Close never sets it)" })) }
+# The decisions are ListKeys' (the unit tests give them in full); what they are given, and which way the code branches.
+Test-Calls @(
+    @("MobTracker.EntityListWindow", "HandleKeys", "ListKeys::ClosesOnBack",
+        @("EntityListWindow::get_IsOpen", "arg consoleVisible", "arg consoleWasVisible", "ZInput::GetKeyDown", "ZInput::GetButtonDown"), $brfalse),
+    @("MobTracker.EntityListWindow", "HandleKeys", "ListKeys::MayToggle",
+        @("EntityListWindow::get_IsOpen", "Hotkeys::TypesText", "EntityListWindow::_searchFocused", "GameTyping::Any", "Menu::IsVisible", "Hud::IsPieceSelectionVisible", "InventoryGui::IsVisible"), $brfalse),
+    @("MobTracker.EntityListWindow", "HandleKeys", "Hotkeys::TypesText", @("ModConfig::ListKey.Value"), $null),
+    @("MobTracker.EntityListWindow", "HandleKeys", "Hotkeys::Pressed", @("ModConfig::ListKey"), $brfalse),
+    @("MobTracker.EntityListWindow", "Update", "EntityListWindow::HandleKeys", @($null, "loc <- Console::IsVisible", "loc <- EntityListWindow::_consoleWasVisible"), $null),
+    @("MobTracker.Hotkeys", "Pressed", "ListKeys::IsClickButton", @($null), $brfalse)
+)
+# What Update keeps for the next frame is this frame's console visibility (read once, before anything else).
+$checks++
+$upd = Get-Method "MobTracker.EntityListWindow" "Update"
+$ui = if ($upd) { @($upd.Body.Instructions) } else { @() }
+$cw = @(for ($k = 1; $k -lt $ui.Count; $k++) { if ($ui[$k].OpCode.Name -eq "stfld" -and "$($ui[$k].Operand.Name)" -eq "_consoleWasVisible") { $k } })
+if ($cw.Count -eq 1 -and (Get-SourceKey $upd $ui ($cw[0] - 1)) -eq "loc <- Console::IsVisible") { Ok "EntityListWindow.Update keeps this frame's Console.IsVisible for the next frame, once" }
+else { Fail ("EntityListWindow.Update: _consoleWasVisible is stored {0} time(s){1}" -f $cw.Count, $(if ($cw.Count -eq 1) { ", from " + (Get-SourceKey $upd $ui ($cw[0] - 1)) + ", not Console.IsVisible" } else { ", expected once" })) }
+# The literals: Escape with logWarning false, and the gamepad's B both read and consumed.
+$checks++
+$hk = Get-Method "MobTracker.EntityListWindow" "HandleKeys"
+$why = @()
+if (-not $hk) { $why += "HandleKeys not found" } else {
+    $hi = @($hk.Body.Instructions)
+    $kd = @(Get-CallAt $hi "ZInput::GetKeyDown")
+    if ($kd.Count -ne 1) { $why += "ZInput.GetKeyDown calls: $($kd.Count)" } else {
+        $a = Get-ArgumentSources $hi $kd[0] $hk.Body.ExceptionHandlers
+        if (-not $a -or (Get-LiteralInt $hi[$a[0]]) -ne 27 -or $hi[$a[1]].OpCode.Name -ne "ldc.i4.0") { $why += "Escape is not read as ZInput.GetKeyDown(KeyCode.Escape, false)" }
+    }
+    foreach ($name in @("ZInput::GetButtonDown", "ZInput::ResetButtonStatus")) {
+        $c = @(Get-CallAt $hi $name)
+        if ($c.Count -ne 1) { $why += "$name calls: $($c.Count)"; continue }
+        $a = Get-ArgumentSources $hi $c[0] $hk.Body.ExceptionHandlers
+        if (-not $a -or $hi[$a[0]].OpCode.Name -ne "ldstr" -or "$($hi[$a[0]].Operand)" -ne "JoyButtonB") { $why += "$name is not given ""JoyButtonB""" }
+    }
+}
+if ($why.Count -eq 0) { Ok "EntityListWindow.HandleKeys reads ZInput.GetKeyDown(KeyCode.Escape, false) and JoyButtonB, and consumes JoyButtonB" }
+else { Fail ("EntityListWindow.HandleKeys: " + ($why -join "; ")) }
+# ListKey is read only through Hotkeys, which passes logWarning false and catches (a KeyCode missing from ZInput's
+# table throws on every read); elsewhere a key read must be a literal (Escape). The mouse buttons ListKeys refuses are
+# UnityEngine.KeyCode's Mouse0 to Mouse2 in this Unity.
+$checks++
+$keyProblems = @(); $hotkeyReads = 0
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        $ins = @($m.Body.Instructions)
+        for ($k = 0; $k -lt $ins.Count; $k++) {
+            $op = $ins[$k].Operand
+            if (-not ($op -is [Mono.Cecil.MethodReference]) -or $op.DeclaringType.FullName -ne "ZInput" -or @("GetKey", "GetKeyDown", "GetKeyUp") -notcontains $op.Name) { continue }
+            if ($op.Parameters.Count -lt 1 -or $op.Parameters[0].ParameterType.FullName -ne "UnityEngine.KeyCode") { continue }
+            $where = "{0}.{1} ZInput.{2}" -f $t.Name, $m.Name, $op.Name
+            $src = Get-ArgumentSources $ins $k $m.Body.ExceptionHandlers
+            if ($t.FullName -eq "MobTracker.Hotkeys") {
+                $hotkeyReads++
+                if ((Get-CatchTries $m $ins[$k]).Count -eq 0) { $keyProblems += "$where is not inside a try whose catch (System.Exception) does not rethrow" }
+                if ($null -eq $src -or $src.Count -lt 2 -or $ins[$src[1]].OpCode.Name -ne "ldc.i4.0") { $keyProblems += "$where does not pass a literal false for logWarning" }
+            }
+            elseif ($null -eq $src -or $null -eq (Get-LiteralInt $ins[$src[0]])) { $keyProblems += "$where reads a key that is not a literal outside Hotkeys" }
+        }
+    }
+}
+if ($hotkeyReads -eq 0) { $keyProblems += "Hotkeys makes no ZInput key read" }
+$kc = $null; foreach ($gm in $gameModules.Values) { $x = $gm.GetType("UnityEngine.KeyCode"); if ($x) { $kc = $x; break } }
+$kcv = @{}; if ($kc) { foreach ($f in $kc.Fields) { if ($f.HasConstant) { $kcv[$f.Name] = [int]$f.Constant } } }
+if ($kcv["Mouse0"] -ne 323 -or $kcv["Mouse2"] -ne 325) { $keyProblems += ("UnityEngine.KeyCode Mouse0/Mouse2 are {0}/{1}, not ListKeys' 323/325" -f $kcv["Mouse0"], $kcv["Mouse2"]) }
+if ($keyProblems.Count -eq 0) { Ok "ListKey is read only through Hotkeys (logWarning false, caught); elsewhere only literal keys; KeyCode.Mouse0-Mouse2 are 323-325" }
+else { foreach ($p in $keyProblems) { Fail $p } }
+# A new ListKey is tried afresh: ModConfig.Bind hands ListKey.SettingChanged to Hotkeys.Forget.
+$checks++
+$bind = Get-TouchesWithLambdas "MobTracker.ModConfig" "Bind"
+if ($bind -and $bind.ContainsKey("Hotkeys::Forget")) { Ok "ModConfig.Bind: a changed ListKey makes Hotkeys forget the keys it refused" }
+else { Fail "ModConfig.Bind never calls Hotkeys.Forget - a refused ListKey stays refused after the setting changes" }
+
+Write-Output "== the mouse wheel =="
+# ZInput's wheel has readers that ask neither forced flag (the free-fly camera, Server Devcommands' wheel binds), so
+# MouseWheelPatch zeroes it while the list blocks game input: it runs last (after MeasurementTracker has recorded the real
+# wheel), reads BlocksGameInput, skips the store when that is false, and only ever stores 0.
+$checks++
+$mw = Get-Method "MobTracker.MouseWheelPatch" "Postfix"
+$why = @()
+if (-not $mw) { $why += "not found" } else {
+    $mwp = Get-Priority $mw
+    if ($null -eq $mwp -or $mwp -ne 0) { $why += ("priority is {0}; it must be 0 (Priority.Last), set on the method" -f $(if ($null -eq $mwp) { "unset" } else { $mwp })) }
+    $mt = Get-Touches $mw
+    if (-not $mt.ContainsKey("EntityListWindow::get_BlocksGameInput")) { $why += "does not read EntityListWindow.BlocksGameInput" }
+    if ($mt.ContainsKey("EntityListWindow::get_IsOpen")) { $why += "reads EntityListWindow.IsOpen (the closing frame is lost)" }
+    $mi = @($mw.Body.Instructions)
+    $st = @(for ($k = 0; $k -lt $mi.Count; $k++) { if ($mi[$k].OpCode.Name -like "stind.*") { $k } })
+    $bad = @($st | Where-Object { $_ -lt 1 -or $mi[$_ - 1].OpCode.Name -ne "ldc.r4" -or [single]"$($mi[$_ - 1].Operand)" -ne 0 })
+    if ($st.Count -eq 0) { $why += "stores nothing into __result" }
+    if ($bad.Count -gt 0) { $why += "stores a value other than 0 into __result" }
+}
+if ($why.Count -eq 0) { Ok "MouseWheelPatch.Postfix runs last, reads BlocksGameInput and only ever sets the wheel to 0" }
+else { Fail ("MouseWheelPatch.Postfix: " + ($why -join "; ")) }
+Test-Calls @(, @("MobTracker.MouseWheelPatch", "Postfix", "EntityListWindow::get_BlocksGameInput", @(), $brfalse))
+
+Write-Output "== TomTom and Wayfinder: their keys over the open list =="
+# TomTom and Wayfinder read their keys only while their Plugin.IsTypingElsewhere() is false, and it asks the two flags
+# the list forces. WaypointerCompat puts a Prefix (SuspendDepth++) and a void Finalizer (SuspendDepth-- while above 0)
+# on it, and both forcing postfixes stand aside while SuspendDepth is above 0. Each piece is one line a refactor can
+# drop while everything else still passes.
+# (1) Each forcing postfix tests SuspendDepth first, and a non-zero value jumps past every store to __result.
+foreach ($pc in @("MobTracker.TextInputVisiblePatch", "MobTracker.ChatHasFocusPatch")) {
+    $checks++
+    $short = $pc.Split('.')[-1]
+    $pm = Get-Method $pc "Postfix"
+    $why = @()
+    if (-not $pm) { $why += "no Postfix" } else {
+        $pi = @($pm.Body.Instructions)
+        $at = -1
+        for ($k = 0; $k -lt $pi.Count; $k++) {
+            $op = $pi[$k].Operand
+            if ($pi[$k].OpCode.Name -eq "ldsfld" -and $op -is [Mono.Cecil.FieldReference] -and ($op.DeclaringType.Name + "::" + $op.Name) -eq "WaypointerCompat::SuspendDepth") { $at = $k; break }
+        }
+        $stores = @(for ($k = 0; $k -lt $pi.Count; $k++) { if ($pi[$k].OpCode.Name -like "stind.*") { $k } })
+        if ($at -lt 0) { $why += "never reads WaypointerCompat.SuspendDepth" }
+        elseif ($pi[$at + 1].OpCode.Name -notlike "brtrue*") { $why += ("SuspendDepth is followed by {0}, not brtrue (skip the forcing while it is above 0)" -f $pi[$at + 1].OpCode.Name) }
+        elseif ($stores.Count -eq 0) { $why += "stores nothing to __result" }
+        else {
+            $skipTo = [array]::IndexOf($pi, $pi[$at + 1].Operand)
+            if (@($stores | Where-Object { $_ -lt $at -or $_ -ge $skipTo }).Count -gt 0) { $why += "a store to __result that the SuspendDepth test does not skip" }
+        }
+    }
+    if ($why.Count -eq 0) { Ok ("{0}.Postfix forces nothing while WaypointerCompat.SuspendDepth is above 0" -f $short) }
+    else { Fail ("{0}.Postfix: {1}" -f $short, ($why -join "; ")) }
+}
+# (2) The Prefix only raises SuspendDepth by one; the Finalizer is void with no parameters (so an exception passes
+#     through unchanged, HarmonyX 2.9) and lowers it by one behind a "> 0" test.
+function Get-DepthStep($m) {
+    # "+1" or "-1" for each SuspendDepth = SuspendDepth +/- 1 in the method (ldsfld, ldc.i4.1, add/sub, stsfld), "?" for any other store.
+    $ins = @($m.Body.Instructions); $out = @()
+    for ($k = 0; $k -lt $ins.Count; $k++) {
+        $op = $ins[$k].Operand
+        if ($ins[$k].OpCode.Name -ne "stsfld" -or -not ($op -is [Mono.Cecil.FieldReference]) -or $op.Name -ne "SuspendDepth") { continue }
+        $shape = $k -ge 3 -and $ins[$k - 3].OpCode.Name -eq "ldsfld" -and $ins[$k - 3].Operand.Name -eq "SuspendDepth" -and $ins[$k - 2].OpCode.Name -eq "ldc.i4.1"
+        if ($shape -and $ins[$k - 1].OpCode.Name -eq "add") { $out += "+1" } elseif ($shape -and $ins[$k - 1].OpCode.Name -eq "sub") { $out += "-1" } else { $out += "?" }
+    }
+    return ,$out
+}
+$checks++
+$cPre = Get-Method "MobTracker.WaypointerCompat" "Prefix"
+$cFin = Get-Method "MobTracker.WaypointerCompat" "Finalizer"
+$why = @()
+if (-not $cPre -or -not $cFin) { $why += "WaypointerCompat.Prefix or .Finalizer not found" } else {
+    if (((Get-DepthStep $cPre) -join ",") -ne "+1") { $why += ("Prefix changes SuspendDepth by '{0}', not '+1'" -f ((Get-DepthStep $cPre) -join ",")) }
+    if (((Get-DepthStep $cFin) -join ",") -ne "-1") { $why += ("Finalizer changes SuspendDepth by '{0}', not '-1'" -f ((Get-DepthStep $cFin) -join ",")) }
+    if ($cFin.ReturnType.FullName -ne "System.Void" -or $cFin.Parameters.Count -ne 0) { $why += "Finalizer is not 'static void Finalizer()' - a non-void finalizer replaces or swallows the exception" }
+    if (-not $cPre.IsStatic -or -not $cFin.IsStatic) { $why += "Prefix and Finalizer must be static" }
+    $fi = @($cFin.Body.Instructions)
+    $dec = -1; for ($k = 0; $k -lt $fi.Count; $k++) { if ($fi[$k].OpCode.Name -eq "stsfld") { $dec = $k } }
+    $guarded = $false
+    for ($k = 0; $k -lt $dec - 3; $k++) { if ("$($fi[$k].OpCode.FlowControl)" -eq "Cond_Branch" -and [array]::IndexOf($fi, $fi[$k].Operand) -gt $dec) { $guarded = $true } }
+    if (-not $guarded) { $why += "Finalizer lowers SuspendDepth without a '> 0' test - a throw before the Prefix ran would drive it below 0" }
+}
+if ($why.Count -eq 0) { Ok "WaypointerCompat: Prefix raises SuspendDepth by 1; 'static void Finalizer()' lowers it by 1 while above 0" }
+else { Fail ("WaypointerCompat: " + ($why -join "; ")) }
+# (3) The one Harmony.Patch call: prefix = WaypointerCompat.Prefix, finalizer = WaypointerCompat.Finalizer, nothing
+#     else. As a postfix, the reset would not run when the method throws, and the list would stop blocking the game.
+$checks++
+$cAt = Get-Method "MobTracker.WaypointerCompat" "ApplyTo"
+$why = @()
+if (-not $cAt) { $why += "WaypointerCompat.ApplyTo not found" } else {
+    $ai = @($cAt.Body.Instructions)
+    $pc = @(Get-CallAt $ai "Harmony::Patch")
+    if ($pc.Count -ne 1) { $why += ("{0} Harmony.Patch calls, expected 1" -f $pc.Count) } else {
+        $src = Get-ArgumentSources $ai $pc[0] $cAt.Body.ExceptionHandlers
+        if ($ai[$pc[0]].Operand.Parameters.Count -ne 6) { $why += "not the 6-parameter Harmony.Patch" }
+        elseif ($null -eq $src) { $why += "its values could not be traced" }
+        else {
+            $got = @()
+            foreach ($v in 2..6) {
+                $k = $src[$v]
+                if ($ai[$k].OpCode.Name -ne "newobj") { $got += $ai[$k].OpCode.Name; continue }
+                # Get-ArgumentSources counts a constructor's "this" for a newobj too, so the arguments are the last three.
+                $hs = Get-ArgumentSources $ai $k $cAt.Body.ExceptionHandlers
+                if ($hs -and $hs.Count -ge 3) { $hs = @($hs[($hs.Count - 3)..($hs.Count - 1)]) }
+                $ok = $hs -and $hs.Count -eq 3 -and $ai[$hs[1]].OpCode.Name -eq "ldstr" -and $hs[0] -ge 1 -and $ai[$hs[0] - 1].OpCode.Name -eq "ldtoken" -and "$($ai[$hs[0] - 1].Operand.FullName)" -eq "MobTracker.WaypointerCompat"
+                $got += $(if ($ok) { "WaypointerCompat." + $ai[$hs[1]].Operand } else { "a HarmonyMethod not built from (typeof(WaypointerCompat), name)" })
+            }
+            $want = @("WaypointerCompat.Prefix", "ldnull", "ldnull", "WaypointerCompat.Finalizer", "ldnull")
+            if (($got -join ",") -cne ($want -join ",")) { $why += ("prefix, postfix, transpiler, finalizer, ilmanipulator are {0}, expected {1}" -f ($got -join ", "), ($want -join ", ")) }
+            $orig = Get-SourceKey $cAt $ai $src[1]
+            if ($orig -cne "loc <- Type::GetMethod") { $why += "the patched method is $orig, not the Type.GetMethod result" }
+        }
+    }
+    # What it asks for: public static IsTypingElsewhere() with no parameters (BindingFlags 24 = Public | Static).
+    $gm = @(Get-CallAt $ai "Type::GetMethod")
+    $gs = if ($gm.Count -eq 1) { Get-ArgumentSources $ai $gm[0] $cAt.Body.ExceptionHandlers } else { $null }
+    if ($null -eq $gs -or $gs.Count -ne 6) { $why += "expected one traceable Type.GetMethod(name, flags, binder, types, modifiers) call" }
+    elseif ("$($ai[$gs[1]].Operand)" -cne "IsTypingElsewhere" -or $ai[$gs[2]].OpCode.Name -notlike "ldc.i4*" -or [int]"$($ai[$gs[2]].Operand)" -ne 24 -or (Get-SourceKey $cAt $ai $gs[4]) -ne "Type::EmptyTypes") {
+        $why += ("GetMethod asks for '{0}' with flags {1} and types {2}, not 'IsTypingElsewhere', 24 (Public | Static), Type.EmptyTypes" -f $ai[$gs[1]].Operand, $ai[$gs[2]].Operand, (Get-SourceKey $cAt $ai $gs[4]))
+    }
+}
+if ($why.Count -eq 0) { Ok "WaypointerCompat.ApplyTo patches public static IsTypingElsewhere() with prefix Prefix and finalizer Finalizer, nothing else" }
+else { Fail ("WaypointerCompat.ApplyTo: " + ($why -join "; ")) }
+# (4) Where it looks: both editions' GUIDs, in Chainloader.PluginInfos; applied once, from Start (in Awake TomTom's
+#     assembly is not loaded yet: BepInEx creates the plugins in GUID order, com.mobtracker before DoomMachine).
+$checks++
+$cc = Get-Method "MobTracker.WaypointerCompat" ".cctor"
+$gl = if ($cc) { @($cc.Body.Instructions | Where-Object { $_.OpCode.Name -eq "ldstr" } | ForEach-Object { "$($_.Operand)" }) } else { @() }
+$why = @($(foreach ($g in @("DoomMachine.TomTom", "DoomMachine.Wayfinder")) { if ($gl -cnotcontains $g) { "no '$g' in WaypointerCompat.Guids" } }))
+$cAp = Get-Method "MobTracker.WaypointerCompat" "Apply"
+$tAp = if ($cAp) { Get-Touches $cAp } else { @{} }
+foreach ($need in @("Chainloader::get_PluginInfos", "WaypointerCompat::Guids", "WaypointerCompat::ApplyTo")) { if (-not $tAp.ContainsKey($need)) { $why += "Apply does not use $need" } }
+$applyCalls = @()
+foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }; foreach ($i in $m.Body.Instructions) { $op = $i.Operand; if ($op -is [Mono.Cecil.MethodReference] -and $op.Name -eq "Apply" -and $op.DeclaringType.FullName -eq "MobTracker.WaypointerCompat") { $applyCalls += ("{0}.{1}" -f $t.Name, $m.Name) } } } }
+if (($applyCalls -join ",") -ne "MobTrackerPlugin.Start") { $why += ("WaypointerCompat.Apply is called from {0}, expected once, from MobTrackerPlugin.Start" -f $(if ($applyCalls.Count) { $applyCalls -join ", " } else { "nowhere" })) }
+if ($why.Count -eq 0) { Ok "WaypointerCompat looks up DoomMachine.TomTom and DoomMachine.Wayfinder in Chainloader.PluginInfos, applied once from MobTrackerPlugin.Start" }
+else { Fail ("WaypointerCompat: " + ($why -join "; ")) }
+Test-Calls @(, @("MobTracker.MobTrackerPlugin", "Start", "WaypointerCompat::Apply", @("MobTrackerPlugin::_harmony"), $null))
+# (5) The other side, read from TomTom's and Wayfinder's own DLLs (the installed ones, or -Waypointer <dll>,<dll>): the
+#     method exists with that shape under a GUID WaypointerCompat names, it reads exactly the two flags the list
+#     forces, and nothing else in the plugin reads them - so standing aside inside it is the whole carve-out.
+$wpDlls = @($Waypointer | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+if ($wpDlls.Count -eq 0) {
+    foreach ($n in @("DoomMachine-TomTom\TomTom.dll", "DoomMachine-Wayfinder\Wayfinder.dll")) {
+        $f = Join-Path $ValheimDir "BepInEx\plugins\$n"
+        if (Test-Path -LiteralPath $f) { $wpDlls += $f }
+    }
+}
+if ($wpDlls.Count -eq 0) { Write-Output "  note  neither TomTom nor Wayfinder is installed; their side is not checked (-Waypointer <dll> checks a copy)" }
+foreach ($f in $wpDlls) {
+    $checks++
+    $why = @()
+    $wm = $null
+    try { $wm = [Mono.Cecil.ModuleDefinition]::ReadModule((Resolve-Path -LiteralPath $f).Path, $rp) } catch { $why += "cannot be read: $($_.Exception.Message)" }
+    $wpGuid = ""
+    if ($wm) {
+        $wp = $wm.GetType("Waypointer.Plugin")
+        if (-not $wp) { $why += "no Waypointer.Plugin" } else {
+            foreach ($ca in $wp.CustomAttributes) { if ($ca.AttributeType.Name -eq "BepInPlugin") { $wpGuid = "$($ca.ConstructorArguments[0].Value) $($ca.ConstructorArguments[2].Value)" } }
+            if ($gl -cnotcontains $wpGuid.Split(' ')[0]) { $why += "its GUID '$wpGuid' is not one WaypointerCompat looks for" }
+            $ite = $wp.Methods | Where-Object { $_.Name -eq "IsTypingElsewhere" -and $_.Parameters.Count -eq 0 } | Select-Object -First 1
+            if (-not $ite -or -not $ite.IsPublic -or -not $ite.IsStatic -or $ite.ReturnType.FullName -ne "System.Boolean") { $why += "no 'public static bool IsTypingElsewhere()'" }
+        }
+        $readers = @()
+        foreach ($t in $wm.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }; foreach ($i in $m.Body.Instructions) { $op = $i.Operand
+            if ($op -is [Mono.Cecil.MethodReference] -and @("TextInput::IsVisible", "Chat::HasFocus") -contains ($op.DeclaringType.Name + "::" + $op.Name)) { $readers += ("{0}.{1}>{2}::{3}" -f $t.Name, $m.Name, $op.DeclaringType.Name, $op.Name) } } } }
+        $readers = @($readers | Sort-Object -Unique)
+        if (($readers -join ",") -cne "Plugin.IsTypingElsewhere>Chat::HasFocus,Plugin.IsTypingElsewhere>TextInput::IsVisible") { $why += ("the readers of TextInput.IsVisible / Chat.HasFocus are {0}, expected Plugin.IsTypingElsewhere reading both" -f ($readers -join ", ")) }
+    }
+    if ($why.Count -eq 0) { Ok ("{0} ({1}): public static bool IsTypingElsewhere() is its only reader of TextInput.IsVisible and Chat.HasFocus" -f (Split-Path $f -Leaf), $wpGuid) }
+    else { Fail ("{0}: {1}" -f (Split-Path $f -Leaf), ($why -join "; ")) }
+}
+
+Write-Output "== clicks on the list stay on the list =="
+# The list is IMGUI, which uGUI cannot see: UiRaycastPatch empties EventSystem.RaycastAll's results while the pointer is
+# on the window, so no game UI under it gets a hover, press, click, drop or wheel. Checked here, because no build or
+# unit test can see it: the postfix runs last; it empties the list it is given (the input module's own cache, not a
+# copy); it decides from the raycast's own position; a pointer off the window skips the Clear; and Covers hands the
+# pure test (Rules.PointerOverWindow, unit-tested) the window's own rect in order, the drawing scale, the screen's
+# height and the point - a constant for the scale is TomTom's unscaled test, which misses the window above 1080p.
+$checks++
+$rcPostfix = $null
+foreach ($t in $patchClasses) { if ($t.Name -eq "UiRaycastPatch") { $rcPostfix = $t.Methods | Where-Object { $_.Name -eq "Postfix" } | Select-Object -First 1 } }
+$rcPriority = if ($rcPostfix) { Get-Priority $rcPostfix } else { $null }
+if ($null -ne $rcPriority -and $rcPriority -le 0) { Ok "UiRaycastPatch.Postfix runs at priority $rcPriority (Last), after every other postfix" }
+else { Fail ("UiRaycastPatch.Postfix priority is {0}; it must be Priority.Last (0), set on the method" -f $(if ($null -eq $rcPriority) { "unset" } else { $rcPriority })) }
+Test-Calls @(
+    @("MobTracker.UiRaycastPatch", "Postfix", 'List`1::Clear', @("arg raycastResults"), $null),
+    @("MobTracker.UiRaycastPatch", "Postfix", "EntityListWindow::Covers", @("PointerEventData::get_position"), $brfalse),
+    @("MobTracker.UiRaycastPatch", "Postfix", "PointerEventData::get_position", @("arg eventData"), $null),
+    @("MobTracker.EntityListWindow", "Covers", "Rules::PointerOverWindow",
+        @("Rect::get_x", "Rect::get_y", "Rect::get_width", "Rect::get_height", "EntityListWindow::get_GuiScale", "Screen::get_height", "Vector2::x", "Vector2::y"), @("ret"))
+)
+Test-Wiring @(
+    @("MobTracker.UiRaycastPatch", "Postfix", @("EntityListWindow::Covers"), @("ZInput::get_pointerPosition", 'List`1::Add', 'List`1::RemoveAt')),
+    @("MobTracker.EntityListWindow", "Covers", @("EntityListWindow::get_IsOpen", "EntityListWindow::_rect"), @()),
+    @("MobTracker.EntityListWindow", "OnGUI", @("GUILayout::Window", "set EntityListWindow::_rect"), @())
+)
 
 Write-Output "== assembly references =="
 foreach ($ar in $plug.AssemblyReferences) {

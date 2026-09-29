@@ -6,7 +6,8 @@ namespace MobTracker
     /// <summary>
     /// "Always track nearest watched": when the tracker loses a creature of a watched type - killed, or gone from this
     /// client (out of range, despawned) - wait five seconds, then track the nearest creature of that type that passes a
-    /// watch alert's filters (Alerts stars, AlertRadius, never tamed), looking again once a second, without a message,
+    /// watch alert's filters (Alerts stars, AlertRadius, never tamed) and is on the player's side of a dungeon entrance
+    /// (both inside a dungeon, or both outside), looking again once a second, without a message,
     /// until there is one. A watch alert for that type leaves the choice to this; tracking anything else (a click, Find
     /// area, an auto-tracked alert for another type), Stop tracking, turning the option off, unwatching the type,
     /// dying or leaving the world ends the wait. Losing a tamed creature starts none. The decisions live in
@@ -58,6 +59,8 @@ namespace MobTracker
                 return;
 
             Vector3 from = player.transform.position;
+            // Which side of a dungeon entrance the player is on, read once (Rules.SameLayer compares the creature's).
+            bool playerInside = Character.InInterior(from);
             Character nearest = null;
             float nearestDistance = float.MaxValue;
             foreach (Character character in Character.GetAllCharacters())
@@ -71,7 +74,8 @@ namespace MobTracker
                 if (Retrack.IsCandidate(string.Equals(Creature.PrefabName(character), Pending.Prefab, StringComparison.Ordinal),
                         character.GetZDOID() != ZDOID.None, character.IsTamed(),
                         StarFilters.Accepts(ModConfig.AlertStars.Value, character.GetLevel()),
-                        Rules.WithinRadius(distance, ModConfig.AlertRadius.Value))
+                        Rules.WithinRadius(distance, ModConfig.AlertRadius.Value),
+                        Rules.SameLayer(character.InInterior(), playerInside))
                     && distance < nearestDistance)
                 {
                     nearest = character;

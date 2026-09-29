@@ -106,8 +106,9 @@ $build = @("build", (Join-Path $repo "MobTracker.csproj"), "-c", "Release", "--n
     "-p:ImportDirectoryBuildProps=false", "-p:ImportDirectoryBuildTargets=false", "-p:ImportDirectoryPackagesProps=false",
     "-noAutoResponse")
 if ($ValheimDir) { $build += "-p:ValheimDir=$ValheimDir" }
+$global:LASTEXITCODE = $null   # cleared and read as the global, as deploy.ps1 does: never an earlier command's 0
 & dotnet @build
-if ($LASTEXITCODE -ne 0) { throw "The build failed." }
+if ($global:LASTEXITCODE -ne 0) { throw "The build failed." }
 $dll = Join-Path $repo "build\MobTracker.dll"
 $stamped = [Diagnostics.FileVersionInfo]::GetVersionInfo($dll).ProductVersion
 if ($stamped -ne "$version+$commit") { throw "The DLL says $stamped, not $version+$commit." }
