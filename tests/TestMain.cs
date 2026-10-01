@@ -22,6 +22,7 @@ namespace MobTracker
             AlertStarFilterTests();
             RetrackTests();
             RefreshTests();
+            GuideTests();
             PointerTests();
             ListKeyTests();
             Console.WriteLine(_failures == 0
@@ -350,7 +351,7 @@ namespace MobTracker
             Check("settle: every change restarts the wait", restarted, "");
 
             // A write that leaves the set as it was restarts the wait too: ConfigurationManager writes the setting at every
-            // keystroke, and a word typed so far ('T', 'Tw' ... of 'TwoStars') reads as All. The same write seen again on
+            // keystroke, and a text with no word it knows yet ('T', 'Tw' ... of 'TwoStars') reads as All. The same write seen again on
             // the next frames does not restart it.
             var w = new StarSetSettler();
             w.Settled(StarSet.OneStar, 0, 0f);
@@ -714,6 +715,22 @@ namespace MobTracker
             Check("retrack: with the player inside, the one outside is never taken, the one inside is",
                 !Retrack.IsCandidate(true, true, false, true, true, Rules.SameLayer(false, true))
                 && Retrack.IsCandidate(true, true, false, true, true, Rules.SameLayer(true, true)), "");
+        }
+
+        // The tracking guide's gate (0.5.1): hidden while any of its five reasons holds, shown only when none does.
+        private static void GuideTests()
+        {
+            string wrong = "";
+            for (int bits = 0; bits < 32; bits++)
+            {
+                bool hud = (bits & 1) != 0, cutscene = (bits & 2) != 0, dead = (bits & 4) != 0, respawn = (bits & 8) != 0, teleport = (bits & 16) != 0;
+                if (Rules.GuideHidden(hud, cutscene, dead, respawn, teleport) != (bits != 0)) wrong += bits + " ";
+            }
+            Check("guide: hidden exactly when the HUD is hidden, in a cutscene, dead, waiting for the respawn or teleporting (all 32 cases)", wrong == "", wrong);
+            Check("guide: each reason alone hides it", Rules.GuideHidden(true, false, false, false, false) && Rules.GuideHidden(false, true, false, false, false)
+                && Rules.GuideHidden(false, false, true, false, false) && Rules.GuideHidden(false, false, false, true, false)
+                && Rules.GuideHidden(false, false, false, false, true), "");
+            Check("guide: shown with none of them", !Rules.GuideHidden(false, false, false, false, false), "");
         }
 
         // The creature list's rows: ShouldRefresh(playerChanged, due, pointerOverWindow, mouseHeld). The case it is for:

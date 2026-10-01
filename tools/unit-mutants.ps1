@@ -102,6 +102,14 @@ $mutants = @(
     # A new game session starts the settler over (0.5.0).
     @("U50 Reset does nothing - a new session's Alerts: row waits 1.5 s", "StarFilter.cs", "            _started = false;`n", ""),
     @("U51 Reset makes All the settled set - a kept Alerts: row waits 1.5 s at the start of a session, with All in use", "StarFilter.cs", "            _started = false;`n", "            _settled = StarSet.All;`n"),
+    # The tracking guide's gate (0.5.1).
+    @("U52 a teleport no longer hides the guide", "Rules.cs", "return hudHidden || inCutscene || dead || waitingForRespawn || teleporting;", "return hudHidden || inCutscene || dead || waitingForRespawn;"),
+    @("U53 the respawn frame no longer hides the guide", "Rules.cs", "|| dead || waitingForRespawn ||", "|| dead ||"),
+    @("U54 a cutscene hides the guide only with the HUD hidden too", "Rules.cs", "return hudHidden || inCutscene ||", "return hudHidden && inCutscene ||"),
+    @("U55 GuideHidden always true - the guide never shows", "Rules.cs", "return hudHidden || inCutscene || dead || waitingForRespawn || teleporting;", "return true;"),
+    @("U56 GuideHidden always false - the guide never hides", "Rules.cs", "return hudHidden || inCutscene || dead || waitingForRespawn || teleporting;", "return false;"),
+    @("U57 GuideHidden hides when NOT teleporting", "Rules.cs", "return hudHidden || inCutscene || dead || waitingForRespawn || teleporting;", "return hudHidden || inCutscene || dead || waitingForRespawn || !teleporting;"),
+    @("U58 GuideHidden reads dead for the respawn frame", "Rules.cs", "return hudHidden || inCutscene || dead || waitingForRespawn || teleporting;", "return hudHidden || inCutscene || dead || dead || teleporting;"),
     @("U45 the barber stops the list closing", "Rules.cs", "return !(keyTypesText && (searchFocused || gameTyping));", "return !barber && !(keyTypesText && (searchFocused || gameTyping));")
 )
 $ids = @($mutants | ForEach-Object { ($_[0] -split " ")[0] })

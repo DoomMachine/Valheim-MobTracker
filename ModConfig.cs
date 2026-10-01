@@ -36,7 +36,7 @@ namespace MobTracker
 
         // How many times AlertStarsText has changed since the start: the settler behind EffectiveAlertStars restarts its
         // wait at every change of the text, also one that leaves AlertStars as it was (ConfigurationManager writes the
-        // setting at each keystroke, and a word typed so far reads as All until it is one Parse knows).
+        // setting at each keystroke, and a text with no word Parse knows yet reads as All).
         public static int AlertStarsRevision;
 
         /// <summary>Parsed view of <see cref="WatchlistEntry"/>; rebuilt whenever the entry changes.</summary>
@@ -59,8 +59,14 @@ namespace MobTracker
                 "GroundPath: a line along the walkable ground to a target up to 250 m away. The arrow shows instead beyond " +
                 "250 m, and as well while the line is missing or ends 5 m or more (measured on the flat) short of the " +
                 "target: still being built, a flying or swimming target, a cliff.");
-            ArrowSize = config.Bind("Tracking", "ArrowSize", 0.6f, "Arrow length in metres.");
-            ArrowHeight = config.Bind("Tracking", "ArrowHeight", 2.6f, "Arrow height above the player's feet, in metres.");
+            // Ranges, so the arrow can neither turn round (a negative size) nor vanish (0). BepInEx sets a value outside to
+            // the nearest end - also one read from the cfg, when the game starts - and saves it.
+            ArrowSize = config.Bind("Tracking", "ArrowSize", 0.6f,
+                new ConfigDescription("Arrow length in metres, from 0.1 to 3. A value outside the range is set to the nearest end.",
+                    new AcceptableValueRange<float>(0.1f, 3f)));
+            ArrowHeight = config.Bind("Tracking", "ArrowHeight", 2.6f,
+                new ConfigDescription("Height of the arrow's middle above the player's feet, in metres, from 0 to 5. A value " +
+                    "outside the range is set to the nearest end.", new AcceptableValueRange<float>(0f, 5f)));
 
             KeepBetweenSessions = config.Bind("General", "KeepBetweenSessions", false,
                 "Keep the watched creature types and both star filters - Watchlist, ListStarFilter and AlertStarFilter, " +

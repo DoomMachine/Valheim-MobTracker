@@ -67,6 +67,18 @@ namespace MobTracker
             return playerChanged || (due && !pointerOverWindow && !mouseHeld);
         }
 
+        /// <summary>
+        /// Whether the tracking guide - the arrow, the ground-path line and the "Tracking:" label - is hidden this frame:
+        /// while the player hides the HUD (Ctrl+F3), in a cutscene (the game's own reason to hide its HUD), while dead
+        /// (the body stays the local player for some seconds after death), in the frame the body is removed for the
+        /// respawn (dead no longer reads true there), and during a teleport. Hidden only: the tracking itself goes on until
+        /// there is no player (Tracker.LateUpdate stops it then - after a death, usually when the body is removed).
+        /// </summary>
+        public static bool GuideHidden(bool hudHidden, bool inCutscene, bool dead, bool waitingForRespawn, bool teleporting)
+        {
+            return hudHidden || inCutscene || dead || waitingForRespawn || teleporting;
+        }
+
         /// <summary>"Troll, serpent,," -> {Troll, serpent}, compared case-insensitively.</summary>
         public static HashSet<string> ParseWatchlist(string text)
         {

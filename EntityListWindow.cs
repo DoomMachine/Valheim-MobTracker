@@ -90,10 +90,7 @@ namespace MobTracker
             Player player = Player.m_localPlayer;
             if (player == null)
             {
-                // A Watch click not yet applied is dropped with the player (dead or logged out), never carried into the
-                // next game session's watchlist.
-                _pendingWatchToggle = null;
-                Close();
+                Close(); // also drops a click not yet applied, so it never reaches the next game session
                 return;
             }
 
@@ -183,9 +180,16 @@ namespace MobTracker
             _refreshNow = true; // the rows of this opening at once, wherever the pointer is (Rules.ShouldRefresh)
         }
 
-        /// <summary>Every way the list closes comes here, so the closing frame is always recorded.</summary>
+        /// <summary>
+        /// Every way the list closes comes here, so the closing frame is always recorded. A Watch or Find area click not
+        /// yet applied (they are applied in the next Update, while the list is open) is dropped first - also when the list
+        /// is already shut, as on every frame without a player - so it never runs at a later opening, possibly in
+        /// another world.
+        /// </summary>
         private void Close()
         {
+            _pendingWatchToggle = null;
+            _pendingFind = null;
             if (!IsOpen)
                 return;
             IsOpen = false;

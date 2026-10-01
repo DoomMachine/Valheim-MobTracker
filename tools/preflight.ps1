@@ -41,7 +41,8 @@
      is another object (by reference) and resets through ModConfig.ResetSession and WatchAlerts.ResetSession, called
      from nowhere else; unless KeepBetweenSessions (General, default false) is on, the reset writes each of the
      watchlist and the two star filters back to its own default, saving the cfg once afterwards; the watchlist
-     entry's own change handler re-parses it; a Watch click still waiting with no player is dropped
+     entry's own change handler re-parses it; closing the list (also on every frame with no player) drops a Watch or
+     Find area click still waiting
   8. every assembly the plugin references is in the game folder
   Run it after every Valheim update. Exits 1 on any failure. The number of checks depends on how many TomTom or
   Wayfinder DLLs it reads (one check each).
@@ -54,11 +55,25 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Plugin = "",
-    [string]$ExpectedVersion = "0.5.0",
+    [string]$ExpectedVersion = "0.5.1",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string[]]$Waypointer = @()   # TomTom / Wayfinder DLLs to check the carve-out against; default: the installed ones
 )
 $ErrorActionPreference = "Stop"
+# Close what Cecil holds - the game's modules and the resolver's cache of every assembly it resolved, whose files stay
+# open (read from disk, not into memory), and the plugin (read into memory) - at the end and when anything throws (the
+# trap; defined before any line that can throw, so a failure shows its own error), so tools\mutants.ps1 (once per
+# planted defect) and tools\deploy.ps1, which run this script in their own PowerShell process rather than starting a
+# second one, do not keep the game's DLLs locked.
+$gameModules = @{}
+$plug = $null
+$resolver = $null
+function Close-Cecil {
+    foreach ($gm in @($script:gameModules.Values)) { try { $gm.Dispose() } catch { } }
+    if ($script:plug) { try { $script:plug.Dispose() } catch { } }
+    if ($script:resolver) { try { $script:resolver.Dispose() } catch { } }
+}
+trap { Close-Cecil; break }
 # Drop a trailing \, and the " that powershell.exe -File leaves when a quoted path ending in
 # \ is the last argument (anywhere earlier it swallows the arguments after it: leave the \ off).
 $ValheimDir = $ValheimDir.TrimEnd('\', '"')
@@ -338,7 +353,7 @@ if ($rpm) {
         $p = $null
         if ($ins[$k].Operand -is [Mono.Cecil.ParameterDefinition]) { $p = $ins[$k].Operand }
         elseif ($ins[$k].OpCode.Name -match "^ldarg\.([0-3])$") { $p = $rpm.Parameters[[int]$Matches[1]] }
-        if (-not $p -or $p.Name -ne "__runOriginal" -or $ins[$k].OpCode.Name -notlike "ldarg*") { continue }
+        if (-not $p -or $p.Name -cne "__runOriginal" -or $ins[$k].OpCode.Name -notlike "ldarg*") { continue }
         if ($ins[$k + 1].OpCode.Name -like "brtrue*" -and $ins[$k + 2].OpCode.Name -eq "ldc.i4.0" -and $ins[$k + 3].OpCode.Name -eq "ret") { $guarded = $true }
     }
 }
@@ -502,6 +517,20 @@ function Get-VarIndex($i) {
     if ($i.Operand -is [Mono.Cecil.Cil.VariableDefinition]) { return $i.Operand.Index }
     if ($i.OpCode.Name -match '^(ld|st)loc\.(\d)$') { return [int]$Matches[2] }
     return -1
+}
+# A method's instructions as text, for the exact IL shapes below: branch targets as indexes, locals by number, members
+# as Type::Name, the short forms of opcodes as the long ones.
+function Get-Shape($m) {
+    $ins = @($m.Body.Instructions)
+    @(for ($k = 0; $k -lt $ins.Count; $k++) {
+        $i = $ins[$k]; $o = $i.Operand; $n = $i.OpCode.Name -replace '\.s$', ''
+        if ($n -match '^(st|ld)loc(\.\d)?$') { "{0}loc V{1}" -f $Matches[1], (Get-VarIndex $i) }
+        elseif ($o -is [Mono.Cecil.Cil.Instruction]) { "{0} ->{1}" -f $n, [array]::IndexOf($ins, $o) }
+        elseif ($o -is [Mono.Cecil.MethodReference] -or $o -is [Mono.Cecil.FieldReference]) { "{0} {1}::{2}" -f $n, $o.DeclaringType.Name, $o.Name }
+        elseif ($o -is [Mono.Cecil.TypeReference]) { "{0} {1}" -f $n, $o.FullName }
+        elseif ($null -ne $o) { "{0} {1}" -f $n, $o }
+        else { $n }
+    })
 }
 function Test-Calls($table) {
     # Each row: type, method, the call ("Type::Member", exactly one in the method; "Type::Member(ParamType,...)" names
@@ -685,6 +714,166 @@ foreach ($t in $plug.GetTypes()) {
 }
 if ($lostCalls.Count -eq 1 -and $lostCalls[0] -eq "Tracker.LateUpdate") { Ok "NearestWatched.Lost is called once, from Tracker.LateUpdate" }
 else { Fail ("NearestWatched.Lost must be called exactly once, from Tracker.LateUpdate; found: {0}" -f $(if ($lostCalls.Count) { $lostCalls -join ", " } else { "none" })) }
+# Which branch starts the re-track (SC-2): the NearestWatched.Lost call ends the lost-creature branch of LateUpdate -
+# IsTracking, not a point, and Target == null or Target.IsDead() - after the "Lost track of" message and Stop, and
+# nothing else leads to it (moved into the logged-out branch, Always track nearest watched would never start). An exact
+# IL shape of that block, branch targets relative to its start; a legitimate rewrite must be re-read against the IL.
+$checks++
+$why = @()
+$tlu = Get-Method "MobTracker.Tracker" "LateUpdate"
+if (-not $tlu) { $why += "Tracker.LateUpdate not found" }
+else {
+    $tShape = Get-Shape $tlu
+    $lost = [array]::IndexOf($tShape, "call NearestWatched::Lost")
+    $tWant = @("call Tracker::get_IsTracking", "brfalse ->29", "ldsfld Tracker::_isPoint", "brtrue ->29", "call Tracker::get_Target", "ldnull",
+        "call Object::op_Equality", "brtrue ->11", "call Tracker::get_Target", "callvirt Character::IsDead", "brfalse ->29",
+        "call MessageHud::get_instance", "ldnull", "call Object::op_Inequality", "brfalse ->25", "call MessageHud::get_instance", "ldc.i4.1",
+        "ldstr Lost track of ", "ldsfld Tracker::_targetName", "call String::Concat", "ldc.i4.0", "ldnull", "ldc.i4.0", "ldc.i4.1",
+        "callvirt MessageHud::ShowMessage", "call Tracker::Stop", "ldsfld Tracker::_targetPrefab", "ldsfld Tracker::_targetTamed",
+        "call NearestWatched::Lost")
+    $start = $lost - ($tWant.Count - 1)
+    if ($lost -lt 0 -or $start -lt 0) { $why += "no NearestWatched.Lost call, or too early in LateUpdate" }
+    else {
+        $tGot = @(for ($k = $start; $k -le $lost; $k++) {
+            $line = $tShape[$k]
+            if ($line -match '^(\S+) ->(\d+)$') { "{0} ->{1}" -f $Matches[1], ([int]$Matches[2] - $start) } else { $line }
+        })
+        if (($tGot -join "`n") -cne ($tWant -join "`n")) { $why += ("the block that ends in NearestWatched.Lost is not: {0} - it is: {1}" -f ($tWant -join "; "), ($tGot -join "; ")) }
+        if (@($tShape | Where-Object { $_ -ceq "call NearestWatched::Lost" }).Count -ne 1) { $why += "NearestWatched.Lost is called more than once in LateUpdate" }
+    }
+}
+if ($why.Count -eq 0) { Ok "Tracker.LateUpdate: NearestWatched.Lost ends the lost-creature branch (tracking, not a point, Target null or dead), after 'Lost track of' and Stop" }
+else { Fail ("Tracker.LateUpdate: " + ($why -join "; ")) }
+# Auto-track's "not while a creature is tracked" (SC-1): WatchAlerts.Update asks Tracker.IsTrackingCreature once and
+# skips the auto-track on true (brtrue), and never asks IsTracking - which would also refuse to take over a Find area arrow.
+Test-Calls @(,
+    @("MobTracker.WatchAlerts", "Update", "Tracker::get_IsTrackingCreature", @(), $brtrue)
+)
+$checks++
+$waU = Get-Method "MobTracker.WatchAlerts" "Update"
+$waTracking = if ($waU) { @(Get-Shape $waU | Where-Object { $_ -ceq "call Tracker::get_IsTracking" }).Count } else { -1 }
+if ($waTracking -eq 0) { Ok "WatchAlerts.Update never asks Tracker.IsTracking (a Find area arrow gives way to an alert)" }
+else { Fail ("WatchAlerts.Update asks Tracker.IsTracking {0} time(s); Auto-track must ask IsTrackingCreature only" -f $waTracking) }
+# What it asks, and the whole condition: IsTrackingCreature is 'IsTracking && !_isPoint', and every test of Auto-track's
+# condition - AutoTrack on, no creature tracked, the same side of a dungeon entrance, no re-track waiting for the type -
+# skips to the instruction after Tracker.Track. Exact IL shapes, as above.
+$checks++
+$why = @()
+$itc = Get-Method "MobTracker.Tracker" "get_IsTrackingCreature"
+$itcWant = @("call Tracker::get_IsTracking", "brfalse ->6", "ldsfld Tracker::_isPoint", "ldc.i4.0", "ceq", "ret", "ldc.i4.0", "ret")
+$itcGot = if ($itc) { @(Get-Shape $itc) } else { @() }
+if (($itcGot -join "`n") -cne ($itcWant -join "`n")) { $why += ("IsTrackingCreature is not 'IsTracking && !_isPoint': {0}" -f ($itcGot -join "; ")) }
+if ($waU) {
+    $waSh = Get-Shape $waU
+    $tk = @(for ($k = 0; $k -lt $waSh.Count; $k++) { if ($waSh[$k] -ceq "call Tracker::Track") { $k } })
+    $atWant = @("ldsfld ModConfig::AutoTrack", 'callvirt ConfigEntry`1::get_Value', "brfalse ->17", "call Tracker::get_IsTrackingCreature", "brtrue ->17",
+        "ldloc V2", "callvirt Character::InInterior", "ldloc V1", "call Character::InInterior", "call Rules::SameLayer", "brfalse ->17",
+        "ldloc V2", "call Creature::PrefabName", "call NearestWatched::IsPendingFor", "brtrue ->17", "ldloc V2", "call Tracker::Track")
+    if ($tk.Count -ne 1 -or $tk[0] -lt 16) { $why += "WatchAlerts.Update does not call Tracker.Track once" }
+    else {
+        $s0 = $tk[0] - 16
+        $atGot = @(for ($k = $s0; $k -le $tk[0]; $k++) { if ($waSh[$k] -match '^(\S+) ->(\d+)$') { "{0} ->{1}" -f $Matches[1], ([int]$Matches[2] - $s0) } else { $waSh[$k] } })
+        if (($atGot -join "`n") -cne ($atWant -join "`n")) { $why += ("Auto-track is not: {0} - it is: {1}" -f ($atWant -join "; "), ($atGot -join "; ")) }
+    }
+} else { $why += "WatchAlerts.Update not found" }
+if ($why.Count -eq 0) { Ok "Tracker.IsTrackingCreature is IsTracking && !_isPoint, and WatchAlerts.Update auto-tracks only with AutoTrack on, no creature tracked, the same side and no re-track waiting" }
+else { Fail ("Auto-track: " + ($why -join "; ")) }
+# The tracking guide hides - arrow, ground-path line and label - while Rules.GuideHidden says so: LateUpdate gives it the
+# HUD-hidden flag, the guarded cutscene test, dead, waiting for the respawn and teleporting, each read from the local
+# player (V0, Player.m_localPlayer - never the target), stores the answer for OnGUI and, on true, turns the arrow and
+# the line off and returns; OnGUI draws nothing while it is set. Exact IL shapes, as above.
+$checks++
+$why = @()
+$tl = Get-Method "MobTracker.Tracker" "LateUpdate"
+if (-not $tl) { $why += "Tracker.LateUpdate not found" } else {
+    $sh = Get-Shape $tl
+    if ($sh.Count -lt 2 -or $sh[0] -cne "ldsfld Player::m_localPlayer" -or $sh[1] -cne "stloc V0") { $why += "it does not start by storing Player.m_localPlayer in V0" }
+    $calls = @(for ($k = 0; $k -lt $sh.Count; $k++) { if ($sh[$k] -ceq "call Rules::GuideHidden") { $k } })
+    # Where it sits: right after the !IsTracking block and the tamed refresh - after the lost and reached tests, which
+    # must go on while the guide is hidden, and before anything that shows the guide.
+    $gWant = @("call Tracker::get_IsTracking", "brtrue ->11", "ldarg.0", "ldfld Tracker::_arrow", "ldc.i4.0", "callvirt GameObject::SetActive", "ldarg.0",
+        "ldfld Tracker::_line", "ldc.i4.0", "callvirt Renderer::set_enabled", "ret",
+        "ldsfld Tracker::_isPoint", "brtrue ->21", "call Tracker::get_Target", "callvirt Character::GetZDOID", "ldsfld ZDOID::None", "call ZDOID::op_Inequality",
+        "brfalse ->21", "call Tracker::get_Target", "callvirt Character::IsTamed", "stsfld Tracker::_targetTamed",
+        "call Hud::IsUserHidden", "ldloc V0", "call Tracker::InCutscene", "ldloc V0", "callvirt Character::IsDead", "call Tracker::WaitingForRespawn",
+        "ldloc V0", "callvirt Character::IsTeleporting", "call Rules::GuideHidden", "stsfld Tracker::_guideHidden", "ldsfld Tracker::_guideHidden",
+        "brfalse ->42", "ldarg.0", "ldfld Tracker::_arrow", "ldc.i4.0", "callvirt GameObject::SetActive", "ldarg.0", "ldfld Tracker::_line", "ldc.i4.0",
+        "callvirt Renderer::set_enabled", "ret")
+    if ($calls.Count -ne 1) { $why += ("Rules.GuideHidden is called {0} time(s), expected once" -f $calls.Count) }
+    else {
+        $start = $calls[0] - 29
+        $gGot = @(for ($k = [Math]::Max(0, $start); $k -lt [Math]::Min($sh.Count, $start + $gWant.Count); $k++) {
+            if ($sh[$k] -match '^(\S+) ->(\d+)$') { "{0} ->{1}" -f $Matches[1], ([int]$Matches[2] - $start) } else { $sh[$k] }
+        })
+        if ($start -lt 0 -or ($gGot -join "`n") -cne ($gWant -join "`n")) { $why += ("the gate is not: {0} - it is: {1}" -f ($gWant -join "; "), ($gGot -join "; ")) }
+    }
+}
+$stores = @()
+foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }
+    foreach ($i in $m.Body.Instructions) { if ($i.OpCode.Name -eq "stsfld" -and $i.Operand -is [Mono.Cecil.FieldReference] -and $i.Operand.Name -ceq "_guideHidden") { $stores += ("{0}.{1}" -f $t.Name, $m.Name) } } } }
+if ($stores.Count -ne 1 -or $stores[0] -cne "Tracker.LateUpdate") { $why += ("_guideHidden is stored in {0}, expected only in Tracker.LateUpdate" -f ($stores -join ", ")) }
+$tg = Get-Method "MobTracker.Tracker" "OnGUI"
+$oWant = @("call Tracker::get_IsTracking", "brfalse ->4", "ldsfld Tracker::_guideHidden", "brfalse ->5", "ret")
+$oGot = if ($tg) { @(Get-Shape $tg | Select-Object -First $oWant.Count) } else { @() }
+if (($oGot -join "`n") -cne ($oWant -join "`n")) { $why += ("OnGUI does not start with: {0} - it starts with: {1}" -f ($oWant -join "; "), ($oGot -join "; ")) }
+$ic = Get-Method "MobTracker.Tracker" "InCutscene"
+$icWant = @("ldarg.0", "callvirt Character::InCutscene", "stloc V0", "leave ->8", "pop", "ldc.i4.0", "stloc V0", "leave ->8", "ldloc V0", "ret")
+if (-not $ic) { $why += "Tracker.InCutscene not found" } else {
+    $icGot = @(Get-Shape $ic)
+    $icCatch = @($ic.Body.ExceptionHandlers | Where-Object { "$($_.HandlerType)" -eq "Catch" -and $_.CatchType.FullName -ceq "System.Exception" })
+    if (($icGot -join "`n") -cne ($icWant -join "`n") -or $icCatch.Count -ne 1) { $why += ("InCutscene is not 'try {{ return player.InCutscene(); }} catch (Exception) {{ return false; }}': {0}; handlers: {1}" -f ($icGot -join "; "), ((@($ic.Body.ExceptionHandlers | ForEach-Object { "{0} {1}" -f $_.HandlerType, $_.CatchType.FullName })) -join ", ")) }
+}
+$wr = Get-Method "MobTracker.Tracker" "WaitingForRespawn"
+$wrWant = @("call Game::get_instance", "stloc V0", "ldloc V0", "ldnull", "call Object::op_Inequality", "brfalse ->9", "ldloc V0", "callvirt Game::WaitingForRespawn", "ret", "ldc.i4.0", "ret")
+$wrGot = if ($wr) { @(Get-Shape $wr) } else { @() }
+if (($wrGot -join "`n") -cne ($wrWant -join "`n")) { $why += ("WaitingForRespawn is not 'Game.instance != null && Game.instance.WaitingForRespawn()': {0}" -f ($wrGot -join "; ")) }
+if ($why.Count -eq 0) { Ok "Tracker: the guide hides (arrow, line, label) while Rules.GuideHidden(HUD hidden, cutscene, dead, waiting for the respawn, teleporting) of the local player says so; the cutscene test is guarded" }
+else { Fail ("Tracker: " + ($why -join "; ")) }
+# ArrowSize and ArrowHeight carry an allowed range (BepInEx clamps a value outside, also one read from the cfg): the
+# arrow can neither turn round (a negative size) nor vanish (0).
+$checks++
+$why = @()
+$bd = Get-Method "MobTracker.ModConfig" "Bind"
+$bi2 = if ($bd) { @($bd.Body.Instructions) } else { @() }
+foreach ($want in @(@("ArrowSize", [single]0.1, [single]3), @("ArrowHeight", [single]0, [single]5))) {
+    $st = @(for ($k = 0; $k -lt $bi2.Count; $k++) { $o = $bi2[$k].Operand; if ($bi2[$k].OpCode.Name -eq "stsfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.Name -ceq $want[0]) { $k } })
+    if ($st.Count -ne 1) { $why += ("{0} is stored {1} time(s) in Bind" -f $want[0], $st.Count); continue }
+    $ctor = -1
+    for ($k = $st[0] - 1; $k -ge 0; $k--) {
+        if ($bi2[$k].OpCode.Name -eq "stsfld") { break }
+        $o = $bi2[$k].Operand
+        if ($bi2[$k].OpCode.Name -eq "newobj" -and $o -is [Mono.Cecil.MethodReference] -and $o.DeclaringType.Name -ceq 'AcceptableValueRange`1') { $ctor = $k; break }
+    }
+    if ($ctor -lt 2 -or $bi2[$ctor - 2].OpCode.Name -ne "ldc.r4" -or $bi2[$ctor - 1].OpCode.Name -ne "ldc.r4") { $why += ("{0} has no AcceptableValueRange<float>(literal, literal)" -f $want[0]); continue }
+    $lo = [single]$bi2[$ctor - 2].Operand; $hi = [single]$bi2[$ctor - 1].Operand
+    if ($lo -ne $want[1] -or $hi -ne $want[2]) { $why += ("{0}'s range is {1} to {2}, expected {3} to {4}" -f $want[0], $lo, $hi, $want[1], $want[2]) }
+    # The whole statement: config.Bind("Tracking", "<the field's name>", <float>, new ConfigDescription(<text>,
+    # new AcceptableValueRange<float>(lo, hi))) - the range as ConfigDescription's acceptable values (a tag would range
+    # nothing), on the field's own key (another key would hand back the other entry).
+    $bc = $st[0] - 1
+    $okStmt = $bc -ge 10
+    if ($okStmt) {
+        $seq = @($bi2[($bc - 10)..$bc])
+        $okStmt = (($seq | ForEach-Object { $_.OpCode.Name }) -join ",") -ceq "ldarg.0,ldstr,ldstr,ldc.r4,ldstr,ldc.r4,ldc.r4,newobj,call,newobj,callvirt" -and
+            "$($seq[1].Operand)" -ceq "Tracking" -and "$($seq[2].Operand)" -ceq $want[0] -and $seq[7].Operand.DeclaringType.Name -ceq 'AcceptableValueRange`1' -and
+            $seq[8].Operand.Name -ceq "Empty" -and $seq[9].Operand.DeclaringType.Name -ceq "ConfigDescription" -and $seq[10].Operand.Name -ceq "Bind"
+    }
+    if (-not $okStmt) { $why += ("{0} is not config.Bind(Tracking, {0}, <default>, new ConfigDescription(<text>, new AcceptableValueRange<float>(lo, hi)))" -f $want[0]) }
+}
+if ($why.Count -eq 0) { Ok "ModConfig.Bind: ArrowSize ranges 0.1 to 3 and ArrowHeight 0 to 5 (AcceptableValueRange as ConfigDescription's acceptable values, each on its own key)" }
+else { Fail ("ModConfig.Bind: " + ($why -join "; ")) }
+# And the arrow uses them: its length is ArrowSize alone (read once, as the scale), its height ArrowHeight alone (read
+# twice, each an up offset).
+$checks++
+$why = @()
+$lu = Get-Method "MobTracker.Tracker" "LateUpdate"
+$luSh = if ($lu) { @(Get-Shape $lu) } else { @() }
+$sz = @(for ($k = 0; $k -lt $luSh.Count; $k++) { if ($luSh[$k] -ceq "ldsfld ModConfig::ArrowSize") { $k } })
+$ht = @(for ($k = 0; $k -lt $luSh.Count; $k++) { if ($luSh[$k] -ceq "ldsfld ModConfig::ArrowHeight") { $k } })
+if ($sz.Count -ne 1 -or $luSh[$sz[0] - 1] -cne "call Vector3::get_one" -or $luSh[$sz[0] + 2] -cne "call Vector3::op_Multiply" -or $luSh[$sz[0] + 3] -cne "callvirt Transform::set_localScale") { $why += "the arrow's scale is not Vector3.one * ArrowSize.Value (ArrowSize read once)" }
+if ($ht.Count -ne 2) { $why += ("ArrowHeight is read {0} time(s), expected twice" -f $ht.Count) }
+foreach ($h in $ht) { if ($luSh[$h - 1] -cne "call Vector3::get_up" -or $luSh[$h + 2] -cne "call Vector3::op_Multiply" -or $luSh[$h + 3] -cne "call Vector3::op_Addition") { $why += "ArrowHeight at $h is not an up offset" } }
+if ($why.Count -eq 0) { Ok "Tracker.LateUpdate scales the arrow by ArrowSize alone and lifts it by ArrowHeight alone" } else { Fail ("Tracker.LateUpdate arrow settings: " + ($why -join "; ")) }
 $checks++
 $retrackLost = @()
 foreach ($t in $plug.GetTypes()) {
@@ -723,20 +912,7 @@ foreach ($component in @("NearestWatched", "GameSession")) {
 
 Write-Output "== the game session =="
 # With KeepBetweenSessions off (the default), the watchlist and both star filters last one game session: the life of
-# the world's Game object. A method's instructions as text, for the exact shapes below: branch targets as indexes,
-# locals by number, members as Type::Name, the short forms of opcodes as the long ones.
-function Get-Shape($m) {
-    $ins = @($m.Body.Instructions)
-    @(for ($k = 0; $k -lt $ins.Count; $k++) {
-        $i = $ins[$k]; $o = $i.Operand; $n = $i.OpCode.Name -replace '\.s$', ''
-        if ($n -match '^(st|ld)loc(\.\d)?$') { "{0}loc V{1}" -f $Matches[1], (Get-VarIndex $i) }
-        elseif ($o -is [Mono.Cecil.Cil.Instruction]) { "{0} ->{1}" -f $n, [array]::IndexOf($ins, $o) }
-        elseif ($o -is [Mono.Cecil.MethodReference] -or $o -is [Mono.Cecil.FieldReference]) { "{0} {1}::{2}" -f $n, $o.DeclaringType.Name, $o.Name }
-        elseif ($o -is [Mono.Cecil.TypeReference]) { "{0} {1}" -f $n, $o.FullName }
-        elseif ($null -ne $o) { "{0} {1}" -f $n, $o }
-        else { $n }
-    })
-}
+# the world's Game object.
 # GameSession.Update sees a session end or begin: Game.instance compared by reference with the Game of the last look
 # (bne.un - Unity's == would be a call of op_Equality, to which the destroyed Game of the world just left equals null,
 # so a logout would go unseen), and on a difference the new one stored, then ModConfig.ResetSession and
@@ -819,9 +995,23 @@ else {
         [array]::IndexOf($rsIns, $_.TryStart) -le $saves[0] -and [array]::IndexOf($rsIns, $_.TryEnd) -gt $saves[0] })
     if ($off.Count -ne 1 -or $first -lt 0 -or $off[0] -gt $first) { $why += "SaveOnConfigSet is not set false once, before the first write" }
     if ($fin.Count -ne 1) { $why += "SaveOnConfigSet is not put back (from a local) in a finally around the writes" }
+    # SC-5: what decides whether the writes happen, and that the value put back is the one read before - exact.
+    $gate = @("ldsfld ModConfig::WatchlistEntry", "call ModConfig::Held", "ldsfld ModConfig::ListStarsText", "call ModConfig::Held",
+        "ldsfld ModConfig::AlertStarsText", "call ModConfig::Held", "call String::Concat", "stloc V0", "ldloc V0", "callvirt String::get_Length",
+        "brtrue ->16", "ret", "ldsfld ModConfig::WatchlistEntry", "callvirt ConfigEntryBase::get_ConfigFile", "stloc V1", "ldloc V1",
+        "callvirt ConfigFile::get_SaveOnConfigSet", "stloc V2", "ldloc V1", "ldc.i4.0", "callvirt ConfigFile::set_SaveOnConfigSet")
+    if ($shape.Count -lt 25 -or (($shape[4..24]) -join "`n") -cne ($gate -join "`n")) {
+        $why += ("after KeepBetweenSessions it is not: {0} - it is: {1}" -f ($gate -join "; "), (($shape | Select-Object -Skip 4 -First 21) -join "; "))
+    }
+    if ($back.Count -ne 1 -or $shape[$back[0] - 1] -cne "ldloc V2" -or $shape[$back[0] - 2] -cne "ldloc V1") { $why += "the finally does not put back the SaveOnConfigSet value read before (ldloc V1; ldloc V2)" }
+    $held = Get-Method "MobTracker.ModConfig" "Held"
+    $hWant = @("ldarg.0", 'callvirt ConfigEntry`1::get_Value', "ldarg.0", "callvirt ConfigEntryBase::get_DefaultValue", "castclass System.String",
+        "call String::op_Equality", "brfalse ->9", "ldstr ", "ret")
+    $hGot = if ($held) { @(Get-Shape $held | Select-Object -First $hWant.Count) } else { @() }
+    if (($hGot -join "`n") -cne ($hWant -join "`n")) { $why += ("Held does not start with: {0} - it starts with: {1}" -f ($hWant -join "; "), ($hGot -join "; ")) }
     if ($saves.Count -ne 1 -or $saves[0] -lt $last -or $caught.Count -ne 1) { $why += "the cfg is not saved once, after the writes, inside a try with a catch" }
 }
-if ($why.Count -eq 0) { Ok "ModConfig.ResetSession: returns first when KeepBetweenSessions is on; else writes Watchlist, ListStarFilter and AlertStarFilter each once, with its own default, with SaveOnConfigSet off (put back in a finally), then saves once, catching a failure" }
+if ($why.Count -eq 0) { Ok "ModConfig.ResetSession: returns first when KeepBetweenSessions is on, and when Held finds every entry at its default; else writes Watchlist, ListStarFilter and AlertStarFilter each once, with its own default, with SaveOnConfigSet off (the value read before put back in a finally), then saves once, catching a failure" }
 else { Fail ("ModConfig.ResetSession: " + ($why -join "; ")) }
 # KeepBetweenSessions is General.KeepBetweenSessions, off unless the player turns it on.
 $checks++
@@ -851,31 +1041,43 @@ else {
 }
 if ($why.Count -eq 0) { Ok "ModConfig.Bind: General.KeepBetweenSessions, default false - the choices last one game session unless the player keeps them" }
 else { Fail ("KeepBetweenSessions: " + ($why -join "; ")) }
-# A Watch click is applied in the next Update while the list is open; one still waiting when the player is gone is
-# dropped there (ldnull; stsfld _pendingWatchToggle before the no-player Close), not carried into the next session.
+# A Watch or Find area click is applied in the next Update while the list is open. Close drops both first (ldnull;
+# stsfld _pendingWatchToggle; ldarg.0; ldflda _pendingFind; initobj, before its IsOpen test), so neither runs at a later
+# opening, possibly in another world; and with no local player Update calls Close at once (the true branch of
+# Player.m_localPlayer == null: ldarg.0; call Close; ret) - on every such frame, so a click is dropped with the player.
 $checks++
 $why = @()
+$lwClose = Get-Method "MobTracker.EntityListWindow" "Close"
+if (-not $lwClose) { $why += "Close not found" }
+else {
+    $cShape = Get-Shape $lwClose
+    $cWant = @("ldnull", "stsfld EntityListWindow::_pendingWatchToggle", "ldarg.0", "ldflda EntityListWindow::_pendingFind",
+        'initobj System.Nullable`1<MobTracker.EntityListWindow/Row>', "call EntityListWindow::get_IsOpen")
+    if ($cShape.Count -lt $cWant.Count -or (($cShape[0..($cWant.Count - 1)]) -join "`n") -cne ($cWant -join "`n")) {
+        $why += ("Close does not start with: {0} - it starts with: {1}" -f ($cWant -join "; "), (($cShape | Select-Object -First $cWant.Count) -join "; "))
+    }
+}
 $lwUpdate = Get-Method "MobTracker.EntityListWindow" "Update"
-if (-not $lwUpdate) { $why += "not found" }
+if (-not $lwUpdate) { $why += "Update not found" }
 else {
     $ins = @($lwUpdate.Body.Instructions)
     $shape = Get-Shape $lwUpdate
     $close = [array]::IndexOf($shape, "call EntityListWindow::Close")
-    if ($close -lt 6) { $why += "no Close call after the player test" }
+    if ($close -lt 4) { $why += "no Close call after the player test" }
     else {
-        if ($shape[$close - 3] -cne "ldnull" -or $shape[$close - 2] -cne "stsfld EntityListWindow::_pendingWatchToggle" -or $shape[$close - 1] -cne "ldarg.0" -or $shape[$close + 1] -cne "ret") {
-            $why += "the first Close is not preceded by _pendingWatchToggle = null and followed by return"
-        }
-        $eq = $close - 5
-        if ($shape[$close - 4] -cnotlike "brfalse ->*" -or $shape[$eq] -cne "call Object::op_Equality") { $why += "the first Close is not in the branch of a == test" }
+        if ($shape[$close - 1] -cne "ldarg.0" -or $shape[$close + 1] -cne "ret") { $why += "the first Close is not 'ldarg.0; call Close; ret'" }
+        $keys = [array]::IndexOf($shape, "call EntityListWindow::HandleKeys")
+        if ($keys -lt 0 -or $keys -lt $close) { $why += "the list's keys are read before the no-player test closes the list" }
+        $eq = $close - 3
+        if ($shape[$close - 2] -cnotlike "brfalse ->*" -or $shape[$eq] -cne "call Object::op_Equality") { $why += "the first Close is not in the branch of a == test" }
         else {
             $src = Get-ArgumentSources $ins $eq
             if ($null -eq $src -or (Get-SourceKey $lwUpdate $ins $src[0]) -cne "loc <- Player::m_localPlayer" -or $ins[$src[1]].OpCode.Name -ne "ldnull") { $why += "the == test before the first Close is not Player.m_localPlayer == null" }
         }
     }
 }
-if ($why.Count -eq 0) { Ok "EntityListWindow.Update: with no local player, a Watch click still waiting is dropped before the list closes" }
-else { Fail ("EntityListWindow.Update: " + ($why -join "; ")) }
+if ($why.Count -eq 0) { Ok "EntityListWindow: Close drops a Watch and a Find area click still waiting before anything else, and Update closes the list on every frame with no local player, before it reads the list's keys" }
+else { Fail ("EntityListWindow: " + ($why -join "; ")) }
 # The parsed watchlist follows its entry: Bind adds exactly one SettingChanged handler to WatchlistEntry, and it is
 # Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value), nothing else. Without it, the reset (and every Watch click)
 # would change the cfg and leave the watchlist the alerts read as it was.
@@ -1821,6 +2023,8 @@ foreach ($ar in $plug.AssemblyReferences) {
     if ((Test-Path -LiteralPath (Join-Path $managed ($ar.Name + ".dll"))) -or (Test-Path -LiteralPath (Join-Path $core ($ar.Name + ".dll")))) { Ok $ar.Name }
     else { Fail ("{0} cannot be found in the game folder" -f $ar.Name) }
 }
+
+Close-Cecil
 
 Write-Output ""
 if ($failures -eq 0) { Write-Output "PREFLIGHT PASSED - $checks checks, 0 failures."; exit 0 }

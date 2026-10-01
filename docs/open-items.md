@@ -4,7 +4,7 @@ The one list of what is untested, unverified, open or only an idea for MobTracke
 again. It lives with the code, so each release can check it. What a player meets is in the README's "Known limits";
 what each release changed is in its "History".
 
-As of **0.5.0**.
+As of **0.5.1**.
 
 ## Keeping it up to date
 
@@ -24,7 +24,9 @@ work.
 
 ## Not yet tried in play
 
-0.5.0 has not been played yet. 0.4.1 - and with it the changes of 0.4.0 and 0.3.1 - ran through a long play session
+0.5.1 has not been played yet. 0.5.0 ran through a long play session, with several logouts, without errors: at its
+first world entry it set back the **Alerts:** filter 0.4.1 had saved (LT-14), but nothing was watched in it, so a reset
+at a logout was not seen. 0.4.1 - and with it the changes of 0.4.0 and 0.3.1 - ran through a long play session
 without errors, in which a watch alert came, the `AlertStarFilter` held several categories at once, types were watched
 and unwatched and the guide mode was switched; none of the checks below was run in it as written. 0.3.0 and 0.2.0 each
 ran through play sessions without errors, but Always track nearest watched (0.3.0) has not been seen acting, and
@@ -36,7 +38,9 @@ two stars. Afterwards, `BepInEx/LogOutput.log` should have no exception naming M
 
 ### LT-14 0.5.0: one game session
 
-- [ ] The log says `MobTracker 0.5.0 loaded`, and the cfg has `KeepBetweenSessions = false` under `[General]`.
+- [x] The log says `MobTracker 0.5.0 loaded`, and the cfg has `KeepBetweenSessions = false` under `[General]`.
+- [x] With `KeepBetweenSessions` off, a filter 0.4.1 saved in the cfg is set back at the first world entry, and the log's
+  `Game session changed and KeepBetweenSessions is off` line names it.
 - [ ] With `KeepBetweenSessions` off, watch a type and set both star rows to something other than *All*. Log out and
   enter a world again: nothing is watched, both rows are on *All*, and the log has a `Game session changed and
   KeepBetweenSessions is off` line naming what was set back.
@@ -50,6 +54,22 @@ two stars. Afterwards, `BepInEx/LogOutput.log` should have no exception naming M
   start), then enter one: the watchlist and both rows are as the older version left them.
 - [ ] Log out with text in the list's search and the all-types view on, then enter a world: the list opens with the same
   search and view.
+
+### LT-15 0.5.1's fixes
+
+- [ ] While tracking, Ctrl+F3 hides the arrow, the ground-path line and the "Tracking:" label, and Ctrl+F3 again brings
+  them back.
+- [ ] While tracking, the guide is hidden while you sleep in a bed, and comes back when you wake.
+- [ ] While tracking, the guide is hidden through a portal. When the tracking survives the teleport - a Find area does,
+  unless you arrive within 30 m of it ("Reached ...") or a watch alert takes it over with Auto-track on (the guide then
+  comes back for that creature), and a creature only when it is still within loading range of the arrival portal
+  (LT-11: roughly 130 to 290 m) - the guide comes back on arrival. A creature left farther behind is unloaded during
+  the teleport and lost: its "Lost track of" message comes while the screen is still dark, so it may not be seen, and
+  its guide does not come back.
+- [ ] With a bed set, while tracking, the guide is hidden from the moment you die; about 10 seconds later the tracking
+  ends (OI-4).
+- [ ] With the game closed, set `ArrowSize = 0` and `ArrowHeight = 9` in the cfg: at the next start the arrow is 0.1 m
+  long and 5 m up, and the cfg says `0.1` and `5`.
 
 ### LT-1 0.4.1's fixes
 
@@ -226,46 +246,23 @@ These would matter only if they happen:
 
 ## Small fixes still open
 
-None is serious. The OI items were found by reading the code, not seen in the game; the SC and TL items are for
-contributors.
+None is serious. The OI item was found by reading the code, not seen in the game; the SC items are for contributors.
 
 **In the game**
 
-### OI-1 Tracking arrow display quirks
+### OI-4 Tracking ends at a death
 
-The 3D tracking arrow stays visible while the HUD is hidden (Ctrl+F3 hides only its label) and during cutscenes, and
-after you die it keeps pointing from where you fell until you respawn. `ArrowSize` and `ArrowHeight` accept any
-number: a negative `ArrowSize` turns the arrow around, and 0 hides it.
-
-Possible fix: hide the arrow while the HUD is hidden (the test the label already makes), in a cutscene and while you
-are dead, and give `ArrowSize` and `ArrowHeight` an allowed range.
-
-### OI-2 A Watch or Find area click can be applied late
-
-A Watch, Unwatch or Find area click made in the last frame before the list closes is not lost: it is applied the next
-time the list opens. Since 0.5.0 a Watch or Unwatch click still waiting is dropped on any frame with no player, so it
-no longer reaches another game session. A Find area click is still kept, also across a logout: the next time the list
-opens, possibly in another world, a Find area runs, and the list closes again at once. Hard to hit.
-
-Fix: clear both pending clicks when the list closes, and the Find area click also when there is no player.
+About 10 seconds after you die the game removes your body, and the tracking usually ends with it, with no message;
+after the respawn nothing is tracked until you track something again (a row's Track button, or Find area), or a watch
+alert does with Auto-track on. After a respawn at once (no bed, near the start) it may carry on (LT-9). (Always track
+nearest watched ends its wait at a death by design.)
+Whether tracking should carry on after the respawn is open: the tracker would have to keep its target while there is
+no player, and say so.
 
 **Safety checks**
 
 `tools/preflight.ps1` checks a build's IL against what the code must do, and `tools/mutants.ps1` plants defects to
 prove that each check fails when it should. These are the known gaps.
-
-### SC-1 Auto-track's "not while a creature is tracked" is not checked
-
-Preflight does not check that Auto-track tests "a creature is tracked" rather than "anything is tracked". With the
-wrong one a watch alert would no longer take over a Find area arrow, and preflight would still pass. A check that
-`WatchAlerts.Update` reads `Tracker.IsTrackingCreature`, with a planted defect to prove it, would close this.
-
-### SC-2 Which branch starts the re-track is not checked
-
-Preflight checks that `Tracker.LateUpdate` is the only caller of `NearestWatched.Lost`, not that the call sits in the
-branch for a lost creature (it says so itself). Moved into the logged-out branch, Always track nearest watched would
-never start, and preflight would still pass. Fix: require the call on the true path of
-`Target == null || Target.IsDead()`, after the "Lost track of" message.
 
 ### SC-3 Two re-track variants the checks do not model
 
@@ -279,57 +276,6 @@ the star rows, the window clamp, the game session) fails them: re-read the IL an
 it. The unit tests link only `StarFilter.cs` and `Rules.cs`; the rest is proved by preflight and planted defects. So
 prove each new check with defects planted in how its answer is used, its true path, how two tested facts combine, its
 loop bounds and its operands - not only in its wiring.
-
-### SC-5 The session reset's first decisions are not pinned
-
-Preflight pins `ModConfig.ResetSession`'s three writes, its `SaveOnConfigSet` handling and its one caught save, but not
-what decides whether they happen - the early return when every entry already holds its default, and the `Held` helper
-that builds the text it tests - nor that the value put back into `SaveOnConfigSet` is the one read before. A change
-there can pass every check. Either pin them with an exact shape, or make the three writes unconditional inside the
-`try`/`finally` (BepInEx ignores a write of an equal value) so that only the log line and the save depend on it.
-
-**Tooling**
-
-### TL-1 Building from PowerShell 7 fails
-
-From a PowerShell 7 session the build fails in the publicize step: the build's `powershell.exe` inherits PowerShell
-7's module path, and `Get-FileHash` is then missing. The README says to build from Windows PowerShell or cmd. Fix: hash
-with .NET's SHA256 class in `tools/publicize.ps1`, or clear `PSModulePath` for the build's step.
-
-### TL-2 Preflight runs as a child process
-
-`tools/deploy.ps1` (twice) and `tools/mutants.ps1` (once for the unmutated copy, then once per planted defect) start
-`tools/preflight.ps1` as a separate PowerShell process (`powershell.exe`, or `pwsh.exe` under PowerShell 7), which can flash a console window during
-automated runs. Running it in the same process is the planned improvement; preflight must then stop ending its caller
-with `exit`.
-
-### TL-3 mutants.ps1 copies only tracked files
-
-`tools/mutants.ps1` plants its defects in a copy of the files git tracks: `git add` a new source file before a run, or
-it is missing from the copy.
-
-### TL-4 compare-il.ps1 shows the first difference per method
-
-`tools/compare-il.ps1` reports only the first difference in each method. Its verdict and exit code are right, but a full
-account needs a diff of the method listings.
-
-### TL-5 publicize.ps1 refreshes only when the game changes
-
-`tools/publicize.ps1` rebuilds `lib/publicized` only when the game's assembly changes, not when the script itself
-does: after editing it, empty `lib/` to make it run again. Releases are not affected: a release's zip is built from a
-fresh clone, where `lib/` starts empty.
-
-### TL-6 mutants.ps1 leaves a planted-defect build behind
-
-`tools/mutants.ps1` empties `build/mutants/` when it starts, not when it ends, so after a run that folder holds the last
-planted defect's `MobTracker.dll`, stamped like a real build of the commit. Never install or ship a DLL from there, and
-compare DLLs by SHA-256, not by stamp. Fix: empty the folder when the run ends, or stamp the copy's builds differently.
-
-### TL-7 mutants.ps1 does not say what it checked against
-
-Preflight adds checks for each TomTom or Wayfinder DLL it finds, but `tools/mutants.ps1`'s output does not name them,
-so what a run was checked against can be shown only from when it ran. Fix: print the clean copy's preflight lines
-naming those DLLs at the top of the run.
 
 ## Known limits
 
@@ -354,6 +300,7 @@ states one, the item says so.
 | FW-1, FW-2 | The window's place not kept; GUI scale | See FW-1 and FW-2. |
 | KL-11 | Find area's limits | Sub-biomes and the game's corner biome test: see FW-5 and FW-6. The rest is how Find area works: it tells the land from the world seed, not from the loaded ground, and the terrain it cannot check (slope, lava, player bases, water depth) is known only where the land is loaded. |
 | KL-12 | Always track nearest watched: its rules | Chosen when it was made (0.3.0), and each could change if players ask; the dungeon side (0.3.1) and the settled **Alerts:** stars (0.4.1) are fixes. Taking a creature that alerted during the wait and then left the `AlertRadius` would need the wait to remember that creature. |
+| KL-24 | Tracking usually ends at a death | The game removes the body about 10 seconds after a death, and with it the local player the tracker follows (a respawn at once may carry it on: LT-9); OI-4 asks whether tracking should carry on after the respawn. |
 
 ### KL-13 Touch screens
 
@@ -443,7 +390,7 @@ it: setting them back when the game quits as well. LT-14 checks it in the game.
 
 - **TomTom and Wayfinder:** their keys work over the list through a patch on their public `IsTypingElsewhere()`. For
   each TomTom or Wayfinder DLL it reads, preflight checks that this is still their only reader of the two flags the list
-  sets (KL-8, TL-7).
+  sets (KL-8); since 0.5.1 `tools/mutants.ps1` names the DLLs a run was checked against.
 - **ConfigurationManager:** it applies MobTracker's two star filters, which are text settings, at every keystroke - one
   reason an **Alerts:** change waits until it holds still (KL-5). While its window blocks input, F7 does not reach the
   list (KL-17).
@@ -552,7 +499,23 @@ tracker, the window, the alerts) is internal, and it raises no events.
 
 ## Done
 
+- 0.5.1: OI-1 - the tracking arrow, the ground-path line and the "Tracking:" label hide while the HUD is hidden, in a
+  cutscene (sleep included), while the player is dead, in the frame the body is removed for the respawn, and during a
+  teleport; `ArrowSize` (0.1 to 3) and `ArrowHeight` (0 to 5) have allowed ranges. Its earlier wording - the arrow
+  "keeps pointing from where you fell until you respawn" - was wrong: the tracking usually ends when the body is
+  removed (OI-4).
+- 0.5.1: OI-2 - a Watch or Find area click still waiting when the list closes is dropped, also on every frame without
+  a player, so it never runs at a later opening.
+- 0.5.1: SC-1, SC-2, SC-5 - preflight checks that Auto-track asks "a creature is tracked", that the re-track starts only
+  in the lost-creature branch after its message, and the session reset's gate, its `Held` test and the
+  `SaveOnConfigSet` value it puts back; planted defects prove each.
+- 0.5.1: TL-1 to TL-7 - `tools/publicize.ps1` hashes with .NET, so a build from PowerShell 7 works, and refreshes its
+  copies when it changes; `tools/mutants.ps1` copies untracked files that git does not ignore too, empties its builds
+  when it ends or is stopped and names the TomTom or Wayfinder DLLs it checked against; `tools/mutants.ps1` and
+  `tools/deploy.ps1` run preflight in the same PowerShell process, without starting a second one;
+  `tools/compare-il.ps1 -All` lists every line that differs, and the script compares names by exact case.
 - 0.5.0: a Watch or Unwatch click still waiting when the player is gone is dropped, so it no longer reaches another
-  game session (part of OI-2; a late Watch click within a session, and the Find area click, are still open there).
+  game session (part of OI-2; the rest - a late Watch click within a session, and the Find area click - came in
+  0.5.1).
 
 Everything before that is in the README's History. From here on, a finished item moves here with its version.

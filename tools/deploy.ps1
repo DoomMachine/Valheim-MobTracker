@@ -18,7 +18,7 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Dll = "",       # default: build\MobTracker.dll in this repository (set below)
-    [string]$ExpectedVersion = "0.5.0",
+    [string]$ExpectedVersion = "0.5.1",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string]$KeepDir = ""    # default: retired\ in this repository (set below)
 )
@@ -28,26 +28,34 @@ $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot -Parent
 if (-not $Dll) { $Dll = Join-Path $repo "build\MobTracker.dll" }
 if (-not $KeepDir) { $KeepDir = Join-Path $repo "retired" }
-# Drop a trailing \ (the quoted path handed to preflight.ps1 below would end in \", an escaped quote), and the "
-# that powershell.exe -File leaves when a quoted path ending in \ is the last argument (anywhere earlier it
-# swallows the arguments after it: leave the \ off).
+# Drop a trailing \, and the " that powershell.exe -File leaves when a quoted path ending in \ is the last argument
+# (anywhere earlier it swallows the arguments after it: leave the \ off).
 $ValheimDir = $ValheimDir.TrimEnd('\', '"')
 if (Get-Process -Name valheim -ErrorAction SilentlyContinue) { throw "Valheim is running - close the game first." }
 if (-not (Test-Path -LiteralPath $Dll -PathType Leaf)) { throw "No built DLL at $Dll (not a file) - run dotnet build first." }
 # The file must be the plugin before anything is moved: preflight checks its identity, its version and every
 # reference against this game, so a zip or any other file stops here with the installed plugin in place.
-# (Continue around the call: under Stop, the child's error output through 2>&1 would end this script with a bare
-# NativeCommandError instead of the explanation below.)
-# The child is the console PowerShell of this installation, found in $PSHOME rather than on PATH (not the host
-# process: inside the ISE that would be another ISE window), and the exit code is cleared first, so a check that
-# could not run counts as failed rather than reading an earlier command's 0.
-$self = (Join-Path $PSHOME $(if ($PSVersionTable.PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }))
-$global:LASTEXITCODE = $null
-$ErrorActionPreference = "Continue"
-$pre = & $self -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "preflight.ps1") -Plugin $Dll -ExpectedVersion $ExpectedVersion -ValheimDir $ValheimDir 2>&1 | ForEach-Object { "$_" }
-$preCode = $global:LASTEXITCODE
-$ErrorActionPreference = "Stop"
-if ($preCode -ne 0) { $pre | Write-Output; throw "$Dll does not pass preflight - nothing was installed or moved." }
+# Runs tools\preflight.ps1 in this process - no console window opens for it - and returns its output lines and exit
+# code. Its 'exit' ends only the script and sets $LASTEXITCODE (cleared first, so a run that never reached its end
+# counts as failed, 2); a preflight that throws is caught and counts as failed too.
+function Invoke-Preflight([string]$script, [hashtable]$arguments) {
+    $global:LASTEXITCODE = $null
+    # Each line is kept as it comes, so a preflight that throws part-way still shows what it printed before.
+    $lines = New-Object System.Collections.Generic.List[string]
+    $code = $null
+    try {
+        & $script @arguments 2>&1 | ForEach-Object { $lines.Add("$_") }
+        $code = $global:LASTEXITCODE
+    } catch {
+        $lines.Add("preflight stopped: " + $_.Exception.Message)
+        $code = 2
+    }
+    if ($null -eq $code) { $code = 2 }
+    return [pscustomobject]@{ Code = $code; Lines = @($lines) }
+}
+$preflightArgs = @{ ExpectedVersion = $ExpectedVersion; ValheimDir = $ValheimDir }
+$pre = Invoke-Preflight (Join-Path $PSScriptRoot "preflight.ps1") ($preflightArgs + @{ Plugin = $Dll })
+if ($pre.Code -ne 0) { $pre.Lines | Write-Output; throw "$Dll does not pass preflight - nothing was installed or moved." }
 
 $target = Join-Path $ValheimDir "BepInEx\plugins\MobTracker.dll"
 $newHash = (Get-FileHash -LiteralPath $Dll -Algorithm SHA256).Hash
@@ -71,11 +79,7 @@ Copy-Item -LiteralPath $Dll -Destination $target
 $installedHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
 if ($installedHash -ne $newHash) { throw "installed hash $installedHash differs from the build's $newHash" }
 Write-Output ("installed {0}  SHA-256 {1}" -f $target, $installedHash)
-# The installed file, checked the way the build was above (Continue around the child, its output shown as text), so a
-# caller that redirects 2>&1 sees the check rather than a NativeCommandError; a check that could not run fails.
-$global:LASTEXITCODE = $null
-$ErrorActionPreference = "Continue"
-& $self -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "preflight.ps1") -Plugin $target -ExpectedVersion $ExpectedVersion -ValheimDir $ValheimDir 2>&1 | ForEach-Object { "$_" }
-$postCode = $global:LASTEXITCODE
-$ErrorActionPreference = "Stop"
-exit $(if ($postCode -eq 0) { 0 } else { 1 })
+# The installed file, checked the way the build was above; a check that could not run fails.
+$post = Invoke-Preflight (Join-Path $PSScriptRoot "preflight.ps1") ($preflightArgs + @{ Plugin = $target })
+$post.Lines | Write-Output
+exit $(if ($post.Code -eq 0) { 0 } else { 1 })

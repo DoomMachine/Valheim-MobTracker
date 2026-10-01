@@ -397,7 +397,7 @@ namespace MobTracker
         /// <summary>
         /// Built and tested, not shipped: the alerts follow the row at once, and taking off the Alerts: row's last marked
         /// category gives None (alert on nothing); only the All button returns it to All. Nothing waits here, so a value
-        /// typed in ConfigurationManager applies at every keystroke, a word typed so far as All.
+        /// typed in ConfigurationManager applies at every keystroke, a text with no word it knows yet as All.
         /// </summary>
         EmptyAlertsNothing = 1
     }

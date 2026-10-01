@@ -33,6 +33,9 @@ namespace MobTracker
             get { return IsTracking && !_isPoint; }
         }
 
+        // Rules.GuideHidden's answer for this frame, also for the label in OnGUI.
+        private static bool _guideHidden;
+
         private static string _targetName;
         // Kept for NearestWatched: a lost creature's own name and tameness may be gone with it.
         private static string _targetPrefab;
@@ -160,6 +163,18 @@ namespace MobTracker
             // removes it, IsTamed already says false.
             if (!_isPoint && Target.GetZDOID() != ZDOID.None)
                 _targetTamed = Target.IsTamed();
+
+            // The guide hides whenever the game hides its own HUD or the player cannot be guided (Rules.GuideHidden);
+            // the tracking goes on, and the guide comes back with the player (after a death the tracking usually ends first, when
+            // the body is removed: Stop above). Each value is a plain call preflight traces.
+            _guideHidden = Rules.GuideHidden(Hud.IsUserHidden(), InCutscene(player), player.IsDead(), WaitingForRespawn(),
+                player.IsTeleporting());
+            if (_guideHidden)
+            {
+                _arrow.SetActive(false);
+                _line.enabled = false;
+                return;
+            }
 
             Vector3 from = player.transform.position;
             // A spawn area has no meaningful height; level with the player keeps the arrow flat.
@@ -302,9 +317,35 @@ namespace MobTracker
             return point;
         }
 
+        /// <summary>
+        /// Player.InCutscene, which also asks the game's video player (CinematicsManager.IsPlaying is not null-safe): an
+        /// exception counts as no cutscene, so the guide is never hidden for good by a broken check.
+        /// </summary>
+        private static bool InCutscene(Player player)
+        {
+            try
+            {
+                return player.InCutscene();
+            }
+            catch (System.Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// The game is between removing the dead body and spawning the player again (Game._RequestRespawn): in its first
+        /// frame the body is still the local player but no longer reads as dead.
+        /// </summary>
+        private static bool WaitingForRespawn()
+        {
+            Game game = Game.instance;
+            return game != null && game.WaitingForRespawn();
+        }
+
         private void OnGUI()
         {
-            if (!IsTracking || Hud.IsUserHidden())
+            if (!IsTracking || _guideHidden)
                 return;
 
             if (_hudStyle == null)

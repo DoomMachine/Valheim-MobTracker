@@ -36,7 +36,9 @@ https://github.com/DoomMachine/Valheim-MobTracker
 - **Track** follows that one creature: a 3D arrow over your head, or with `GuideMode = GroundPath`
   a walkable line on the ground. The path builds over a few seconds on long distances; while it
   is missing or incomplete (flying/swimming targets, cliffs) the arrow shows as well. Beyond 250 m
-  only the arrow shows.
+  only the arrow shows. The arrow, the line and the "Tracking:" label hide while you hide the HUD (Ctrl+F3),
+  during a cutscene (sleeping in a bed is one), while you are dead and during a teleport, and come back after it (after a
+  death, see Known limits; a creature a portal leaves far behind is lost on the way).
 - **View: nearby / all types** switches the list to every creature type the game has (including
   other mods' creatures), so you can Watch something that is not around. Search works there too.
 - **Find area** (in the all-types view) works out where that creature's world-spawn rule can be met -
@@ -105,7 +107,7 @@ with their defaults. When the game starts, `BepInEx/LogOutput.log` says
 | `General.KeepBetweenSessions` | `false` | Keep `Watchlist`, `ListStarFilter` and `AlertStarFilter` - the Watch buttons and the **List:** and **Alerts:** rows - from one game session to the next. Off, they are set back to nothing watched and `All` whenever you enter a world or go back to the main menu (see **One game session**); closing the game leaves the last ones in this file until you next enter a world |
 | `General.ListStarFilter` | `All` | The list's star filter (also the **List:** row): `All`, or one or more of `NoStars`, `OneStar`, `TwoStars` and `TwoOrMoreStars` separated by commas, e.g. `NoStars, OneStar` for both. Any case; the window's labels (`No star`, `1 star`, `2 stars`, `2+ stars`) work too, and a number counts stars: 0-3, 3 = two or more, 4 = All. `All` anywhere in the list means All; anything else is ignored with a warning in the log, and with nothing valid the filter works as All. A text setting since 0.4.0 (a single name or number from a 0.3.x file reads as before), so ConfigurationManager shows a text box for it rather than a list, and applies it at every keystroke. Back to `All` at every session unless `KeepBetweenSessions` is on |
 | `Tracking.GuideMode` | `Arrow` | `Arrow` or `GroundPath` |
-| `Tracking.ArrowSize` / `ArrowHeight` | `0.6` / `2.6` | Metres |
+| `Tracking.ArrowSize` / `ArrowHeight` | `0.6` / `2.6` | Metres: the arrow's length, from 0.1 to 3, and the height of its middle above your feet, from 0 to 5. A value outside the range is set to the nearest end, also one written in this file, when the game starts |
 | `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Emptied at every session unless `KeepBetweenSessions` is on. With it on, edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows, Guide, the two tracking checkboxes) rewrites the file |
 | `Alerts.AlertRadius` | `0` | Only alert (or re-track, below) within this many metres; 0 = anywhere loaded |
 | `Alerts.AlertVolume` | `0.8` | Ding volume; the game's Volume and Effect volume settings apply on top of it |
@@ -123,6 +125,8 @@ with their defaults. When the game starts, `BepInEx/LogOutput.log` says
   tamed can start Always track nearest watched.
 - A watched creature inside a dungeon still alerts while you are outside it, and the other way round, but is not
   auto-tracked; with `AlertRadius` at 0 it has then had its alert, so going in does not alert it again.
+- Tracking usually ends when the game removes your body, about 10 seconds after you die: track the creature again after
+  you respawn. After a respawn at once - no bed, close to the start - it may carry on (not yet confirmed).
 - While the pointer rests on the window its rows do not update: a creature killed meanwhile keeps its row, and
   its Track button does nothing, until the pointer leaves the window.
 - A change on the **Alerts:** row reaches the alerts, Auto-track and Always track nearest watched once the row
@@ -160,8 +164,7 @@ Open issues, what has not yet been confirmed in the game, and ideas for later ar
 ## Building
 
 `dotnet build MobTracker.csproj -c Release` (needs the game with BepInEx; see the comment at the top of
-`MobTracker.csproj`; run it from Windows PowerShell or cmd - from a PowerShell 7 session the build's publicize
-step fails). `tools/preflight.ps1` checks a build against the installed game - run it after every
+`MobTracker.csproj`). `tools/preflight.ps1` checks a build against the installed game - run it after every
 Valheim update - and `tools/deploy.ps1` installs one, moving the DLL it replaces into `retired/` in this folder
 (`-KeepDir` to choose another). The tools find the game the way the build does: `-ValheimDir`, else the
 `VALHEIM` environment variable; they take named arguments only, and reject a misspelt one. When a tool is
@@ -190,14 +193,23 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **0.5.1** - fixes. The tracking arrow, the ground-path line and the "Tracking:" label hide while you hide the HUD
+  (Ctrl+F3), during a cutscene, while you are dead and during a teleport; before, the arrow and the line stayed up
+  through all of these, and the label through all but the hidden HUD. `ArrowSize` (0.1 to 3) and `ArrowHeight` (0 to
+  5) have allowed ranges, so the arrow can no longer turn round or vanish. A Watch or Find area click still waiting
+  when the list closes is dropped; before, a Find area click could run the next time the list opened, even in
+  another world. The safety checks catch more planted defects; `tools/mutants.ps1` and `tools/deploy.ps1` run
+  preflight in the same PowerShell process, without starting a second one, and a build started from PowerShell 7 no
+  longer fails. Not yet played in the game.
 - **0.5.0** - the watched types and both star rows last one game session: whenever you enter a world or go
   back to the main menu, nothing is watched and both rows are at *All* again, so logging out and in, or
   restarting the game, starts afresh (dying does not). The new `KeepBetweenSessions` setting, off by default,
   keeps them as before. A watchlist and star filters saved by an earlier version are set back when you first enter
   a world; to keep them, turn `KeepBetweenSessions` on before that - in ConfigurationManager at the main menu, or
   in the cfg with the game closed (add `KeepBetweenSessions = true` under `[General]` if the line is not there yet -
-  0.5.0 writes it at its first start; a change made in the file while the game runs is overwritten). Not yet played
-  in the game.
+  0.5.0 writes it at its first start; a change made in the file while the game runs is overwritten). Ran through a
+  long play session, with several logouts, without errors; at the first world entry it set back the **Alerts:**
+  filter 0.4.1 had saved. Nothing was watched in it, so a reset at a logout was not seen.
 - **0.4.1** - fixes. Taking off the only marked category on the **Alerts:** row no longer lets every watched
   creature alert until your next click: a change on that row, or to `AlertStarFilter` in ConfigurationManager,
   now takes effect once it has stayed the same for 1.5 seconds, so what the row passes through while you click,

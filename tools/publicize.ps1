@@ -9,9 +9,10 @@
   [IgnoresAccessChecksTo(...)] (IgnoresAccessChecksTo.cs) plus SkipVerification (from AllowUnsafeBlocks) let it
   reach them. This does what the BepInEx.AssemblyPublicizer.MSBuild package does, without NuGet.
 
-  The copies go to lib\publicized\ (git-ignored, never shipped - they are the game's code), each with the
-  SHA-256 of the game DLL it was made from; a copy is rebuilt only when its game DLL changes. Mono.Cecil is the
-  copy BepInEx ships.
+  The copies go to lib\publicized\ (git-ignored, never shipped - they are the game's code), each with a stamp: the
+  SHA-256 of the game DLL it was made from and of this script; a copy is rebuilt when either changes. Mono.Cecil is
+  the copy BepInEx ships. Hashing uses .NET's SHA256, not Get-FileHash: a build started from PowerShell 7 hands this
+  Windows PowerShell child PowerShell 7's module path, where Get-FileHash (a script function in 5.1) cannot load.
 
   Skipped on purpose: compiler-generated members (a field-like event's backing field has the event's own
   name, so publishing it would make every use of the event ambiguous).
@@ -31,6 +32,14 @@ if (-not $OutDir) { $OutDir = Join-Path (Split-Path $PSScriptRoot -Parent) "lib\
 $ValheimDir = $ValheimDir.TrimEnd('\', '"')
 $managed = Join-Path $ValheimDir "valheim_Data\Managed"
 $cecilLoaded = $false
+
+function Get-Sha256([string]$path) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($path))).Replace("-", "") }
+    finally { $sha.Dispose() }
+}
+# This script's own hash is part of every stamp, so an edited publicizer rebuilds the copies.
+$scriptHash = Get-Sha256 $PSCommandPath
 
 function Test-Generated($member) {
     foreach ($ca in $member.CustomAttributes) {
@@ -61,8 +70,8 @@ foreach ($name in $Assemblies) {
     if (-not (Test-Path -LiteralPath $source)) { throw "$name.dll not found at $source (pass -ValheimDir)" }
     $target = Join-Path $OutDir ($name + ".dll")
     $stamp = Join-Path $OutDir ($name + ".source.sha256")
-    $hash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
-    if ((Test-Path -LiteralPath $target) -and (Test-Path -LiteralPath $stamp) -and ((Get-Content -LiteralPath $stamp -Raw).Trim() -eq $hash)) {
+    $hash = (Get-Sha256 $source) + " " + $scriptHash
+    if ((Test-Path -LiteralPath $target) -and (Test-Path -LiteralPath $stamp) -and ([IO.File]::ReadAllText($stamp).Trim() -ceq $hash)) {
         Write-Output "publicized $name.dll is current"
         continue
     }

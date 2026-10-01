@@ -4,8 +4,12 @@
   builds it and expects preflight to FAIL.
 
 .DESCRIPTION
-  Works in build\mutants\ (git ignores build\), emptied first, on a copy of the working tree's tracked files and of
-  lib\, so the repository itself is never edited. Each mutant is one regex replacement that must match exactly once.
+  Works in build\mutants\ (git ignores build\), emptied first, on a copy of the working tree's files - tracked, and
+  untracked ones git does not ignore, so a new source file needs no 'git add' first - and of lib\, so the repository
+  itself is never edited. Preflight runs in this process (no console window per mutant). Right after the unmutated copy
+  passes, the run names the TomTom or Wayfinder DLLs its preflight checked against (or says there are none). When the
+  run ends or is stopped (Ctrl+C included), the copy's build\ and obj\ are emptied, so no planted-defect DLL -
+  stamped like a real build of the commit - is left behind. Each mutant is one regex replacement that must match exactly once.
   First the unmutated copy is built and must PASS, so a failure below is the mutant's and not the copy's. A mutant
   counts as caught only when preflight exits non-zero with a FAIL line. Exits 1 if -ValheimDir holds no Valheim
   install, an -Only id is not one of its mutants, the clean copy fails, a mutant cannot be planted or built, or any
@@ -24,10 +28,28 @@ param(
     [string]$ValheimDir = ""
 )
 $ErrorActionPreference = "Stop"
+# Set here, before anything can call Finish: Remove-MutantBuilds reads this script's $work only, never a caller's.
+$work = $null
 # -ValheimDir reaches the copy's MobTracker.csproj and tools\preflight.ps1 through VALHEIM; the caller's value
 # comes back when this script ends, however it ends.
 $callersValheim = $env:VALHEIM
-function Finish([int]$code) { $env:VALHEIM = $callersValheim; exit $code }
+# No planted-defect build is left behind: its DLL carries the same version stamp as a real build of the commit. Nothing
+# is emptied through a directory link, whichever exit calls this: not when $work itself is one, nor build\ or obj\.
+function Remove-MutantBuilds {
+    if (-not $script:work -or -not (Test-Path -LiteralPath $script:work)) { return }
+    if ((Get-Item -LiteralPath $script:work -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { return }
+    foreach ($d in @("build", "obj")) {
+        $p = Join-Path $script:work $d
+        if ((Test-Path -LiteralPath $p) -and -not ((Get-Item -LiteralPath $p -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            [IO.Directory]::Delete($p, $true)
+        }
+    }
+}
+function Finish([int]$code) {
+    $env:VALHEIM = $callersValheim
+    Remove-MutantBuilds
+    exit $code
+}
 trap { $env:VALHEIM = $callersValheim; break }
 if ($ValheimDir) {
     # Resolved here, so a relative path means the same to the copy's build as to this shell.
@@ -350,7 +372,66 @@ $mutants = @(
     @("E16 KeepBetweenSessions on by default - nothing resets", "ModConfig.cs", [regex]::Escape("""KeepBetweenSessions"", false,"), """KeepBetweenSessions"", true,"),
     @("E17 WatchAlerts.Update starts the settler over on every frame - the Alerts: row never waits", "WatchAlerts.cs", "(private void Update\(\)\r?\n[ \t]*\{\r?\n)", '${1}            ResetSession();' + "`r`n"),
     @("E18 a new settler started over, not the alerts' own", "WatchAlerts.cs", [regex]::Escape("AlertStarsSettler.Reset();"), "new StarSetSettler().Reset();"),
-    @("E19 a Watch click still waiting at a logout is applied in the next session", "EntityListWindow.cs", "(never carried into the\r?\n[^\r\n]*\r?\n)[ \t]*_pendingWatchToggle = null;\r?\n", '${1}'),
+    @("E19 a Watch click still waiting when the list closes is applied at the next opening, also in another session", "EntityListWindow.cs", "(private void Close\(\)\r?\n[ \t]*\{\r?\n)[ \t]*_pendingWatchToggle = null;\r?\n", '${1}'),
+    @("E29 a Find area click still waiting when the list closes runs at the next opening, also in another world", "EntityListWindow.cs", "(private void Close\(\)\r?\n[ \t]*\{\r?\n[^\r\n]*\r?\n)[ \t]*_pendingFind = null;\r?\n", '${1}'),
+    @("E30 no player no longer closes the list - a click waits for the next session", "EntityListWindow.cs", "[ \t]*Close\(\); // also drops a click not yet applied[^\r\n]*\r?\n", ""),
+    # Which branch starts the re-track, and Auto-track's test (0.5.1).
+    @("E31 the re-track started on logout, not on a lost creature - Always track nearest watched never starts", "Tracker.cs", "(?s)Stop\(\); // logged out; nobody to tell(.*?)NearestWatched\.Lost\(_targetPrefab, _targetTamed\);[^\r\n]*", '{ NearestWatched.Lost(_targetPrefab, _targetTamed); Stop(); }${1}'),
+    @("E32 a tracked spawn area counts as lost at once - 'Lost track of' on every Find area", "Tracker.cs", [regex]::Escape("if (IsTracking && !_isPoint && (Target == null"), "if (IsTracking && (Target == null"),
+    @("E33 Auto-track waits for any tracking - an alert no longer takes over a Find area arrow", "WatchAlerts.cs", [regex]::Escape("!Tracker.IsTrackingCreature"), "!Tracker.IsTracking"),
+    @("E34 Auto-track only while a creature is tracked", "WatchAlerts.cs", [regex]::Escape("!Tracker.IsTrackingCreature"), "Tracker.IsTrackingCreature"),
+    # The session reset's decisions (0.5.1, SC-5).
+    @("E35 the reset's gate inverted - nothing is ever reset", "ModConfig.cs", [regex]::Escape("if (held.Length == 0)"), "if (held.Length != 0)"),
+    @("E36 Held inverted - only entries already at their default count as held", "ModConfig.cs", [regex]::Escape("if (entry.Value == (string)entry.DefaultValue)"), "if (entry.Value != (string)entry.DefaultValue)"),
+    @("E37 Held compares the default with itself - nothing is ever reset", "ModConfig.cs", [regex]::Escape("if (entry.Value == (string)entry.DefaultValue)"), "if ((string)entry.DefaultValue == (string)entry.DefaultValue)"),
+    @("E38 SaveOnConfigSet put back as false - no setting saves again until the game restarts", "ModConfig.cs", [regex]::Escape("bool saveEach = file.SaveOnConfigSet;"), "bool saveEach = false;"),
+    # The tracking guide hides with the game's HUD, in cutscenes, while dead or teleporting (0.5.1); the arrow's ranges.
+    @("E39 the guide never hidden - the arrow shows over a hidden HUD, a cutscene and a death again", "Tracker.cs", [regex]::Escape("if (_guideHidden)"), "if (false)"),
+    @("E40 dead read from the tracked creature, not the player", "Tracker.cs", [regex]::Escape("player.IsDead(), WaitingForRespawn()"), "Target.IsDead(), WaitingForRespawn()"),
+    @("E41 teleporting read from the tracked creature, not the player", "Tracker.cs", [regex]::Escape("player.IsTeleporting());"), "Target.IsTeleporting());"),
+    @("E42 the label ignores the gate - 'Tracking:' over a hidden HUD and the death fade", "Tracker.cs", [regex]::Escape("if (!IsTracking || _guideHidden)"), "if (!IsTracking)"),
+    @("E43 the hidden guide still draws the ground-path line", "Tracker.cs", "(if \(_guideHidden\)\r?\n[ \t]*\{\r?\n[ \t]*_arrow\.SetActive\(false\);\r?\n)[ \t]*_line\.enabled = false;\r?\n", '${1}'),
+    @("E44 a failed cutscene test hides the guide for good", "Tracker.cs", "(catch \(System\.Exception\)\r?\n[ \t]*\{\r?\n[ \t]*return )false;", '${1}true;'),
+    @("E45 the cutscene test unguarded - a missing video player throws in LateUpdate", "Tracker.cs", "(?s)try\r?\n[ \t]*\{\r?\n[ \t]*return player\.InCutscene\(\);\r?\n[ \t]*\}\r?\n[ \t]*catch \(System\.Exception\)\r?\n[ \t]*\{\r?\n[ \t]*return false;\r?\n[ \t]*\}", "return player.InCutscene();"),
+    @("E46 the respawn frame not counted - the guide shows from the removed body for a frame", "Tracker.cs", [regex]::Escape("return game != null && game.WaitingForRespawn();"), "return false;"),
+    @("E47 ArrowSize unranged - a negative size turns the arrow round, 0 hides it", "ModConfig.cs", [regex]::Escape("new AcceptableValueRange<float>(0.1f, 3f)"), "null"),
+    @("E48 ArrowSize may be 0 - the arrow vanishes", "ModConfig.cs", [regex]::Escape("new AcceptableValueRange<float>(0.1f, 3f)"), "new AcceptableValueRange<float>(0f, 3f)"),
+    # More ways the 0.5.1 code could be wrong and still compile.
+    @("E49 the gate moved below 'if (!showArrow) return;' - in GroundPath mode with a complete path the line stays up while dead or with the HUD hidden", "Tracker.cs",
+        '(?s)([ \t]*_guideHidden = Rules\.GuideHidden\(Hud\.IsUserHidden\(\).*?_line\.enabled = false;\r?\n[ \t]*return;\r?\n[ \t]*\}\r?\n)(.*?if \(!showArrow\)\r?\n[ \t]*return;\r?\n)', '${2}${1}'),
+    @("E50 the gate moved above the tamed refresh - a creature tamed while the guide is hidden stays 'wild' for the re-track", "Tracker.cs",
+        '(?s)([ \t]*// Tamed can happen while tracked\..*?_targetTamed = Target\.IsTamed\(\);\r?\n\r?\n)(.*?[ \t]*_guideHidden = Rules\.GuideHidden\(.*?_line\.enabled = false;\r?\n[ \t]*return;\r?\n[ \t]*\}\r?\n)', ('${2}' + "`r`n" + '${1}')),
+    @("E51 the gate's return dropped - the code below turns the arrow and the line back on", "Tracker.cs",
+        '(_line\.enabled = false;\r?\n)[ \t]*return;\r?\n([ \t]*\}\r?\n\r?\n[ \t]*Vector3 from = player)', '${1}${2}'),
+    @("E52 the gate leaves the arrow up", "Tracker.cs", '(if \(_guideHidden\)\r?\n[ \t]*\{\r?\n)[ \t]*_arrow\.SetActive\(false\);\r?\n', '${1}'),
+    @("E53 the gate inverted - the guide shows only while it should hide", "Tracker.cs", [regex]::Escape("if (_guideHidden)"), 'if (!_guideHidden)'),
+    @("E54 the cutscene test called unguarded (wrapper bypassed)", "Tracker.cs", [regex]::Escape("InCutscene(player), player.IsDead()"), 'player.InCutscene(), player.IsDead()'),
+    @("E55 the label's gate back to 0.5.0's HUD test only - the label shows while dead, in a cutscene, teleporting", "Tracker.cs", [regex]::Escape("if (!IsTracking || _guideHidden)"), 'if (!IsTracking || Hud.IsUserHidden())'),
+    @("E56 the label's gate with && - the label shows while hidden", "Tracker.cs", [regex]::Escape("if (!IsTracking || _guideHidden)"), 'if (!IsTracking && _guideHidden)'),
+    @("E57 the cutscene catch narrowed to NullReferenceException", "Tracker.cs", 'catch \(System\.Exception\)(\r?\n[ \t]*\{\r?\n[ \t]*return false;)', 'catch (System.NullReferenceException)${1}'),
+    @("E58 the cutscene catch rethrows", "Tracker.cs", '(catch \(System\.Exception\)\r?\n[ \t]*\{\r?\n[ \t]*)return false;', '${1}throw;'),
+    @("E59 WaitingForRespawn true without a Game", "Tracker.cs", [regex]::Escape("return game != null && game.WaitingForRespawn();"), 'return game == null || game.WaitingForRespawn();'),
+    @("E60 the lost-creature branch reads the player's death, not the creature's", "Tracker.cs", [regex]::Escape("(Target == null || Target.IsDead())"), '(Target == null || player.IsDead())'),
+    @("E61 the re-track scheduled before Stop", "Tracker.cs", '([ \t]*)Stop\(\);\r?\n([ \t]*NearestWatched\.Lost\(_targetPrefab, _targetTamed\);[^\r\n]*\r?\n)', ('${2}${1}Stop();' + "`r`n")),
+    @("E62 a creature dead but not yet removed is not lost", "Tracker.cs", [regex]::Escape("(Target == null || Target.IsDead())"), '(Target == null)'),
+    @("E63 IsTrackingCreature is IsTracking - a Find area arrow no longer gives way to an alert", "Tracker.cs", [regex]::Escape("get { return IsTracking && !_isPoint; }"), 'get { return IsTracking; }'),
+    @("E64 IsTrackingCreature inverted to 'tracking a point'", "Tracker.cs", [regex]::Escape("get { return IsTracking && !_isPoint; }"), 'get { return IsTracking && _isPoint; }'),
+    @("E65 IsTrackingCreature ignores IsTracking - true with nothing tracked, so Auto-track never starts", "Tracker.cs", [regex]::Escape("get { return IsTracking && !_isPoint; }"), 'get { return !_isPoint; }'),
+    @("E66 Auto-track's && became || - with AutoTrack on an alert replaces a tracked creature; off, it still auto-tracks", "WatchAlerts.cs", [regex]::Escape("if (ModConfig.AutoTrack.Value && !Tracker.IsTrackingCreature"), 'if (ModConfig.AutoTrack.Value || !Tracker.IsTrackingCreature'),
+    @("E67 Auto-track ignores the AutoTrack setting", "WatchAlerts.cs", [regex]::Escape("if (ModConfig.AutoTrack.Value && !Tracker.IsTrackingCreature"), 'if (!Tracker.IsTrackingCreature'),
+    @("E68 ArrowSize's range passed as a ConfigDescription tag, not its AcceptableValues - unranged", "ModConfig.cs", [regex]::Escape("new AcceptableValueRange<float>(0.1f, 3f)"), 'null, new AcceptableValueRange<float>(0.1f, 3f)'),
+    @("E69 ArrowHeight's range passed as a ConfigDescription tag - unranged", "ModConfig.cs", [regex]::Escape("new AcceptableValueRange<float>(0f, 5f)"), 'null, new AcceptableValueRange<float>(0f, 5f)'),
+    @("E70 ArrowSize bound to the key ArrowHeight - both fields share one entry: ArrowHeight ranges 0.1-3, default 0.6", "ModConfig.cs", [regex]::Escape('config.Bind("Tracking", "ArrowSize", 0.6f,'), 'config.Bind("Tracking", "ArrowHeight", 0.6f,'),
+    @("E71 the two ranges swapped between the entries", "ModConfig.cs", '(?s)new AcceptableValueRange<float>\(0\.1f, 3f\)(.*?)new AcceptableValueRange<float>\(0f, 5f\)', 'new AcceptableValueRange<float>(0f, 5f)${1}new AcceptableValueRange<float>(0.1f, 3f)'),
+    @("E72 the arrow's length read from ArrowHeight (0 allowed: the arrow vanishes)", "Tracker.cs", [regex]::Escape("_arrow.transform.localScale = Vector3.one * ModConfig.ArrowSize.Value;"), '_arrow.transform.localScale = Vector3.one * ModConfig.ArrowHeight.Value;'),
+    @("E73 Close drops the waiting clicks only when the list is open", "EntityListWindow.cs", '([ \t]*_pendingWatchToggle = null;\r?\n[ \t]*_pendingFind = null;\r?\n)([ \t]*if \(!IsOpen\)\r?\n[ \t]*return;\r?\n)', '${2}${1}'),
+    @("E74 the no-player branch closes only an open list", "EntityListWindow.cs", [regex]::Escape("Close(); // also drops a click not yet applied"), 'if (IsOpen) Close(); // also drops a click not yet applied'),
+    @("E75 the no-player branch goes on after Close - the list key can open it with no player", "EntityListWindow.cs", '(Close\(\); // also drops a click not yet applied[^\r\n]*\r?\n)[ \t]*return;\r?\n', '${1}'),
+    @("E76 the no-player test moved after HandleKeys - the list key opens the list (closed again at once) with no player", "EntityListWindow.cs",
+        '(?s)([ \t]*Player player = Player\.m_localPlayer;\r?\n[ \t]*if \(player == null\)\r?\n[ \t]*\{\r?\n[^\r\n]*\r?\n[ \t]*return;\r?\n[ \t]*\}\r?\n\r?\n)([ \t]*HandleKeys\(consoleVisible, consoleWasVisible\);\r?\n)', '${2}${1}'),
+    @("E77 SaveOnConfigSet read after it is set false - put back as false (E38 respelled)", "ModConfig.cs", '([ \t]*bool saveEach = file\.SaveOnConfigSet;\r?\n)([ \t]*file\.SaveOnConfigSet = false;\r?\n)', '${2}${1}'),
+    @("E78 the restore taken out of the finally - a throwing handler leaves SaveOnConfigSet off", "ModConfig.cs", 'finally\r?\n[ \t]*\{\r?\n[ \t]*file\.SaveOnConfigSet = saveEach;\r?\n[ \t]*\}', ('catch (System.Exception) { throw; }' + "`r`n" + '            file.SaveOnConfigSet = saveEach;')),
+    @("E79 the reset's gate asks only the watchlist - star filters held alone are never reset", "ModConfig.cs", [regex]::Escape("string held = Held(WatchlistEntry) + Held(ListStarsText) + Held(AlertStarsText);"), 'string held = Held(WatchlistEntry);'),
     @("E20 the reset saves the cfg at each write again - a failed save leaves the parsed watchlist behind its entry", "ModConfig.cs", "[ \t]*file\.SaveOnConfigSet = false;\r?\n", ""),
     @("E21 SaveOnConfigSet never put back - no setting saves again until the game restarts", "ModConfig.cs", "[ \t]*file\.SaveOnConfigSet = saveEach;\r?\n", ""),
     @("E22 the reset's save not caught - a locked cfg throws out of GameSession.Update", "ModConfig.cs", "try\r?\n[ \t]*\{\r?\n[ \t]*file\.Save\(\);\r?\n[ \t]*\}\r?\n[ \t]*catch \(System\.Exception e\)\r?\n[ \t]*\{\r?\n[^\r\n]*\r?\n[ \t]*\}", "file.Save();"),
@@ -368,6 +449,24 @@ if ($unknown.Count -gt 0) {
     Finish 1
 }
 
+# Runs tools\preflight.ps1 in this process - no console window opens for it - and returns its output lines and exit
+# code. Its 'exit' ends only the script and sets $LASTEXITCODE (cleared first, so a run that never reached its end
+# counts as failed, 2); a preflight that throws is caught and counts as failed too.
+function Invoke-Preflight([string]$script, [hashtable]$arguments) {
+    $global:LASTEXITCODE = $null
+    # Each line is kept as it comes, so a preflight that throws part-way still shows what it printed before.
+    $lines = New-Object System.Collections.Generic.List[string]
+    $code = $null
+    try {
+        & $script @arguments 2>&1 | ForEach-Object { $lines.Add("$_") }
+        $code = $global:LASTEXITCODE
+    } catch {
+        $lines.Add("preflight stopped: " + $_.Exception.Message)
+        $code = 2
+    }
+    if ($null -eq $code) { $code = 2 }
+    return [pscustomobject]@{ Code = $code; Lines = @($lines) }
+}
 function Build-And-Check {
     # Returns the lines to show and preflight's exit code ($null if the copy did not build); it prints nothing
     # itself, since anything a PowerShell function writes becomes part of what it returns.
@@ -380,13 +479,13 @@ function Build-And-Check {
     $ErrorActionPreference = "Continue"
     $b = & dotnet build (Join-Path $work "MobTracker.csproj") -c Release --no-incremental -nologo -v q 2>&1 | Out-String
     if (-not (Test-Path -LiteralPath $dll)) { return [pscustomobject]@{ Code = $null; Lines = @("    BUILD FAILED", $b) } }
-    $global:LASTEXITCODE = $null   # a preflight that could not start must not read dotnet's 0 as a pass
-    $console = (Join-Path $PSHOME $(if ($PSVersionTable.PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }))   # not the host: inside the ISE that is the ISE
-    $out = & $console -NoProfile -ExecutionPolicy Bypass -File (Join-Path $work "tools\preflight.ps1") -Plugin $dll 2>&1 | ForEach-Object { "$_" }
-    $code = $global:LASTEXITCODE
-    $lines = @($out | Where-Object { "$_" -cmatch "FAIL" } | ForEach-Object { "      $_" })
-    $tail = @($out | Select-Object -Last 5 | ForEach-Object { "      $_" })
-    return [pscustomobject]@{ Code = $code; Lines = $lines; Tail = $tail }
+    $pre = Invoke-Preflight (Join-Path $work "tools\preflight.ps1") @{ Plugin = $dll }
+    $code = $pre.Code
+    $lines = @($pre.Lines | Where-Object { "$_" -cmatch "FAIL" } | ForEach-Object { "      $_" })
+    $tail = @($pre.Lines | Select-Object -Last 5 | ForEach-Object { "      $_" })
+    # What the TomTom/Wayfinder half was checked against: preflight's line per DLL, or its note that there is none.
+    $waypointer = @($pre.Lines | Where-Object { "$_" -cmatch "(TomTom|Wayfinder)\.dll \(|neither TomTom nor Wayfinder" })
+    return [pscustomobject]@{ Code = $code; Lines = $lines; Tail = $tail; Waypointer = $waypointer }
 }
 
 # A fresh copy of the tracked files as they are in the working tree, and of the publicized game assemblies - into an
@@ -395,11 +494,17 @@ function Build-And-Check {
 if (Test-Path -LiteralPath $work) {
     $isLink = (Get-Item -LiteralPath $work -Force).Attributes -band [IO.FileAttributes]::ReparsePoint
     $links = @(Get-ChildItem -LiteralPath $work -Recurse -Force -Attributes ReparsePoint -ErrorAction SilentlyContinue)
-    if ($isLink -or $links.Count -gt 0) { Write-Output "$work is or holds a directory link - move it away first."; Finish 1 }
+    if ($isLink -or $links.Count -gt 0) {
+        Write-Output "$work is or holds a directory link - move it away first."
+        # Forgotten first: Finish's Remove-MutantBuilds would empty build\ and obj\ through the link.
+        $work = $null
+        Finish 1
+    }
     [IO.Directory]::Delete($work, $true)
 }
 New-Item -ItemType Directory -Force -Path $work | Out-Null
-foreach ($f in @(& git -C $repo ls-files)) {
+foreach ($f in @(& git -C $repo ls-files --cached --others --exclude-standard)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repo $f) -PathType Leaf)) { continue }   # tracked, but deleted in the working tree
     $dest = Join-Path $work $f
     New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
     Copy-Item -LiteralPath (Join-Path $repo $f) -Destination $dest -Force
@@ -412,11 +517,14 @@ if (Test-Path -LiteralPath (Join-Path $repo "lib")) {
 }
 
 $bad = 0
+# The builds are removed however the run ends - its verdict, an error, or Ctrl+C (which runs finally, not trap).
+try {
 Write-Output "=== unmutated copy"
 $r = Build-And-Check
 $r.Lines
 if ($r.Code -ne 0) { Write-Output "    the unmutated copy does not build or pass preflight - fix that first"; Finish 1 }
 Write-Output "    PASSED, as it should"
+foreach ($line in @($r.Waypointer)) { Write-Output ("    checked against: " + $line.Trim()) }
 
 foreach ($m in $mutants) {
     $id = ($m[0] -split " ")[0]
@@ -440,3 +548,4 @@ Write-Output ""
 if ($bad -eq 0) { Write-Output "MUTANTS: every planted defect fails preflight."; Finish 0 }
 Write-Output "MUTANTS: $bad mutant(s) not planted, not built, not caught or not proven."
 Finish 1
+} finally { Remove-MutantBuilds }
