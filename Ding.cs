@@ -30,9 +30,13 @@ namespace MobTracker
         public static void Play()
         {
             if (_source == null || !Routed())
+            {
+                Events.DingNotPlayed(_source == null);
                 return;
+            }
 
             _source.PlayOneShot(_clip, ModConfig.AlertVolume.Value);
+            Events.DingPlayed();
         }
 
         /// <summary>
@@ -83,9 +87,9 @@ namespace MobTracker
                         return group;
                 }
             }
-            catch (System.Exception)
+            catch (System.Exception e)
             {
-                // Looked for another way below.
+                Events.DingGroupSearchFailed(e); // looked for another way below
             }
 
             foreach (AudioMixerGroup group in Resources.FindObjectsOfTypeAll<AudioMixerGroup>())

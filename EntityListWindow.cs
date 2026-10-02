@@ -63,6 +63,8 @@ namespace MobTracker
         private ZNetScene _typesScene;
         private static string _pendingWatchToggle;
         private Row? _pendingFind;
+        // Why the list is closing, for the verbose log: set just before Close by the callers that know (Events.ListClosed).
+        private string _closeCause;
 
         // The list's star filter as of the last refresh; a change (the List: row or the cfg) refreshes at once.
         private StarSet _appliedListStars = StarSet.All;
@@ -115,6 +117,7 @@ namespace MobTracker
             {
                 SpawnFinder.Find(_pendingFind.Value.Prefab, _pendingFind.Value.Name);
                 _pendingFind = null;
+                _closeCause = EventLines.ClosedByFind;
                 Close(); // the answer arrives as a HUD message and map pins
                 return;
             }
@@ -156,6 +159,7 @@ namespace MobTracker
                 ZInput.ResetButtonStatus("JoyButtonB");
                 if (ZInput.IsGamepadActive())
                     PlayerController.SetTakeInputDelay(0.1f);
+                _closeCause = EventLines.ClosedByBack;
                 Close();
                 return;
             }
@@ -164,11 +168,14 @@ namespace MobTracker
                     Menu.IsVisible(), Hud.IsPieceSelectionVisible(), InventoryGui.IsVisible(), PlayerCustomizaton.IsBarberGuiVisible())
                 && Hotkeys.Pressed(ModConfig.ListKey))
             {
+                _closeCause = EventLines.ClosedByKey;
                 if (IsOpen)
                     Close();
                 else
                     Open();
             }
+            else
+                Events.ListKeyCheck(IsOpen, _searchFocused); // verbose only: a press refused, and why
         }
 
         private void Open()
@@ -178,6 +185,8 @@ namespace MobTracker
             IsOpen = true;
             _focusSearch = true;
             _refreshNow = true; // the rows of this opening at once, wherever the pointer is (Rules.ShouldRefresh)
+            _closeCause = null;
+            Events.ListOpened(_allTypes);
         }
 
         /// <summary>
@@ -196,6 +205,8 @@ namespace MobTracker
             _closedFrame = Time.frameCount;
             _focusSearch = false;
             _searchFocused = false;
+            Events.ListClosed(_closeCause);
+            _closeCause = null;
         }
 
         /// <summary>The player changed what the list shows - the search, the view or the list's stars - or opened it.</summary>
@@ -320,19 +331,26 @@ namespace MobTracker
             // Also while "always track nearest watched" waits for the next creature: the way to call that off.
             if ((Tracker.IsTracking || NearestWatched.IsPending) && GUILayout.Button("Stop tracking", GUILayout.Width(100f)))
             {
+                Events.Clicked("Stop tracking");
                 Tracker.Stop();
                 NearestWatched.Cancel();
             }
             // Called straight from here: nothing drawn after it depends on HasPins, so the layout and the
             // events of this frame still see the same controls.
             if (SpawnFinder.HasPins && GUILayout.Button("Clear pins", GUILayout.Width(80f)))
+            {
+                Events.Clicked("Clear pins");
                 SpawnFinder.Clear();
+            }
             GUILayout.EndHorizontal();
 
             // Both buttons only flip a flag; the rows themselves are swapped in Update.
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(_allTypes ? "View: all types" : "View: nearby"))
+            {
                 _allTypes = !_allTypes;
+                Events.ViewSwitched(_allTypes);
+            }
             bool path = ModConfig.Guide.Value == GuideMode.GroundPath;
             if (GUILayout.Button(path ? "Guide: ground path" : "Guide: 3D arrow"))
                 ModConfig.Guide.Value = path ? GuideMode.Arrow : GuideMode.GroundPath;
@@ -396,7 +414,10 @@ namespace MobTracker
                 if (row.IsType)
                 {
                     if (GUILayout.Button("Find area", GUILayout.Width(80f)))
+                    {
+                        Events.RowClicked("Find area", row.Label, row.Prefab);
                         _pendingFind = row;
+                    }
                 }
                 else
                 {
@@ -408,9 +429,15 @@ namespace MobTracker
                     if (GUILayout.Button(tracked ? "Untrack" : "Track", GUILayout.Width(70f)))
                     {
                         if (tracked)
+                        {
+                            Events.RowClicked("Untrack", row.Label, row.Prefab);
                             Tracker.Stop();
+                        }
                         else if (row.Character != null)
+                        {
+                            Events.RowClicked("Track", row.Label, row.Prefab);
                             Tracker.Track(row.Character);
+                        }
                     }
                 }
 

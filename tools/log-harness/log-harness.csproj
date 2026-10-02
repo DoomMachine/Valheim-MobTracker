@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Proves MobTracker.log's file handling outside the game (0.7.0): LogFile.cs, LogRules.cs and EventLines.cs are compiled
+    as they are, with stand-ins for MobTrackerPlugin and LogHost (Program.cs), against the game's own BepInEx.dll.
+    Build:  dotnet build tools\log-harness\log-harness.csproj -c Release
+    Run:    build\log-harness\log-harness.exe <an empty scratch folder>     (exit 0: every scenario passed)
+    It runs on .NET Framework 4.8, not the game's Mono: what it proves about file sharing is Windows' and .NET's.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>log-harness</AssemblyName>
+    <RootNamespace>MobTracker</RootNamespace>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>..\..\build\log-harness\</OutputPath>
+    <DebugType>none</DebugType>
+    <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
+    <ValheimDir Condition="'$(ValheimDir)' == '' and '$(VALHEIM)' != ''">$(VALHEIM)</ValheimDir>
+    <ValheimDir Condition="'$(ValheimDir)' == ''">E:\SteamLibrary\steamapps\common\Valheim</ValheimDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\..\LogFile.cs" />
+    <Compile Include="..\..\LogRules.cs" />
+    <Compile Include="..\..\EventLines.cs" />
+    <Compile Include="..\..\Rules.cs" />
+    <Compile Include="..\..\StarFilter.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx"><HintPath>$(ValheimDir)\BepInEx\core\BepInEx.dll</HintPath><Private>true</Private></Reference>
+  </ItemGroup>
+
+</Project>

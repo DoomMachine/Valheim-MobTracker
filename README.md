@@ -93,7 +93,34 @@ https://github.com/DoomMachine/Valheim-MobTracker
   (F7) while it waits, and calls it off; nothing else on screen shows that it is waiting. Losing a tamed creature or one
   of a type you do not watch, or stopping the tracking yourself, never starts one. With the option on,
   `BepInEx/LogOutput.log` gets a line at each loss of a tracked creature - whether it waits and, if not, why - and one
-  when a wait ends: what it took, or, as far as it can tell, why it took nothing.
+  when a wait ends: what it took, or, as far as it can tell, why it took nothing; with `VerboseLog` on, also what its
+  looks found while they took nothing (see **Logs**).
+- **Logs**: MobTracker's warnings and errors also go to its own `BepInEx/MobTracker.log` (`ErrorLog`, on by default),
+  and so does an error of MobTracker's own code that the game or BepInEx reports - an exception nobody caught, which
+  `LogOutput.log` holds only with BepInEx's `WriteUnityLog` setting on - and BepInEx's warning about a value in
+  MobTracker's cfg it could not read. Such an error that repeats - one thrown on every frame - is written at most once a
+  minute, with how many times it came in between. Each entry starts with the date, the time to the millisecond and the
+  game's frame number (`f-` for a line logged off the game's main thread), and an error's stack trace follows on lines
+  indented under it; after that, a MobTracker line reads as it does in `LogOutput.log`. The file starts afresh at each
+  start of the game, and the one before is kept as `MobTracker-prev.log`, so a restart does not wipe it. Its own lines,
+  marked `[File   :MobTracker]`, name MobTracker's, Valheim's and BepInEx's versions and the two logging settings when
+  it opens, and, opened at the start of the game, every MobTracker setting as read then. If the one before could not be
+  copied to `MobTracker-prev.log`, its lines stay at the top of the file instead, above a line saying so. With
+  `VerboseLog` on (off by default; in ConfigurationManager it can be turned on and off while the game runs),
+  `MobTracker.log` and `LogOutput.log` also get a line for each of these events, starting with what it is about: a
+  tracking started, stopped, lost or reached and why, the guide hidden or shown, the ground path found or not, each
+  watch alert and what Auto-track did with it, a watched creature that does not alert and why (once per creature), what
+  Always track nearest watched's looks found when they took nothing, the list opened and closed and why, a press of
+  `ListKey` the list did not act on and why, the window's buttons, Find area's steps, each setting changed, a world
+  entered or left (Known limits says what it does not say yet). A line in LogOutput.log - and in MobTracker.log while it
+  is open - says when either setting changes in the game, as long as the cfg can be saved. `LogOutput.log` and the
+  game's `Player.log` get every line they got before, whatever the two settings say; "the log" elsewhere in this README
+  is `LogOutput.log`. In `MobTracker.log` the game's folder and your Windows user folder are written as `<game>` and
+  `<user>` where they appear in full, and MobTracker's own lines name creature types and distances - and, with
+  `VerboseLog` on, the map positions of the areas Find area finds, as `LogOutput.log` has them - never a player,
+  character or world. With both settings off from the start of the game, neither file is touched. The game keeps the
+  file open while it runs, as it does `LogOutput.log`, so a program that reads it then must let the game go on writing
+  to it.
 
 ## Installing
 
@@ -103,9 +130,15 @@ MobTracker needs BepInEx 5 for Valheim (the BepInExPack for Valheim, for example
 licence. The settings in `BepInEx/config/com.mobtracker.plugin.cfg` are kept from one version to the next - since
 0.5.0 the watchlist and the two star filters only with `KeepBetweenSessions` on - and a new version adds its own
 with their defaults. When the game starts, `BepInEx/LogOutput.log` says
-`MobTracker <version> loaded`. To remove it, delete `MobTracker.dll`, and the .cfg too to forget the settings.
+`MobTracker <version> loaded`, and, with the default settings, `BepInEx/MobTracker.log` has a line that reads
+`MobTracker <version> - MobTracker.log opened at the game's start; ...` after its date, time, frame and
+`[File   :MobTracker]`. To remove it, delete `MobTracker.dll`, the .cfg too to forget the settings, and
+`BepInEx/MobTracker.log` and `MobTracker-prev.log` if you like.
 
 ## Configuration (`BepInEx/config/com.mobtracker.plugin.cfg`)
+
+ConfigurationManager lists MobTracker's **Logging** section first (unless its own "Sort by name" setting is on); the
+file lists its sections by name.
 
 | Setting | Default | |
 |---|---|---|
@@ -120,6 +153,8 @@ with their defaults. When the game starts, `BepInEx/LogOutput.log` says
 | `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor takes a creature on the other side of a dungeon entrance, nor acts while Always track nearest watched waits after a loss - that wait chooses instead |
 | `Alerts.AlertStarFilter` | `All` | The alerts' star filter (also the **Alerts:** row), written the same way: e.g. `OneStar, TwoStars` alerts only for one- and two-star creatures. A text setting since 0.4.0, like `ListStarFilter`, except that a change in the window or in ConfigurationManager takes effect only once the filter has stayed the same for 1.5 seconds (see Known limits). Back to `All` at every session unless `KeepBetweenSessions` is on; with it on, edit the file by hand with the game closed, as for `Watchlist` |
 | `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature of a watched type, not a tamed one, is lost, track the nearest creature of any watched type that passes the watch alert's filters and is on your side of a dungeon entrance: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window). With it on, the log says what each loss and each wait did |
+| `Logging.ErrorLog` | `true` | Copy MobTracker's warnings and errors, an error of its code that the game or BepInEx reports and a value in this file BepInEx could not read, to `BepInEx/MobTracker.log`, with the date, time and frame of each; the game start before is kept as `MobTracker-prev.log` (see **Logs**). `LogOutput.log` gets MobTracker's lines either way. With this and `VerboseLog` off from the start of the game, neither file is touched |
+| `Logging.VerboseLog` | `false` | Also write a line for each event listed under **Logs** to `MobTracker.log` and `LogOutput.log`; on, `MobTracker.log` gets every MobTracker line, whatever `ErrorLog` says. Changed in ConfigurationManager, it takes effect at once, also while the game runs - unless the cfg cannot be saved then (read-only, or held by another program). Edited in this file by hand, it is read only at the next start of the game - edit with the game closed: while it runs, any setting the game saves writes its own values back over the file. A setting dragged or typed in ConfigurationManager writes one line at once and one more when it holds still |
 
 ## Known limits
 
@@ -163,6 +198,29 @@ with their defaults. When the game starts, `BepInEx/LogOutput.log` says
   how creatures on those tiles find their way. The arrow (the default) leaves them alone.
 - The window and the tracking label grow with your screen height above 1080p; they do not follow the game's GUI
   scale setting. The window's size and place are not kept from one start of the game to the next.
+- `MobTracker.log` gets an error of MobTracker's code that nobody caught only through BepInEx's `UnityLogListening`
+  setting (on by default), only one the game reports on its main thread, and only when a line of its stack names
+  MobTracker's code - an error inside game code MobTracker changes, with no MobTracker line in its stack, is not taken.
+  A value BepInEx cannot read in the two `Logging` settings themselves is warned about in `LogOutput.log` only. The file
+  holds at most 5 MB per game start, then says so and stops until the next start. A second copy of the game running at
+  the same time writes none, and says so in its own `LogOutput.log`. A folder written in another spelling - shortened,
+  or with `/` in place of `\` - is not replaced by `<game>` or `<user>`: look before you share the file.
+- `VerboseLog` does not say why a Watch or Find area click was dropped when the list closed in the same frame, nor why
+  the guide stayed up when the game's cutscene test fails, nor which of Escape and the gamepad's B closed the list,
+  nor why a watched creature did not alert for a reason other than the four its line names (not on the network yet,
+  tamed, its stars, outside `AlertRadius`). It writes nothing when the search changes the list's rows (the search text
+  is never written), when the once-a-second alert check finds nothing watched, when another mod (TomTom, say) takes
+  the map's delete before MobTracker does, or when that delete finds no area pin in reach. What it learns by
+  watching - the guide hidden or shown, a tracked creature tamed, the local player there or not, the **Alerts:**
+  stars in effect - it writes up to a frame after it happened, except the state it finds when `VerboseLog` is turned
+  on and the guide and tamed state in a tracking's first two frames, which it takes as they are without a line: a
+  guide already hidden when you start tracking (the HUD hidden with Ctrl+F3, say) gets no `Guide: hidden` line. The
+  ground path's lines come only within 250 m, where the line is built.
+- While `com.mobtracker.plugin.cfg` cannot be written (read-only, or held by another program), a click in the window
+  that changes a setting fails (an error in `MobTracker.log` with `ErrorLog` on, and in the game's `Player.log`), and
+  the watchlist or star filter it changed stays behind its setting until the next change of it that can be saved
+  (already so in 0.6.0). `VerboseLog` turned on or off in ConfigurationManager then does not take effect, and a change
+  of either logging setting neither opens `MobTracker.log` nor is noted in it.
 
 Open issues, what has not yet been confirmed in the game, and ideas for later are listed in
 `docs/open-items.md` in the repository.
@@ -182,7 +240,9 @@ Run in Windows PowerShell 5.1, in a plain shell, with the same .NET SDK and agai
 BepInEx files, the same commit gives the same bytes, so a downloaded zip can be checked against its tag; each
 release's notes name the versions used. `tests/` holds the rules that need no game (`dotnet run` there), and
 `tools/unit-mutants.ps1` plants defects in those rules, one at a time in a copy under `build/`, and checks that
-the tests fail on each.
+the tests fail on each. `tools/log-harness/` proves how `MobTracker.log` is opened, kept, written and shut outside the
+game: `dotnet build tools/log-harness/log-harness.csproj -c Release`, then
+`build/log-harness/log-harness.exe <an empty folder>`.
 
 ## Credits
 
@@ -199,6 +259,16 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **0.7.0** - logs, asked for after 0.6.0's release. Every MobTracker warning and error, and an error of MobTracker's
+  own code that the game or BepInEx reports (see Known limits), also goes to `BepInEx/MobTracker.log`, each entry with
+  its date, time and frame (`ErrorLog`, on by default); the game start before is kept as `MobTracker-prev.log`.
+  `VerboseLog` (off by default; in ConfigurationManager it can be turned on while the game runs) adds a line for each of
+  these events - tracking, the guide and the ground path, alerts and Auto-track, why a watched creature did not alert,
+  Always track nearest watched's looks that took nothing, the list, its key and its buttons, Find area, settings, worlds
+  entered and left - to it and to `LogOutput.log`, which gets every line it got before (Known limits says what it does
+  not say yet). An error saying a part of MobTracker could not be patched in, or that TomTom's or Wayfinder's keys could
+  not be kept working, now gives its cause, not only where. The safety checks cover the new code with more planted
+  defects, and a harness proves the file's handling outside the game. Not yet played in the game.
 - **0.6.0** - Always track nearest watched takes the nearest creature of any watched type, not only of the type that
   was lost: watching Deer and Boar, after a tracked Deer is lost it points at whichever Deer or Boar is nearest (asked
   for during a 0.5.1 play session). While it waits, a watch alert still shows and dings but leaves the choice to it,
@@ -206,7 +276,7 @@ The copyright holder is DoomMachine (see `LICENSE`).
   and unwatching the type you lost no longer ends the wait; unwatching every type does. To hunt one kind only, watch
   only that kind. With the option on, `BepInEx/LogOutput.log` says what each loss of a tracked creature and each wait
   did. The safety checks catch more planted defects, among them a re-track that keeps the first creature it finds
-  rather than the nearest. Not yet played in the game.
+  rather than the nearest. Ran through a play session without errors, in which the new rule did not act.
 - **0.5.1** - fixes. The tracking arrow, the ground-path line and the "Tracking:" label hide while you hide the HUD
   (Ctrl+F3), during a cutscene, while you are dead and during a teleport; before, the arrow and the line stayed up
   through all of these, and the label through all but the hidden HUD. `ArrowSize` (0.1 to 3) and `ArrowHeight` (0 to

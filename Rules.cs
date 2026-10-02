@@ -324,6 +324,18 @@ namespace MobTracker
             return _alerted.Add(id);
         }
 
+        /// <summary>How many creatures have had their alert since the last Clear (the verbose log's line when it clears).</summary>
+        public int Count
+        {
+            get { return _alerted.Count; }
+        }
+
+        /// <summary>Whether this creature has had its alert (the verbose log's not-alerting line skips it).</summary>
+        public bool Has(TId id)
+        {
+            return _alerted.Contains(id);
+        }
+
         public void Clear()
         {
             _alerted.Clear();

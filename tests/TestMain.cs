@@ -27,6 +27,7 @@ namespace MobTracker
             GuideTests();
             PointerTests();
             ListKeyTests();
+            LogTests.Run(Check);
             Console.WriteLine(_failures == 0
                 ? "ALL TESTS PASSED (" + _passes + ")"
                 : _failures + " TEST(S) FAILED, " + _passes + " passed");

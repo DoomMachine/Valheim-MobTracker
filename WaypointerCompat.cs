@@ -31,7 +31,10 @@ namespace MobTracker
             {
                 PluginInfo info;
                 if (!Chainloader.PluginInfos.TryGetValue(guid, out info) || info == null || info.Instance == null)
-                    continue; // not installed, or not loaded: nothing to say
+                {
+                    Events.CompatSkipped(guid, info != null); // not installed, or installed but not loaded
+                    continue;
+                }
                 ApplyTo(harmony, info.Instance.GetType(), info.Metadata.Name + " " + info.Metadata.Version);
             }
         }
@@ -53,7 +56,7 @@ namespace MobTracker
             }
             catch (Exception e)
             {
-                MobTrackerPlugin.Log.LogError("Could not patch " + who + "'s IsTypingElsewhere, so its keys stay off while the MobTracker list is open: " + e.Message);
+                MobTrackerPlugin.Log.LogError("Could not patch " + who + "'s IsTypingElsewhere, so its keys stay off while the MobTracker list is open: " + LogRules.Describe(e));
                 return false;
             }
 

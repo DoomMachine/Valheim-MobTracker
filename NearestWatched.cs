@@ -102,7 +102,10 @@ namespace MobTracker
             // An empty look returns first, so the line below is written once per take - never per look, and never about
             // a creature that is not there.
             if (nearest == null)
+            {
+                Events.EmptyLook(from, playerInside); // verbose only: why nothing could be taken, when that changes
                 return;
+            }
 
             MobTrackerPlugin.Log.LogInfo(Pending.TookLine(Creature.DisplayName(nearest), nearestDistance, Time.time));
             Pending.Cancel();

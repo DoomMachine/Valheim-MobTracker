@@ -45,6 +45,21 @@
      entry's own change handler re-parses it; closing the list (also on every frame with no player) drops a Watch or
      Find area click still waiting
   8. every assembly the plugin references is in the game folder
+  9. the log (0.7.0): Logging.ErrorLog (default true) and Logging.VerboseLog (default false) are bound first in Awake,
+     before ModConfig.Bind, and MobTracker.log is opened then only when one is on, else when one is first turned on,
+     once per game start; it is taken first (sharing Read only), copied to MobTracker-prev.log and only then emptied,
+     UTF-8 without a BOM, flushed per line, every failure of the open caught and named by type only, and the file's
+     failure paths (Shut, Dispose, Broke, Stop, the stop notice, CloseQuietly) held to their exact IL shapes, each with
+     its catch; the listener copies
+     MobTracker's own source (by reference) as LogRules.ToFile says and another source's line only as LogRules.Foreign
+     and the repeat limit say, and neither throws nor logs; LogRules' levels are BepInEx's; every log line, by method
+     and level, is a 0.6.0 line, a warning of the log's own, a switch note or a verbose line (Info, through ModLog.Event,
+     which writes nothing while VerboseLog is off); the verbose lines come from a fixed list of sites, each returning
+     first while VerboseLog is off and catching its own failure, none changing what it describes; Events' once-only,
+     on-change and on-press guards and what it hands to EventLines' decisions are held to their exact IL shapes, as are
+     the catch round the settings line LogFile.Bound writes in Awake, the list's close line past Close's IsOpen test and
+     the reached line inside the reached block; and nothing reads a player's, character's or
+     world's name, an ID or a save path
   Run it after every Valheim update. Exits 1 on any failure. The number of checks depends on how many TomTom or
   Wayfinder DLLs it reads (one check each).
 
@@ -56,7 +71,7 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Plugin = "",
-    [string]$ExpectedVersion = "0.6.0",
+    [string]$ExpectedVersion = "0.7.0",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string[]]$Waypointer = @()   # TomTom / Wayfinder DLLs to check the carve-out against; default: the installed ones
 )
@@ -631,6 +646,9 @@ Test-Calls @(
     @("MobTracker.NearestWatched", "Cancel", "Retrack::Cancel", @("NearestWatched::Pending"), @("ret")),
     @("MobTracker.NearestWatched", "Update", "Retrack::TookLine", @("NearestWatched::Pending", "Creature::DisplayName", "loc <- loc <- Vector3::Distance", "Time::get_time"), $null),
     @("MobTracker.NearestWatched", "Update", "Creature::DisplayName", @("loc <- loc <- Enumerator::get_Current"), $null),
+    # The empty look's verbose line (0.7.0) is given the player's position and side, read once before the loop, and
+    # the return follows it.
+    @("MobTracker.NearestWatched", "Update", "Events::EmptyLook", @("loc <- Transform::get_position", "loc <- Character::InInterior"), @("ret")),
     # The log lines (0.6.0): the end line's reason from what can still be read when a wait ends, the loss line built
     # from the outcome of Retrack.Lost, and Stop tracking's line only while a wait is on (where each sits: the shapes).
     @("MobTracker.NearestWatched", "Update", "Retrack::EndedLine", @("NearestWatched::Pending", "Time::get_time", "Retrack::EndReason"), $null),
@@ -785,6 +803,7 @@ $ccWant = @(
     'call Creature::PrefabName x1',
     'call Enumerator::get_Current x1',
     'call Enumerator::MoveNext x1',
+    'call Events::EmptyLook x1',
     'call ModConfig::get_Watchlist x3',
     'call Object::op_Equality x2',
     'call Retrack::EndReason x1',
@@ -829,31 +848,38 @@ else {
     Fail ("NearestWatched.Update: its calls, returns or branches differ from the checked ones: " + ($ccDiff -join "; "))
 }
 # MobTracker logs through BepInEx's ManualLogSource only: a UnityEngine.Debug call anywhere would reach the log past
-# every count of ManualLogSource calls above.
+# every count of ManualLogSource calls above and below, and so would System.Console, System.Diagnostics' Trace and
+# Debug (BepInEx copies them to its log) or a Unity log callback of its own (since 0.7.0 MobTracker.log takes Unity's
+# errors through BepInEx, one route only).
 $checks++
-$dbg = @(foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if ($m.HasBody) { foreach ($x in $m.Body.Instructions) { if ($x.Operand -is [Mono.Cecil.MethodReference] -and $x.Operand.DeclaringType.FullName -ceq "UnityEngine.Debug") { $t.Name + "." + $m.Name + " -> Debug." + $x.Operand.Name } } } } })
-if ($dbg.Count -eq 0) { Ok "No method calls UnityEngine.Debug: every log line goes through BepInEx's ManualLogSource" } else { Fail ("UnityEngine.Debug is called: " + ($dbg -join "; ")) }
-# After the loop, an empty look returns at once; only then the took line, the cancel and the Track, in that order, each
-# about the kept nearest (a line above the return would hand Creature.DisplayName a null on every look). Update writes
-# two lines in all: this one and the end of a wait's.
+$bypass = @("UnityEngine.Debug", "System.Console", "System.Diagnostics.Trace", "System.Diagnostics.Debug", "UnityEngine.ILogger", "UnityEngine.Logger")
+$dbg = @(foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if ($m.HasBody) { foreach ($x in $m.Body.Instructions) { $o = $x.Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($bypass -ccontains $o.DeclaringType.FullName -or ($o.DeclaringType.FullName -ceq "UnityEngine.Application" -and $o.Name -clike "add_logMessageReceived*"))) { $t.Name + "." + $m.Name + " -> " + $o.DeclaringType.Name + "." + $o.Name } } } } })
+if ($dbg.Count -eq 0) { Ok "No method calls UnityEngine.Debug, System.Console, Trace, Diagnostics.Debug or a Unity log callback: every log line goes through BepInEx's ManualLogSource" } else { Fail ("a log route past ManualLogSource is used: " + ($dbg -join "; ")) }
+# After the loop, an empty look returns at once - since 0.7.0 after its verbose line, Events.EmptyLook, given the
+# player's position and side read before the loop (it returns at once with VerboseLog off); only then the took line,
+# the cancel and the Track, in that order, each about the kept nearest (a line above the return would hand
+# Creature.DisplayName a null on every look). Update writes three lines in all: this one, the end of a wait's and the
+# empty look's verbose one - by any route: ManualLogSource, ModLog or Events.
 $checks++
 $why = @()
 $sh = Get-Shape $nwu
 $tk = @(for ($k = 0; $k -lt $sh.Count; $k++) { if ($sh[$k] -ceq "call Tracker::Track") { $k } })
 $ic = @(Get-CallAt $ni "Retrack::IsCandidate")
-if ($tk.Count -ne 1 -or $ic.Count -ne 1 -or $tk[0] -lt 16) { $why += "Tracker.Track / IsCandidate calls: {0} / {1}" -f $tk.Count, $ic.Count } else {
+if ($tk.Count -ne 1 -or $ic.Count -ne 1 -or $tk[0] -lt 19) { $why += "Tracker.Track / IsCandidate calls: {0} / {1}" -f $tk.Count, $ic.Count } else {
     $vN = Get-VarIndex $ni[$ic[0] + 6]; $vD = Get-VarIndex $ni[$ic[0] + 8]
-    $tailWant = @("ldloc V$vN", "ldnull", "call Object::op_Equality", "brfalse ->5", "ret", "ldsfld MobTrackerPlugin::Log", "ldsfld NearestWatched::Pending",
+    $tailWant = @("ldloc V$vN", "ldnull", "call Object::op_Equality", "brfalse ->8", "ldloc V1", "ldloc V2", "call Events::EmptyLook", "ret",
+        "ldsfld MobTrackerPlugin::Log", "ldsfld NearestWatched::Pending",
         "ldloc V$vN", "call Creature::DisplayName", "ldloc V$vD", "call Time::get_time", "callvirt Retrack::TookLine", "callvirt ManualLogSource::LogInfo",
         "ldsfld NearestWatched::Pending", "callvirt Retrack::Cancel", "ldloc V$vN", "call Tracker::Track", "ret")
-    $s0 = $tk[0] - 16
+    $s0 = $tk[0] - 19
     $tailGot = @(for ($k = $s0; $k -lt [Math]::Min($sh.Count, $s0 + $tailWant.Count); $k++) { if ($sh[$k] -match '^(\S+) ->(\d+)$') { "{0} ->{1}" -f $Matches[1], ([int]$Matches[2] - $s0) } else { $sh[$k] } })
     if (($tailGot -join "`n") -cne ($tailWant -join "`n")) { $why += ("the end is not: {0} - it is: {1}" -f ($tailWant -join "; "), ($tailGot -join "; ")) }
-    # Any level counts: a Message or a Debug line on every look would be as wrong as an Info one.
-    $lg = @(for ($k = 0; $k -lt $sh.Count; $k++) { if ($sh[$k] -cmatch "^callvirt ManualLogSource::Log") { $k } })
-    if ($lg.Count -ne 2) { $why += ("ManualLogSource is called {0} time(s), expected twice (the end line and the took line)" -f $lg.Count) }
+    # Any level counts, and any route: a Message or a Debug line on every look would be as wrong as an Info one, and so
+    # would a verbose line through ModLog or Events.
+    $lg = @(for ($k = 0; $k -lt $sh.Count; $k++) { if ($sh[$k] -cmatch "^(callvirt ManualLogSource::Log|call ModLog::Event|call Events::)") { $k } })
+    if ($lg.Count -ne 3) { $why += ("a log call (ManualLogSource, ModLog or Events) is made {0} time(s), expected 3 (the end line, the took line and the empty look's verbose line)" -f $lg.Count) }
 }
-if ($why.Count -eq 0) { Ok "NearestWatched.Update: an empty look returns; then the log line, Pending.Cancel and Tracker.Track, each of the kept nearest" } else { Fail ("NearestWatched.Update: " + ($why -join "; ")) }
+if ($why.Count -eq 0) { Ok "NearestWatched.Update: an empty look writes its verbose line (Events.EmptyLook) and returns; then the log line, Pending.Cancel and Tracker.Track, each of the kept nearest" } else { Fail ("NearestWatched.Update: " + ($why -join "; ")) }
 # The loss line (0.6.0): built right after Retrack.Lost, from its outcome, and written only when there is one (null with
 # the option off). An exact IL shape from the Retrack.Lost call to the end of NearestWatched.Lost.
 $checks++
@@ -1093,10 +1119,10 @@ foreach ($t in $plug.GetTypes()) {
 }
 if ($retrackLost.Count -eq 1 -and $retrackLost[0] -eq "NearestWatched.Lost") { Ok "Retrack.Lost is called once, from NearestWatched.Lost" }
 else { Fail ("Retrack.Lost must be called exactly once, from NearestWatched.Lost; found: {0}" -f $(if ($retrackLost.Count) { $retrackLost -join ", " } else { "none" })) }
-# A component nobody adds never runs: Awake must add NearestWatched and GameSession (AddComponent<T>) to the plugin's
+# A component nobody adds never runs: Awake must add NearestWatched, GameSession and LogObserver (AddComponent<T>) to the plugin's
 # own object (this.gameObject), which BepInEx keeps across scene loads - on an object of the scene, GameSession would
 # go with the first logout.
-foreach ($component in @("NearestWatched", "GameSession")) {
+foreach ($component in @("NearestWatched", "GameSession", "LogObserver")) {
     $checks++
     $added = $false
     if ($awake) {
@@ -2219,6 +2245,674 @@ foreach ($pair in @(@("Rect::get_x", "Rect::set_x"), @("Rect::get_y", "Rect::set
 }
 if ($why.Count -eq 0) { Ok "EntityListWindow.OnGUI: _rect.x = Clamp(_rect.x, ...), _rect.y = Clamp(_rect.y, ...)" }
 else { Fail ("EntityListWindow.OnGUI: " + ($why -join "; ")) }
+
+Write-Output "== the log (0.7.0) =="
+# MobTracker.log and VerboseLog. LogFile, a listener on BepInEx's log, copies MobTracker's own lines - and the errors of
+# its code that reach BepInEx from Unity's log or BepInEx's own source - into BepInEx\MobTracker.log; the verbose lines
+# are written by Events, through ModLog.Event, at Info. The listener runs inside every plugin's log call, on its thread,
+# with nothing round it: what it may do is pinned here as exact IL shapes, like the ones above - a legitimate rewrite
+# fails them and must be re-read against the method's IL (ILSpy or Mono.Cecil), not loosened until they pass.
+# Each shape below was read against the C# it compiles from (0.7.0 design, 2026-10-02).
+function Get-ShapeText($m) {
+    # Get-Shape, with a CR or LF in a string written as \r or \n, and a description (an ldstr of more than 100
+    # characters) as 'ldstr <text>': the cfg's wording is not this check's to hold.
+    @(Get-Shape $m | ForEach-Object { if ($_ -clike "ldstr *" -and $_.Length -gt 106) { "ldstr <text>" } else { $_.Replace("`r", "\r").Replace("`n", "\n") } })
+}
+function Get-HandlerText($m) {
+    $ins = @($m.Body.Instructions)
+    @($m.Body.ExceptionHandlers | ForEach-Object { "{0} {1} {2}..{3} {4}..{5}" -f $_.HandlerType, $(if ($_.CatchType) { $_.CatchType.FullName } else { "-" }),
+        [array]::IndexOf($ins, $_.TryStart), [array]::IndexOf($ins, $_.TryEnd), [array]::IndexOf($ins, $_.HandlerStart), [array]::IndexOf($ins, $_.HandlerEnd) })
+}
+function Test-ExactShape($typeName, $methodName, $want, $what, $handlers = @()) {
+    # The whole method, instruction by instruction, and its exception handlers (none unless listed).
+    $script:checks++
+    $where = "{0}.{1}" -f $typeName.Split('.')[-1], $methodName
+    $m = Get-Method $typeName $methodName
+    if (-not $m) { Fail "$where not found"; return }
+    $why = @()
+    $got = @(Get-ShapeText $m)
+    if (($got -join "`n") -cne (@($want) -join "`n")) { $why += ("it is not: {0} - it is: {1}" -f (@($want) -join "; "), ($got -join "; ")) }
+    $hGot = @(Get-HandlerText $m)
+    if (($hGot -join "; ") -cne (@($handlers) -join "; ")) { $why += ("its exception handlers are [{0}], not [{1}]" -f ($hGot -join "; "), (@($handlers) -join "; ")) }
+    if ($why.Count -eq 0) { Ok "${where}: $what" } else { Fail ("${where}: " + ($why -join "; ")) }
+}
+function Get-CallTable($match) {
+    # "Caller.Method -> Type::Member xN" for every call (or newobj) of a member whose "Type::Name" matches; a compiler-made
+    # nested type is named without its number (<Search>d__N), which changes with unrelated edits.
+    $rows = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
+    foreach ($t in $plug.GetTypes()) {
+        foreach ($m in $t.Methods) {
+            if (-not $m.HasBody) { continue }
+            foreach ($x in $m.Body.Instructions) {
+                $o = $x.Operand
+                if ($o -isnot [Mono.Cecil.MethodReference] -or -not ($x.OpCode.Name -eq "call" -or $x.OpCode.Name -eq "callvirt" -or $x.OpCode.Name -eq "newobj")) { continue }
+                $callee = $o.DeclaringType.Name + "::" + $o.Name
+                if ($callee -cnotmatch $match) { continue }
+                $k = "{0}.{1} -> {2}" -f ($t.Name -replace '>d__\d+$', '>d__N'), ($m.Name -replace '>b__\d+(_\d+)?$', '>b__N'), $callee
+                if ($rows.ContainsKey($k)) { $rows[$k] = $rows[$k] + 1 } else { $rows[$k] = 1 }
+            }
+        }
+    }
+    return @($rows.Keys | Sort-Object -CaseSensitive | ForEach-Object { "{0} x{1}" -f $_, $rows[$_] })
+}
+function Test-Table($got, $want, $ok, $what) {
+    $script:checks++
+    $g = @($got) -join "; "; $w = @($want) -join "; "
+    if ($g -ceq $w) { Ok $ok }
+    else {
+        $diff = @(Compare-Object -CaseSensitive @($want) @($got) | ForEach-Object { if ($_.SideIndicator -eq "=>") { "+ " + $_.InputObject } else { "- " + $_.InputObject } })
+        Fail ("{0} differ from the checked ones: {1}" -f $what, ($diff -join "; "))
+    }
+}
+
+$Shape_LogFile_Start = @('ldarg.0', 'ldstr Logging', 'ldstr ErrorLog', 'ldc.i4.1', 'ldstr <text>', 'callvirt ConfigFile::Bind', 'stsfld LogFile::ErrorLog', 'ldarg.0',
+    'ldstr Logging', 'ldstr VerboseLog', 'ldc.i4.0', 'ldstr <text>', 'callvirt ConfigFile::Bind', 'stsfld LogFile::VerboseLog',
+    'ldsfld LogFile::VerboseLog', 'callvirt ConfigEntry`1::get_Value', 'stsfld ModLog::Verbose', 'ldarg.1', 'stsfld LogFile::_folder', 'ldarg.2',
+    'stsfld LogFile::_gameFolder', 'call Thread::get_CurrentThread', 'callvirt Thread::get_ManagedThreadId', 'stsfld LogFile::_mainThread',
+    'ldsfld LogFile::Clock', 'callvirt Stopwatch::Start', 'ldsfld LogFile::ErrorLog', 'callvirt ConfigEntry`1::get_Value', 'brtrue ->32',
+    'ldsfld LogFile::VerboseLog', 'callvirt ConfigEntry`1::get_Value', 'brfalse ->34', 'ldstr at the game''s start', 'call LogFile::Open',
+    'ldc.i4.1', 'stsfld LogFile::_binding', 'ldsfld LogFile::ErrorLog', 'ldsfld <>O::<0>__ErrorLogChanged', 'dup', 'brtrue ->46', 'pop', 'ldnull',
+    'ldftn LogFile::ErrorLogChanged', 'newobj EventHandler::.ctor', 'dup', 'stsfld <>O::<0>__ErrorLogChanged',
+    'callvirt ConfigEntry`1::add_SettingChanged', 'ldsfld LogFile::VerboseLog', 'ldsfld <>O::<1>__VerboseLogChanged', 'dup', 'brtrue ->57', 'pop',
+    'ldnull', 'ldftn LogFile::VerboseLogChanged', 'newobj EventHandler::.ctor', 'dup', 'stsfld <>O::<1>__VerboseLogChanged',
+    'callvirt ConfigEntry`1::add_SettingChanged', 'ret')
+$Shape_LogFile_ErrorLogChanged = @('ldstr ErrorLog', 'ldsfld LogFile::ErrorLog', 'callvirt ConfigEntry`1::get_Value', 'call LogFile::Switched', 'ret')
+$Shape_LogFile_VerboseLogChanged = @('ldsfld LogFile::VerboseLog', 'callvirt ConfigEntry`1::get_Value', 'stsfld ModLog::Verbose', 'ldstr VerboseLog', 'ldsfld LogFile::VerboseLog',
+    'callvirt ConfigEntry`1::get_Value', 'call LogFile::Switched', 'ret')
+$Shape_LogFile_Switched = @('ldarg.1', 'brfalse ->9', 'ldsfld LogFile::_opened', 'brtrue ->9', 'ldstr when ', 'ldarg.0', 'ldstr  was turned on', 'call String::Concat',
+    'call LogFile::Open', 'ldsfld MobTrackerPlugin::Log', 'ldarg.0', 'ldarg.1', 'ldsfld LogFile::ErrorLog', 'callvirt ConfigEntry`1::get_Value',
+    'ldsfld ModLog::Verbose', 'call EventLines::LoggingSwitch', 'callvirt ManualLogSource::LogMessage', 'ret')
+$Shape_LogFile_Open = @('ldnull', 'stloc V0', 'ldnull', 'stloc V1', 'ldsfld LogFile::_folder', 'ldstr MobTracker.log', 'call Path::Combine', 'ldc.i4.4', 'ldc.i4.3',
+    'ldc.i4.1', 'newobj FileStream::.ctor', 'stloc V0', 'ldc.i4.1', 'stsfld LogFile::_opened', 'ldnull', 'stloc V2', 'ldloc V0',
+    'callvirt Stream::get_Length', 'ldc.i4.0', 'conv.i8', 'ble ->57', 'ldsfld LogFile::_folder', 'ldstr MobTracker-prev.log', 'call Path::Combine',
+    'ldc.i4.2', 'ldc.i4.2', 'ldc.i4.1', 'newobj FileStream::.ctor', 'stloc V4', 'ldloc V0', 'ldc.i4.0', 'conv.i8', 'callvirt Stream::set_Position',
+    'ldloc V0', 'ldloc V4', 'callvirt Stream::CopyTo', 'leave ->42', 'ldloc V4', 'brfalse ->41', 'ldloc V4', 'callvirt IDisposable::Dispose',
+    'endfinally', 'ldloc V0', 'ldc.i4.0', 'conv.i8', 'callvirt Stream::SetLength', 'leave ->57', 'callvirt Exception::GetType',
+    'callvirt MemberInfo::get_Name', 'stloc V2', 'ldloc V0', 'ldc.i4.0', 'conv.i8', 'ldc.i4.2', 'callvirt Stream::Seek', 'pop', 'leave ->57',
+    'ldc.i4 40', 'call Environment::GetFolderPath', 'stsfld LogFile::_userFolder', 'newobj LogFile::.ctor', 'stloc V1', 'ldloc V1', 'ldloc V0',
+    'callvirt Stream::get_Length', 'stfld LogFile::_written', 'ldloc V0', 'ldc.i4.0', 'newobj UTF8Encoding::.ctor', 'newobj StreamWriter::.ctor',
+    'stloc V3', 'ldloc V3', 'ldstr \r\n', 'callvirt TextWriter::set_NewLine', 'ldloc V3', 'ldc.i4.1', 'callvirt StreamWriter::set_AutoFlush',
+    'ldloc V1', 'ldloc V3', 'stfld LogFile::_writer', 'ldnull', 'stloc V0', 'ldloc V2', 'brfalse ->88', 'ldloc V1', 'ldloc V2',
+    'call EventLines::PrevNotWritten', 'callvirt LogFile::WriteFile', 'ldloc V1', ("ldstr " + $ExpectedVersion), 'call LogFile::GameVersion',
+    'call LogFile::BepInExVersion', 'ldarg.0', 'call EventLines::Header', 'callvirt LogFile::WriteFile', 'ldloc V1', 'ldsfld LogFile::ErrorLog',
+    'callvirt ConfigEntry`1::get_Value', 'ldsfld ModLog::Verbose', 'call EventLines::HeaderSwitches', 'callvirt LogFile::WriteFile', 'ldloc V1',
+    'stsfld LogFile::_tee', 'call Logger::get_Listeners', 'ldloc V1', 'callvirt ICollection`1::Add', 'leave ->123', 'stloc V5', 'ldloc V1',
+    'brfalse ->112', 'ldloc V1', 'callvirt LogFile::Dispose', 'ldloc V0', 'brfalse ->116', 'ldloc V0', 'call LogFile::CloseQuietly',
+    'ldsfld MobTrackerPlugin::Log', 'ldloc V5', 'callvirt Exception::GetType', 'callvirt MemberInfo::get_Name', 'call EventLines::OpenFailed',
+    'callvirt ManualLogSource::LogWarning', 'leave ->123', 'ret')
+$Handlers_LogFile_Open = @('Finally - 29..37 37..42', 'Catch System.Exception 21..47 47..57', 'Catch System.Exception 4..107 107..123')
+$Shape_LogFile_LogEvent = @('ldarg.0', 'ldfld LogFile::_writer', 'brtrue ->4', 'ret', 'nop', 'ldarg.2', 'callvirt LogEventArgs::get_Level', 'stloc V0', 'ldarg.2',
+    'callvirt LogEventArgs::get_Source', 'ldsfld MobTrackerPlugin::Log', 'bne.un ->28', 'ldloc V0', 'ldsfld LogFile::ErrorLog',
+    'callvirt ConfigEntry`1::get_Value', 'ldsfld ModLog::Verbose', 'call LogRules::ToFile', 'brfalse ->27', 'ldarg.0', 'ldloc V0',
+    'ldsfld MobTrackerPlugin::Log', 'callvirt ManualLogSource::get_SourceName', 'ldarg.2', 'callvirt LogEventArgs::get_Data',
+    'call LogRules::TextOf', 'call LogRules::Line', 'call LogFile::Write', 'leave ->70', 'ldarg.2', 'callvirt LogEventArgs::get_Source',
+    'call LogFile::NameOf', 'stloc V1', 'ldloc V1', 'ldloc V0', 'ldsfld LogFile::ErrorLog', 'callvirt ConfigEntry`1::get_Value', 'brtrue ->39',
+    'ldsfld ModLog::Verbose', 'br ->40', 'ldc.i4.1', 'ldsfld LogFile::_binding', 'call LogRules::Foreign', 'stloc V2', 'ldloc V2', 'brtrue ->46',
+    'leave ->70', 'ldarg.2', 'callvirt LogEventArgs::get_Data', 'call LogRules::TextOf', 'stloc V3', 'ldloc V2', 'ldc.i4.2', 'bne.un ->58',
+    'ldarg.0', 'ldloc V3', 'call LogFile::Ours', 'brtrue ->58', 'leave ->70', 'ldarg.0', 'ldloc V0', 'ldloc V1', 'ldloc V3', 'call LogRules::Line',
+    'call LogFile::Write', 'leave ->70', 'stloc V4', 'ldarg.0', 'ldloc V4', 'call LogFile::Broke', 'leave ->70', 'ret')
+$Handlers_LogFile_LogEvent = @('Catch System.Exception 5..65 65..70')
+$Shape_LogFile_Write = @('ldarg.0', 'ldfld LogFile::_gate', 'stloc V0', 'ldc.i4.0', 'stloc V1', 'ldloc V0', 'ldloca V_1', 'call Monitor::Enter', 'ldarg.0',
+    'ldfld LogFile::_writer', 'stloc V2', 'ldloc V2', 'brtrue ->14', 'leave ->76', 'ldc.i4.m1', 'stloc V3', 'call Thread::get_CurrentThread',
+    'callvirt Thread::get_ManagedThreadId', 'ldsfld LogFile::_mainThread', 'bne.un ->22', 'call LogHost::Frame', 'stloc V3',
+    'call DateTime::get_Now', 'ldloc V3', 'ldarg.1', 'ldsfld LogFile::_gameFolder', 'ldsfld LogFile::_userFolder', 'call LogRules::Scrub',
+    'call LogRules::FileLine', 'stloc V4', 'call Encoding::get_UTF8', 'ldloc V4', 'callvirt Encoding::GetByteCount', 'ldc.i4.2', 'add', 'conv.i8',
+    'stloc V5', 'ldarg.0', 'ldfld LogFile::_written', 'ldloc V5', 'ldc.i4 5242880', 'conv.i8', 'call LogRules::Fits', 'brtrue ->61', 'ldloc V2',
+    'call DateTime::get_Now', 'ldloc V3', 'ldstr [File   :MobTracker] ', 'ldc.i4 5242880', 'conv.i8', 'call EventLines::CapReached',
+    'call String::Concat', 'call LogRules::FileLine', 'callvirt TextWriter::WriteLine', 'ldc.i4 5242880', 'conv.i8', 'call EventLines::CapReached',
+    'stsfld LogFile::_notice', 'ldarg.0', 'call LogFile::Shut', 'leave ->76', 'ldloc V2', 'ldloc V4', 'callvirt TextWriter::WriteLine', 'ldarg.0',
+    'ldarg.0', 'ldfld LogFile::_written', 'ldloc V5', 'add', 'stfld LogFile::_written', 'leave ->76', 'ldloc V1', 'brfalse ->75', 'ldloc V0',
+    'call Monitor::Exit', 'endfinally', 'ret')
+$Handlers_LogFile_Write = @('Finally - 5..71 71..76')
+$Shape_LogFile_Ours = @('ldarg.1', 'call LogRules::NamesMobTracker', 'brtrue ->5', 'ldc.i4.0', 'ret', 'ldarg.0', 'ldfld LogFile::_gate', 'stloc V2', 'ldc.i4.0',
+    'stloc V3', 'ldloc V2', 'ldloca V_3', 'call Monitor::Enter', 'ldarg.0', 'ldfld LogFile::_repeats', 'ldarg.1', 'call LogRules::RepeatKey',
+    'ldsfld LogFile::Clock', 'callvirt Stopwatch::get_Elapsed', 'stloc V4', 'ldloca V_4', 'call TimeSpan::get_TotalSeconds', 'ldloca V_0',
+    'callvirt RepeatLimiter::Write', 'stloc V1', 'leave ->31', 'ldloc V3', 'brfalse ->30', 'ldloc V2', 'call Monitor::Exit', 'endfinally',
+    'ldloc V1', 'brfalse ->40', 'ldloc V0', 'ldc.i4.0', 'ble ->40', 'ldarg.0', 'ldloc V0', 'call EventLines::LeftOut', 'call LogFile::WriteFile',
+    'ldloc V1', 'ret')
+$Handlers_LogFile_Ours = @('Finally - 10..26 26..31')
+$Shape_ModLog_Event = @('ldsfld ModLog::Verbose', 'brfalse ->5', 'ldsfld MobTrackerPlugin::Log', 'ldarg.0', 'callvirt ManualLogSource::LogInfo', 'ret')
+$Shape_LogObserver_Update = @('call LogFile::ReportNotice', 'ldsfld ModLog::Verbose', 'brtrue ->10', 'ldarg.0', 'ldc.i4.0', 'stfld LogObserver::_known', 'ldarg.0',
+    'ldc.i4.m1', 'stfld LogObserver::_generation', 'ret', 'call Events::FlushSettings', 'ldsfld Player::m_localPlayer', 'ldnull',
+    'call Object::op_Inequality', 'stloc V0', 'call WatchAlerts::get_EffectiveAlertStars', 'stloc V1', 'ldarg.0', 'ldfld LogObserver::_known',
+    'brfalse ->26', 'ldloc V0', 'ldarg.0', 'ldfld LogObserver::_player', 'beq ->26', 'ldloc V0', 'call Events::PlayerPresence', 'ldarg.0',
+    'ldfld LogObserver::_known', 'brfalse ->35', 'ldloc V1', 'ldarg.0', 'ldfld LogObserver::_stars', 'beq ->35', 'ldloc V1',
+    'call Events::AlertStars', 'ldarg.0', 'ldloc V0', 'stfld LogObserver::_player', 'ldarg.0', 'ldloc V1', 'stfld LogObserver::_stars', 'ldarg.0',
+    'ldc.i4.1', 'stfld LogObserver::_known', 'call Tracker::get_IsTracking', 'brtrue ->50', 'ldarg.0', 'ldc.i4.m1',
+    'stfld LogObserver::_generation', 'ret', 'call Tracker::get_Generation', 'ldarg.0', 'ldfld LogObserver::_generation', 'beq ->61', 'ldarg.0',
+    'call Tracker::get_Generation', 'stfld LogObserver::_generation', 'ldarg.0', 'ldc.i4.2', 'stfld LogObserver::_wait', 'ret', 'ldarg.0',
+    'ldfld LogObserver::_wait', 'ldc.i4.0', 'ble ->81', 'ldarg.0', 'ldarg.0', 'ldfld LogObserver::_wait', 'ldc.i4.1', 'sub',
+    'stfld LogObserver::_wait', 'ldarg.0', 'ldfld LogObserver::_wait', 'brtrue ->80', 'ldarg.0', 'call Tracker::get_GuideHiddenNow',
+    'stfld LogObserver::_guideHidden', 'ldarg.0', 'call Tracker::get_TargetTamed', 'stfld LogObserver::_tamed', 'ret',
+    'call Tracker::get_GuideHiddenNow', 'ldarg.0', 'ldfld LogObserver::_guideHidden', 'beq ->91', 'ldarg.0', 'call Tracker::get_GuideHiddenNow',
+    'stfld LogObserver::_guideHidden', 'ldarg.0', 'ldfld LogObserver::_guideHidden', 'call Events::Guide', 'call Tracker::get_IsTrackingCreature',
+    'brfalse ->104', 'call Tracker::get_TargetTamed', 'ldarg.0', 'ldfld LogObserver::_tamed', 'beq ->104', 'ldarg.0',
+    'call Tracker::get_TargetTamed', 'stfld LogObserver::_tamed', 'ldarg.0', 'ldfld LogObserver::_tamed', 'brfalse ->104', 'call Events::Tamed',
+    'ret')
+$Shape_Events_TrackEnding = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'call Tracker::get_IsTracking', 'brtrue ->7', 'leave ->44', 'ldarg.0', 'ldnull',
+    'call Object::op_Equality', 'brfalse ->15', 'call Tracker::get_Tracked', 'call EventLines::TrackNoPlayer', 'call ModLog::Event', 'leave ->44',
+    'call Tracker::get_IsTrackingCreature', 'brtrue ->18', 'leave ->44', 'call Tracker::get_Target', 'stloc V0', 'ldloc V0', 'ldnull',
+    'call Object::op_Equality', 'brtrue ->27', 'ldloc V0', 'callvirt Character::IsDead', 'brfalse ->38', 'ldnull', 'stsfld Events::_lastEmptyLook',
+    'call Tracker::get_Tracked', 'ldloc V0', 'ldnull', 'call Object::op_Inequality', 'call Tracker::get_TargetTamed',
+    'ldsfld ModConfig::AlwaysTrackNearest', 'callvirt ConfigEntry`1::get_Value', 'call EventLines::TrackLost', 'call ModLog::Event', 'leave ->44',
+    'stloc V1', 'ldstr LateUpdate', 'ldloc V1', 'call Events::Failed', 'leave ->44', 'ret')
+$Handlers_Events_TrackEnding = @('Catch System.Exception 4..39 39..44')
+$Shape_Ding_Play = @('ldsfld Ding::_source', 'ldnull', 'call Object::op_Equality', 'brtrue ->6', 'call Ding::Routed', 'brtrue ->11', 'ldsfld Ding::_source',
+    'ldnull', 'call Object::op_Equality', 'call Events::DingNotPlayed', 'ret', 'ldsfld Ding::_source', 'ldsfld Ding::_clip',
+    'ldsfld ModConfig::AlertVolume', 'callvirt ConfigEntry`1::get_Value', 'callvirt AudioSource::PlayOneShot', 'call Events::DingPlayed', 'ret')
+$Shape_Events_Watch = @('ldarg.0', 'stsfld Events::Config', 'ldarg.0', 'ldsfld <>O::<0>__OnSettingChanged', 'dup', 'brtrue ->12', 'pop', 'ldnull',
+    'ldftn Events::OnSettingChanged', 'newobj EventHandler`1::.ctor', 'dup', 'stsfld <>O::<0>__OnSettingChanged',
+    'callvirt ConfigFile::add_SettingChanged', 'ldsfld ModLog::Verbose', 'brfalse ->17', 'call Events::Snapshot', 'pop', 'ret')
+$Shape_Tracker_LogPath = @('ldsfld ModLog::Verbose', 'brfalse ->11', 'ldarg.0', 'ldfld Tracker::_pathState', 'ldarg.0', 'ldfld Tracker::_loggedPathState', 'bne.un ->12',
+    'call Tracker::get_Generation', 'ldarg.0', 'ldfld Tracker::_loggedGeneration', 'bne.un ->12', 'ret', 'ldarg.0', 'ldarg.0',
+    'ldfld Tracker::_pathState', 'stfld Tracker::_loggedPathState', 'ldarg.0', 'call Tracker::get_Generation', 'stfld Tracker::_loggedGeneration',
+    'ldarg.0', 'ldfld Tracker::_pathState', 'ldarg.0', 'ldfld Tracker::_points', 'callvirt List`1::get_Count', 'ldarg.0',
+    'ldfld Tracker::_pathShortBy', 'call Events::GroundPath', 'ret')
+# Since 0.7.0: LogFile.Bound's catch, and the guards and decisions inside Events - each once-only, on-change
+# or on-press guard (a line at most once per creature, per site, per press, per change) and what each hands to EventLines.
+$Shape_LogFile_Bound = @('ldc.i4.0', 'stsfld LogFile::_binding', 'ldsfld LogFile::_tee', 'stloc V0', 'ldloc V0', 'brtrue ->7', 'ret', 'nop', 'ldloc V0', 'ldarg.0',
+    'call LogFile::Settings', 'call EventLines::Settings', 'callvirt LogFile::WriteFile', 'leave ->19', 'stloc V1', 'ldloc V0', 'ldloc V1',
+    'callvirt LogFile::Broke', 'leave ->19', 'ret')
+$Handlers_LogFile_Bound = @('Catch System.Exception 8..14 14..19')
+$Shape_Events_Failed = @('ldsfld Events::FailedOnce', 'ldarg.0', 'callvirt HashSet`1::Add', 'brfalse ->11', 'ldsfld MobTrackerPlugin::Log', 'ldarg.1',
+    'callvirt Exception::GetType', 'callvirt MemberInfo::get_Name', 'ldarg.0', 'call EventLines::VerboseFailed',
+    'callvirt ManualLogSource::LogWarning', 'ret')
+$Shape_Events_AlertMemoryClearing = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'ldsfld Events::ToldNotAlerting', 'callvirt HashSet`1::Clear', 'ldarg.0', 'ldc.i4.0',
+    'ble ->12', 'ldarg.0', 'call EventLines::AlertMemoryCleared', 'call ModLog::Event', 'leave ->18', 'stloc V0', 'ldstr AlertMemory', 'ldloc V0',
+    'call Events::Failed', 'leave ->18', 'ret')
+$Handlers_Events_AlertMemoryClearing = @('Catch System.Exception 4..13 13..18')
+$Shape_Events_AutoTrack = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'call Tracker::get_Generation', 'ldsfld Events::_alertGeneration',
+    'call Tracker::get_IsTrackingCreature', 'call Tracker::get_Target', 'ldarg.0', 'call Object::op_Equality', 'ldsfld ModConfig::AutoTrack',
+    'callvirt ConfigEntry`1::get_Value', 'call NearestWatched::get_IsPending', 'call EventLines::AutoTrackOutcome', 'call Tracker::get_Tracked',
+    'call EventLines::AutoTrack', 'call ModLog::Event', 'leave ->23', 'stloc V0', 'ldstr AutoTrack', 'ldloc V0', 'call Events::Failed',
+    'leave ->23', 'ret')
+$Handlers_Events_AutoTrack = @('Catch System.Exception 4..18 18..23')
+$Shape_Events_NotAlertingEach = @('call Character::GetAllCharacters', 'callvirt List`1::GetEnumerator', 'stloc V0', 'br ->83', 'ldloca V_0', 'call Enumerator::get_Current',
+    'stloc V1', 'ldloc V1', 'call Creature::IsListable', 'brfalse ->15', 'ldsfld Events::ToldNotAlerting', 'ldloc V1',
+    'callvirt Object::GetInstanceID', 'callvirt HashSet`1::Contains', 'brfalse ->16', 'leave ->83', 'ldloc V1', 'call Creature::PrefabName',
+    'stloc V2', 'call ModConfig::get_Watchlist', 'ldloc V2', 'callvirt HashSet`1::Contains', 'brtrue ->24', 'leave ->83', 'ldloc V1',
+    'callvirt Character::GetZDOID', 'stloc V3', 'ldloc V3', 'ldsfld ZDOID::None', 'call ZDOID::op_Inequality', 'brfalse ->36', 'ldarg.0',
+    'ldloc V3', 'callvirt AlertGate`1::Has', 'brfalse ->36', 'leave ->83', 'ldarg.1', 'ldloc V1', 'callvirt Component::get_transform',
+    'callvirt Transform::get_position', 'call Vector3::Distance', 'stloc V4', 'ldloc V3', 'ldsfld ZDOID::None', 'call ZDOID::op_Inequality',
+    'ldloc V1', 'callvirt Character::IsTamed', 'call WatchAlerts::get_EffectiveAlertStars', 'ldloc V1', 'callvirt Character::GetLevel',
+    'call StarSets::Accepts', 'ldloc V4', 'ldsfld ModConfig::AlertRadius', 'callvirt ConfigEntry`1::get_Value', 'call Rules::WithinRadius',
+    'ldc.i4.1', 'call EventLines::TurnedAway', 'stloc V5', 'ldloc V5', 'brtrue ->61', 'leave ->83', 'ldsfld Events::ToldNotAlerting', 'ldloc V1',
+    'callvirt Object::GetInstanceID', 'callvirt HashSet`1::Add', 'pop', 'ldloc V1', 'call Creature::DisplayName', 'ldloc V2', 'ldloc V1',
+    'callvirt Character::GetLevel', 'ldloc V4', 'ldloc V5', 'call WatchAlerts::get_EffectiveAlertStars', 'call StarSets::Label',
+    'call EventLines::NotAlerting', 'call ModLog::Event', 'leave ->83', 'stloc V6', 'ldstr NotAlerting', 'ldloc V6', 'call Events::Failed',
+    'leave ->83', 'ldloca V_0', 'call Enumerator::MoveNext', 'brtrue ->4', 'leave ->91', 'ldloca V_0',
+    'constrained. System.Collections.Generic.List`1/Enumerator<Character>', 'callvirt IDisposable::Dispose', 'endfinally', 'ret')
+$Handlers_Events_NotAlertingEach = @('Catch System.Exception 7..78 78..83', 'Finally - 3..87 87..91')
+$Shape_Events_EmptyLookEach = @('ldc.i4.0', 'stloc V0', 'ldc.i4.6', 'newarr System.Int32', 'stloc V1', 'call Character::GetAllCharacters', 'callvirt List`1::GetEnumerator',
+    'stloc V2', 'br ->61', 'ldloca V_2', 'call Enumerator::get_Current', 'stloc V3', 'ldloc V3', 'call Creature::IsListable', 'brfalse ->20',
+    'call ModConfig::get_Watchlist', 'ldloc V3', 'call Creature::PrefabName', 'callvirt HashSet`1::Contains', 'brtrue ->21', 'leave ->61',
+    'ldloc V0', 'ldc.i4.1', 'add', 'stloc V0', 'ldloc V1', 'ldloc V3', 'callvirt Character::GetZDOID', 'ldsfld ZDOID::None',
+    'call ZDOID::op_Inequality', 'ldloc V3', 'callvirt Character::IsTamed', 'call WatchAlerts::get_EffectiveAlertStars', 'ldloc V3',
+    'callvirt Character::GetLevel', 'call StarSets::Accepts', 'ldarg.0', 'ldloc V3', 'callvirt Component::get_transform',
+    'callvirt Transform::get_position', 'call Vector3::Distance', 'ldsfld ModConfig::AlertRadius', 'callvirt ConfigEntry`1::get_Value',
+    'call Rules::WithinRadius', 'ldloc V3', 'callvirt Character::InInterior', 'ldarg.1', 'call Rules::SameLayer', 'call EventLines::TurnedAway',
+    'ldelema System.Int32', 'dup', 'ldind.i4', 'ldc.i4.1', 'add', 'stind.i4', 'leave ->61', 'stloc V4', 'ldstr EmptyLook', 'ldloc V4',
+    'call Events::Failed', 'leave ->61', 'ldloca V_2', 'call Enumerator::MoveNext', 'brtrue ->9', 'leave ->69', 'ldloca V_2',
+    'constrained. System.Collections.Generic.List`1/Enumerator<Character>', 'callvirt IDisposable::Dispose', 'endfinally', 'nop', 'ldloc V0',
+    'ldloc V1', 'ldc.i4.1', 'ldelem.i4', 'ldloc V1', 'ldc.i4.2', 'ldelem.i4', 'ldloc V1', 'ldc.i4.3', 'ldelem.i4', 'ldloc V1', 'ldc.i4.4',
+    'ldelem.i4', 'ldloc V1', 'ldc.i4.5', 'ldelem.i4', 'call EventLines::EmptyLook', 'stloc V5', 'ldloc V5', 'ldsfld Events::_lastEmptyLook',
+    'call String::op_Equality', 'brfalse ->93', 'leave ->103', 'ldloc V5', 'stsfld Events::_lastEmptyLook', 'ldloc V5', 'call ModLog::Event',
+    'leave ->103', 'stloc V6', 'ldstr EmptyLook', 'ldloc V6', 'call Events::Failed', 'leave ->103', 'ret')
+$Handlers_Events_EmptyLookEach = @('Catch System.Exception 12..56 56..61', 'Finally - 8..65 65..69', 'Catch System.Exception 70..98 98..103')
+$Shape_Events_ListClosed = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'ldarg.0', 'brtrue ->12', 'call InventoryGui::IsVisible', 'ldsfld Player::m_localPlayer',
+    'ldnull', 'call Object::op_Inequality', 'call EventLines::ClosedUnseen', 'starg cause', 'ldarg.0', 'call EventLines::ListClosed',
+    'call ModLog::Event', 'leave ->21', 'stloc V0', 'ldstr Close', 'ldloc V0', 'call Events::Failed', 'leave ->21', 'ret')
+$Handlers_Events_ListClosed = @('Catch System.Exception 4..16 16..21')
+$Shape_Events_ListKeyCheck = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'ldsfld ModConfig::ListKey', 'callvirt ConfigEntry`1::get_Value', 'stloc V0', 'ldloc V0',
+    'call Hotkeys::TypesText', 'stloc V1', 'call GameTyping::Any', 'stloc V2', 'call Menu::IsVisible', 'stloc V3',
+    'call Hud::IsPieceSelectionVisible', 'stloc V4', 'call InventoryGui::IsVisible', 'stloc V5', 'call PlayerCustomizaton::IsBarberGuiVisible',
+    'stloc V6', 'ldarg.0', 'ldloc V1', 'ldarg.1', 'ldloc V2', 'ldloc V3', 'ldloc V4', 'ldloc V5', 'ldloc V6', 'call ListKeys::MayToggle',
+    'brfalse ->31', 'leave ->59', 'ldsfld ModConfig::ListKey', 'call Hotkeys::Pressed', 'brtrue ->35', 'leave ->59', 'ldloca V_0',
+    'constrained. UnityEngine.KeyCode', 'callvirt Object::ToString', 'ldarg.0', 'ldloc V1', 'brfalse ->45', 'ldarg.1', 'ldloc V2', 'or', 'br ->46',
+    'ldc.i4.0', 'ldloc V2', 'ldloc V3', 'ldloc V4', 'ldloc V5', 'ldloc V6', 'call EventLines::ListKeyRefused', 'call ModLog::Event', 'leave ->59',
+    'stloc V7', 'ldstr HandleKeys', 'ldloc V7', 'call Events::Failed', 'leave ->59', 'ret')
+$Handlers_Events_ListKeyCheck = @('Catch System.Exception 4..54 54..59')
+$Shape_Events_SettingChanged = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'ldarg.0', 'brtrue ->7', 'leave ->72', 'ldarg.0',
+    'callvirt ConfigEntryBase::get_Definition', 'callvirt ConfigDefinition::get_Section', 'ldstr Logging', 'call String::op_Equality',
+    'brfalse ->31', 'ldarg.0', 'callvirt ConfigEntryBase::get_Definition', 'callvirt ConfigDefinition::get_Key', 'ldstr VerboseLog',
+    'call String::op_Equality', 'brfalse ->30', 'ldsfld Events::ToldNotAlerting', 'callvirt HashSet`1::Clear', 'ldnull',
+    'stsfld Events::_lastEmptyLook', 'call Events::Snapshot', 'stloc V4', 'ldloc V4', 'brfalse ->30', 'ldloc V4', 'call EventLines::Settings',
+    'call ModLog::Event', 'leave ->72', 'ldarg.0', 'callvirt ConfigEntryBase::get_Definition', 'callvirt ConfigDefinition::get_Section', 'ldstr .',
+    'ldarg.0', 'callvirt ConfigEntryBase::get_Definition', 'callvirt ConfigDefinition::get_Key', 'call String::Concat', 'stloc V0', 'ldarg.0',
+    'callvirt ConfigEntryBase::GetSerializedValue', 'stloc V1', 'ldsfld Events::Values', 'ldloc V0', 'ldloca V_2',
+    'callvirt Dictionary`2::TryGetValue', 'brtrue ->50', 'ldstr ?', 'stloc V2', 'ldsfld Events::Values', 'ldloc V0', 'ldloc V1',
+    'callvirt Dictionary`2::set_Item', 'ldsfld Events::Settler', 'ldloc V0', 'ldloc V2', 'ldloc V1', 'call Time::get_realtimeSinceStartup',
+    'conv.r8', 'callvirt SettingSettler::Changed', 'stloc V3', 'ldloc V3', 'brfalse ->66', 'ldloc V3', 'call ModLog::Event', 'leave ->72',
+    'stloc V5', 'ldstr SettingChanged', 'ldloc V5', 'call Events::Failed', 'leave ->72', 'ret')
+$Handlers_Events_SettingChanged = @('Catch System.Exception 4..67 67..72')
+
+# The two switches, first: LogFile.Start binds Logging.ErrorLog (default true) and Logging.VerboseLog (default false)
+# before anything else, takes VerboseLog's value as the flag every verbose site asks, opens the file at the start only
+# when one of them is on, takes BepInEx's warnings as MobTracker's (its cfg is being read) from then until Bound, and
+# gives each switch its own handler.
+Test-ExactShape "MobTracker.LogFile" "Start" $Shape_LogFile_Start "binds Logging.ErrorLog (true) and Logging.VerboseLog (false), VerboseLog's value is the verbose flag, the file opens at the start only when one is on, and each switch has its handler"
+Test-ExactShape "MobTracker.LogFile" "ErrorLogChanged" $Shape_LogFile_ErrorLogChanged "ErrorLog's handler tells Switched"
+Test-ExactShape "MobTracker.LogFile" "VerboseLogChanged" $Shape_LogFile_VerboseLogChanged "VerboseLog's handler sets the verbose flag from VerboseLog, then tells Switched"
+Test-ExactShape "MobTracker.LogFile" "Switched" $Shape_LogFile_Switched "only a switch turned on opens the file, and only if it never was in this game start (a failed open is tried again then, never when a switch is turned off); a Message line says what the file gets now"
+# The settings line at the end of the binding window: written in a catch that shuts the file and leaves the notice to
+# LogObserver, as LogEvent does - Bound runs in Awake, and a throw out of it would drop the plugin.
+Test-ExactShape "MobTracker.LogFile" "Bound" $Shape_LogFile_Bound "ends the binding window, then writes the settings line inside a catch that only hands the failure to Broke" $Handlers_LogFile_Bound
+
+# Who starts and stops it: Awake begins with the log source, then LogFile.Start (the folder beside LogOutput.log and the
+# game's folder), ModConfig.Bind, LogFile.Bound - so ModConfig.Bind's warnings reach the file - and OnDestroy ends with
+# LogFile.Stop; the file is opened only by Start and Switched, and only those two places touch BepInEx's listeners.
+$checks++
+$why = @()
+$awWant = @("ldarg.0", "call BaseUnityPlugin::get_Logger", "stsfld MobTrackerPlugin::Log", "ldarg.0", "call BaseUnityPlugin::get_Config",
+    "call Paths::get_BepInExRootPath", "call Paths::get_GameRootPath", "call LogFile::Start", "ldarg.0", "call BaseUnityPlugin::get_Config",
+    "call ModConfig::Bind", "ldarg.0", "call BaseUnityPlugin::get_Config", "call LogFile::Bound")
+$awGot = if ($awake) { @(Get-Shape $awake | Select-Object -First $awWant.Count) } else { @() }
+if (($awGot -join "`n") -cne ($awWant -join "`n")) { $why += ("Awake does not start with: {0} - it starts with: {1}" -f ($awWant -join "; "), ($awGot -join "; ")) }
+$odm = Get-Method "MobTracker.MobTrackerPlugin" "OnDestroy"
+$odGot = if ($odm) { @(Get-Shape $odm) } else { @() }
+if ($odGot.Count -lt 3 -or (@($odGot[($odGot.Count - 3)..($odGot.Count - 1)]) -join "; ") -cne "call Harmony::UnpatchSelf; call LogFile::Stop; ret") { $why += ("OnDestroy does not end with UnpatchSelf, LogFile.Stop: {0}" -f ($odGot -join "; ")) }
+$lifeWant = @("LogFile.Open -> Logger::get_Listeners x1", "LogFile.Start -> LogFile::Open x1", "LogFile.Stop -> Logger::get_Listeners x1",
+    "LogFile.Switched -> LogFile::Open x1", "MobTrackerPlugin.Awake -> LogFile::Bound x1", "MobTrackerPlugin.Awake -> LogFile::Start x1",
+    "MobTrackerPlugin.OnDestroy -> LogFile::Stop x1")
+$lifeGot = Get-CallTable '^(LogFile::(Start|Bound|Stop|Open)|Logger::get_Listeners)$'
+if (($lifeGot -join "; ") -cne ($lifeWant -join "; ")) { $why += ("the calls that start, open and stop the file are [{0}], not [{1}]" -f ($lifeGot -join "; "), ($lifeWant -join "; ")) }
+if ($why.Count -eq 0) { Ok "MobTrackerPlugin: Awake starts the log first (LogFile.Start, ModConfig.Bind, LogFile.Bound) and OnDestroy stops it last; only Start and Switched open the file" }
+else { Fail ("the log's start and stop: " + ($why -join "; ")) }
+
+# Opening the file: MobTracker.log taken first (OpenOrCreate, ReadWrite, sharing Read only - a second copy of the game
+# fails here and touches nothing), never again in this game start (_opened right after), its lines copied to
+# MobTracker-prev.log (Create, Write, sharing Read) and only then emptied, both in a try that keeps them on failure;
+# UTF-8 without a BOM, CRLF, each line flushed; the header; the listener added last; every exception of the open caught
+# - one thrown out of Awake would drop the plugin - and said with its type only (an IOException's message holds the
+# path). What the catch calls to let the file go has a catch of its own, held below (Shut, Dispose, CloseQuietly).
+Test-ExactShape "MobTracker.LogFile" "Open" $Shape_LogFile_Open "takes MobTracker.log first (OpenOrCreate, ReadWrite, FileShare.Read), copies it to MobTracker-prev.log and only then empties it, writes UTF-8 without a BOM, flushed per line, adds the listener last, and catches every failure of the open, said by type only (what its catch calls to let the file go - Dispose, Shut, CloseQuietly - is held to its own shape and catch below)" $Handlers_LogFile_Open
+# The file and folder calls are Open's alone, and LogFile never writes an exception's message or stack.
+$checks++
+$io = @()
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($x in $m.Body.Instructions) {
+            $o = $x.Operand
+            if ($o -isnot [Mono.Cecil.MethodReference]) { continue }
+            $dt = $o.DeclaringType.FullName
+            $isFile = @("System.IO.File", "System.IO.Directory", "System.IO.FileInfo", "System.IO.DirectoryInfo", "System.IO.FileStream", "System.IO.StreamWriter") -ccontains $dt -or
+                ($dt -ceq "System.IO.Stream" -and @("SetLength", "CopyTo") -ccontains $o.Name) -or ($dt -ceq "System.Environment" -and $o.Name -ceq "GetFolderPath")
+            if ($isFile -and -not ($t.Name -ceq "LogFile" -and $m.Name -ceq "Open")) { $io += ("{0}.{1} -> {2}::{3}" -f $t.Name, $m.Name, $o.DeclaringType.Name, $o.Name) }
+            if ($t.Name -ceq "LogFile" -and $dt -ceq "System.Exception" -and @("get_Message", "ToString", "get_StackTrace") -ccontains $o.Name) { $io += ("LogFile.{0} -> Exception::{1}" -f $m.Name, $o.Name) }
+        }
+    }
+}
+if ($io.Count -eq 0) { Ok "only LogFile.Open opens, copies or empties a file or reads a folder; LogFile names an exception by its type only" }
+else { Fail ("file calls outside LogFile.Open, or an exception's message in LogFile: " + ($io -join "; ")) }
+
+# The listener: returns at once while the file is shut; MobTracker's own source - by reference, not by name - goes
+# through LogRules.ToFile with ErrorLog and the verbose flag; another source only through LogRules.Foreign, and an
+# error about MobTracker's code only through Ours (NamesMobTracker, then the repeat limit); all of it in one catch
+# whose only work is Broke. Never throws, never logs: below.
+Test-ExactShape "MobTracker.LogFile" "LogEvent" $Shape_LogFile_LogEvent "MobTracker's own source (by reference) through LogRules.ToFile, another source only through LogRules.Foreign and Ours, all in one catch that only calls Broke" $Handlers_LogFile_LogEvent
+Test-ExactShape "MobTracker.LogFile" "Ours" $Shape_LogFile_Ours "an error is MobTracker's only when NamesMobTracker finds its code in the stack, then the repeat limit decides, under the lock" $Handlers_LogFile_Ours
+Test-ExactShape "MobTracker.LogFile" "Write" $Shape_LogFile_Write "under the lock: the date, time and frame (read on the main thread only), the folders scrubbed, the 5 MB cap with its last line and a notice, then the line" $Handlers_LogFile_Write
+# Everything LogEvent can reach inside LogFile and its rules: no throw, no rethrow, and no log call of any route - one
+# would re-enter this listener, and BepInEx would hand a throw to whichever plugin logged.
+$checks++
+$why = @()
+$seen = @{}
+$todo = New-Object System.Collections.Queue
+$le = Get-Method "MobTracker.LogFile" "LogEvent"
+if ($le) { $todo.Enqueue($le) } else { $why += "LogFile.LogEvent not found" }
+while ($todo.Count -gt 0) {
+    $m = $todo.Dequeue()
+    $key = $m.DeclaringType.Name + "::" + $m.Name
+    if ($seen.ContainsKey($key)) { continue }
+    $seen[$key] = $true
+    foreach ($x in $m.Body.Instructions) {
+        if ($x.OpCode.Name -eq "throw" -or $x.OpCode.Name -eq "rethrow") { $why += ("{0} has a {1}" -f $key, $x.OpCode.Name) }
+        $o = $x.Operand
+        if ($o -isnot [Mono.Cecil.MethodReference]) { continue }
+        $callee = $o.DeclaringType.Name + "::" + $o.Name
+        if ($callee -cmatch '^(ManualLogSource::Log|ModLog::|Events::|Logger::|UnityLogWriter::|Debug::)') { $why += ("{0} calls {1}" -f $key, $callee) }
+        if (@("LogFile", "LogRules", "RepeatLimiter", "EventLines") -ccontains $o.DeclaringType.Name) {
+            $d = $null; try { $d = $o.Resolve() } catch { }
+            if ($d -and $d.HasBody) { $todo.Enqueue($d) }
+        }
+    }
+}
+if ($why.Count -eq 0) { Ok ("LogFile.LogEvent and the {0} methods it reaches in LogFile, LogRules, RepeatLimiter and EventLines neither throw nor log" -f ($seen.Count - 1)) }
+else { Fail ("LogFile.LogEvent: " + ($why -join "; ")) }
+
+# One log source: MobTrackerPlugin.Log is BepInEx's own for the plugin, stored once in Awake; no second source (the
+# listener filters by reference: a line through another one would miss MobTracker.log).
+$checks++
+$why = @()
+$src2 = Get-CallTable '^(Logger::CreateLogSource|ManualLogSource::\.ctor)$'
+if ($src2.Count -gt 0) { $why += ("another log source is made: " + ($src2 -join "; ")) }
+$logStores = @(foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if ($m.HasBody) { foreach ($x in $m.Body.Instructions) { if ($x.OpCode.Name -eq "stsfld" -and $x.Operand.Name -ceq "Log" -and $x.Operand.DeclaringType.Name -ceq "MobTrackerPlugin") { "{0}.{1}" -f $t.Name, $m.Name } } } } })
+if ($logStores.Count -ne 1 -or $logStores[0] -cne "MobTrackerPlugin.Awake") { $why += ("MobTrackerPlugin.Log is stored in: {0}" -f ($logStores -join ", ")) }
+if ($why.Count -eq 0) { Ok "one log source: MobTrackerPlugin.Log, stored once in Awake, and no other is made" } else { Fail ("log source: " + ($why -join "; ")) }
+
+# LogRules' level constants are BepInEx's LogLevel values (BepInEx 5.4.23.3): read from the BepInEx.dll in the game.
+$checks++
+$why = @()
+$llType = $null
+foreach ($gm in $gameModules.Values) { $tt = $gm.GetType("BepInEx.Logging.LogLevel"); if ($tt) { $llType = $tt; break } }
+$lr = $null
+foreach ($t in $plug.GetTypes()) { if ($t.FullName -ceq "MobTracker.LogRules") { $lr = $t } }
+if (-not $llType -or -not $lr) { $why += "BepInEx.Logging.LogLevel or MobTracker.LogRules not found" }
+else {
+    foreach ($name in @("Fatal", "Error", "Warning", "Message", "Info", "Debug")) {
+        $bf = $llType.Fields | Where-Object { $_.Name -ceq $name } | Select-Object -First 1
+        $mf = $lr.Fields | Where-Object { $_.Name -ceq $name } | Select-Object -First 1
+        if (-not $bf -or -not $mf -or -not $mf.HasConstant -or [int]$bf.Constant -ne [int]$mf.Constant) { $why += ("{0}: BepInEx {1}, LogRules {2}" -f $name, $(if ($bf) { $bf.Constant } else { "none" }), $(if ($mf) { $mf.Constant } else { "none" })) }
+    }
+}
+if ($why.Count -eq 0) { Ok "LogRules' Fatal, Error, Warning, Message, Info and Debug are BepInEx's LogLevel values" } else { Fail ("LogRules levels: " + ($why -join "; ")) }
+
+# Every log line by level: the verbose route is ModLog.Event alone - Info, and nothing while VerboseLog is off - called
+# only by Events; LogMessage only for the switches' notes; LogDebug nowhere (BepInEx's default disk levels leave it out
+# of LogOutput.log); every other line is one of the 0.6.0 lines or one of the log's own warnings. A new line anywhere,
+# at any level, is a row more here.
+Test-ExactShape "MobTracker.ModLog" "Event" $Shape_ModLog_Event "a verbose line is Info, written only while VerboseLog is on"
+$mlWant = @("Ding.Routed -> ManualLogSource::LogInfo x1", "Ding.Routed -> ManualLogSource::LogWarning x1", "Events.Failed -> ManualLogSource::LogWarning x1",
+    "Hotkeys.Refuse -> ManualLogSource::LogWarning x1", "LogFile.Open -> ManualLogSource::LogWarning x1", "LogFile.ReportNotice -> ManualLogSource::LogWarning x1",
+    "LogFile.Switched -> ManualLogSource::LogMessage x1", "MobTrackerPlugin.Awake -> ManualLogSource::LogInfo x1", "MobTrackerPlugin.Patch -> ManualLogSource::LogError x1",
+    "MobTrackerPlugin.Start -> ManualLogSource::LogError x1", "ModConfig.ParseStars -> ManualLogSource::LogWarning x1", "ModConfig.ResetSession -> ManualLogSource::LogInfo x1",
+    "ModConfig.ResetSession -> ManualLogSource::LogWarning x1", "ModLog.Event -> ManualLogSource::LogInfo x1", "NearestWatched.Cancel -> ManualLogSource::LogInfo x1",
+    "NearestWatched.Lost -> ManualLogSource::LogInfo x1", "NearestWatched.Update -> ManualLogSource::LogInfo x2", "SpawnFinder.Report -> ManualLogSource::LogInfo x3",
+    "Tracker.Awake -> ManualLogSource::LogError x1", "WatchAlerts.Update -> ManualLogSource::LogWarning x1", "WaypointerCompat.ApplyTo -> ManualLogSource::LogError x1",
+    "WaypointerCompat.ApplyTo -> ManualLogSource::LogInfo x1", "WaypointerCompat.ApplyTo -> ManualLogSource::LogWarning x1")
+Test-Table (Get-CallTable '^ManualLogSource::Log') $mlWant "every log line is a 0.6.0 line, a warning of the log's own, a switch note (Message) or a verbose line through ModLog.Event (Info); no Debug line" "the log lines by method and level"
+$evWant = @(Get-CallTable '^ModLog::Event$' | Where-Object { $_ -cnotlike "Events.*" })
+$checks++
+if ($evWant.Count -eq 0 -and @(Get-CallTable '^ModLog::Event$').Count -gt 0) { Ok "ModLog.Event is called only from Events" } else { Fail ("ModLog.Event is called from outside Events: " + ($evWant -join "; ")) }
+
+# Where the verbose lines are written from: this exact list of sites, so none sits in a Harmony patch, an OnGUI, a
+# creature helper or anywhere that runs per frame beyond the ones listed (LogObserver writes changes only, and
+# HandleKeys' ListKeyCheck writes only on a refused press). With VerboseLog off each returns at once (below).
+$siteWant = @("<Search>d__N.MoveNext -> Events::FindDone x1", "Ding.FindGuiGroup -> Events::DingGroupSearchFailed x1", "Ding.Play -> Events::DingNotPlayed x1",
+    "Ding.Play -> Events::DingPlayed x1", "EntityListWindow.Close -> Events::ListClosed x1", "EntityListWindow.DrawWindow -> Events::Clicked x2",
+    "EntityListWindow.DrawWindow -> Events::RowClicked x3", "EntityListWindow.DrawWindow -> Events::ViewSwitched x1", "EntityListWindow.HandleKeys -> Events::ListKeyCheck x1",
+    "EntityListWindow.Open -> Events::ListOpened x1", "LogObserver.Update -> Events::AlertStars x1", "LogObserver.Update -> Events::FlushSettings x1",
+    "LogObserver.Update -> Events::Guide x1", "LogObserver.Update -> Events::PlayerPresence x1", "LogObserver.Update -> Events::Tamed x1",
+    "MobTrackerPlugin.Patch -> Events::Patched x1", "ModConfig.Bind -> Events::Watch x1", "NearestWatched.Update -> Events::EmptyLook x1",
+    "SpawnFinder.RemovePinNear -> Events::MapDeleteTookAreaPin x1", "SpawnFinder.RemovePins -> Events::PinsRemoved x1", "SpawnFinder.Say -> Events::FindSays x1",
+    "SpawnFinder.StartFind -> Events::FindNotStarted x1", "SpawnFinder.StartFind -> Events::FindReplaced x1", "Tracker.LateUpdate -> Events::TrackEnding x1",
+    "Tracker.LateUpdate -> Events::TrackReached x1", "Tracker.LogPath -> Events::GroundPath x1", "Tracker.Stop -> Events::TrackStopping x1",
+    "Tracker.Track -> Events::TrackStarting x1", "Tracker.TrackPoint -> Events::TrackStartingArea x1", "WatchAlerts.ResetSession -> Events::Session x1",
+    "WatchAlerts.Update -> Events::Alert x1", "WatchAlerts.Update -> Events::AlertMemoryClearing x1", "WatchAlerts.Update -> Events::AutoTrack x1",
+    "WatchAlerts.Update -> Events::NotAlerting x1", "WaypointerCompat.Apply -> Events::CompatSkipped x1")
+Test-Table (Get-CallTable '^Events::' | Where-Object { $_ -cnotlike "Events.*" }) $siteWant "the verbose lines are written from these sites only" "the verbose sites"
+# Placement within three of them: the alert poll's lines after its once-a-second return; the loss line before the
+# lost block (which must stay its exact shape); each of the window's clicks in the true branch of its button - IMGUI
+# enters it on the click alone, outside it the line would be written at every GUI event.
+$checks++
+$why = @()
+$wa = Get-Method "MobTracker.WatchAlerts" "Update"
+if ($wa) {
+    $wsh = @(Get-Shape $wa)
+    $firstRet = [array]::IndexOf($wsh, "ret")
+    $evAt = @(for ($k = 0; $k -lt $wsh.Count; $k++) { if ($wsh[$k] -clike "call Events::*") { $k } })
+    if ($evAt.Count -eq 0 -or @($evAt | Where-Object { $_ -lt $firstRet }).Count -gt 0) { $why += "WatchAlerts.Update calls Events before its once-a-second return" }
+}
+$lu2 = Get-Method "MobTracker.Tracker" "LateUpdate"
+if ($lu2) {
+    $lsh = @(Get-Shape $lu2)
+    $te = [array]::IndexOf($lsh, "call Events::TrackEnding"); $it = [array]::IndexOf($lsh, "call Tracker::get_IsTracking")
+    if ($te -lt 0 -or $it -lt 0 -or $te -gt $it) { $why += "Tracker.LateUpdate does not call Events.TrackEnding before its first IsTracking test" }
+}
+$dw2 = Get-Method "MobTracker.EntityListWindow" "DrawWindow"
+if ($dw2) {
+    $di = @($dw2.Body.Instructions)
+    for ($k = 0; $k -lt $di.Count; $k++) {
+        $o = $di[$k].Operand
+        if ($o -isnot [Mono.Cecil.MethodReference] -or $o.DeclaringType.Name -cne "Events") { continue }
+        $b = -1
+        for ($s = $k - 1; $s -ge 0; $s--) { $p = $di[$s].Operand; if ($p -is [Mono.Cecil.MethodReference] -and $p.DeclaringType.Name -ceq "GUILayout" -and $p.Name -ceq "Button") { $b = $s; break } }
+        $inBranch = $b -ge 0 -and $di[$b + 1].OpCode.Name -like "brfalse*" -and [array]::IndexOf($di, $di[$b + 1].Operand) -gt $k
+        if (-not $inBranch) { $why += ("DrawWindow's Events.{0} at {1} is not in the true branch of a GUILayout.Button" -f $o.Name, $k) }
+    }
+}
+# And every site hands over values it already holds - with VerboseLog off nothing is put together: no text joined or
+# formatted, no creature's name worked out, in the argument list of an Events call (read back to the end of the
+# statement before it).
+foreach ($t in $plug.GetTypes()) {
+    if ($t.FullName -ceq "MobTracker.Events") { continue }
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        $xi = @($m.Body.Instructions)
+        for ($k = 0; $k -lt $xi.Count; $k++) {
+            $o = $xi[$k].Operand
+            if ($o -isnot [Mono.Cecil.MethodReference] -or $o.DeclaringType.Name -cne "Events") { continue }
+            for ($s = $k - 1; $s -ge 0; $s--) {
+                $pi = $xi[$s]
+                $po = $pi.Operand
+                $void = "$($pi.OpCode.StackBehaviourPush)" -eq "Varpush" -and $po -is [Mono.Cecil.MethodReference] -and $pi.OpCode.Name -ne "newobj" -and $po.ReturnType.FullName -ceq "System.Void"
+                if ($void -or "$($pi.OpCode.StackBehaviourPush)" -eq "Push0" -or "$($pi.OpCode.FlowControl)" -match 'Branch|Return|Throw') { break }
+                if ($po -is [Mono.Cecil.MethodReference] -and (($po.DeclaringType.Name + "::" + $po.Name) -cmatch '^(String::(Concat|Format|Join)|Creature::(DisplayName|PrefabName)|Object::ToString|EventLines::)')) {
+                    $why += ("{0}.{1} builds Events.{2}'s argument ({3}::{4}) whether VerboseLog is on or not" -f $t.Name, $m.Name, $o.Name, $po.DeclaringType.Name, $po.Name)
+                }
+            }
+        }
+    }
+}
+if ($why.Count -eq 0) { Ok "verbose sites: the alert poll's after its once-a-second return, the loss line before the lost block, each window click inside its button's branch; each hands over plain values" }
+else { Fail ("verbose sites: " + ($why -join "; ")) }
+
+# Each verbose method returns first thing while VerboseLog is off - nothing is read or put together - and does the rest
+# inside a catch of its own that only says so once (Events.Failed): a verbose line can never stop or change what it
+# describes. Events throws nothing.
+$checks++
+$why = @()
+$evType = $null
+foreach ($t in $plug.GetTypes()) { if ($t.FullName -ceq "MobTracker.Events") { $evType = $t } }
+if (-not $evType) { $why += "MobTracker.Events not found" }
+else {
+    $guarded = 0
+    foreach ($m in $evType.Methods) {
+        if (-not $m.HasBody -or -not $m.IsPublic -or $m.Name -ceq "Watch") { continue }
+        $guarded++
+        $sh = @(Get-Shape $m); $ins = @($m.Body.Instructions)
+        if ($sh.Count -lt 5 -or (@($sh[0..3]) -join "; ") -cne "ldsfld ModLog::Verbose; brtrue ->3; ret; nop") { $why += ("Events.{0} does not start with 'if (!ModLog.Verbose) return;'" -f $m.Name); continue }
+        $hs = @($m.Body.ExceptionHandlers)
+        $outer = @($hs | Where-Object { "$($_.HandlerType)" -eq "Catch" -and $_.CatchType.FullName -ceq "System.Exception" -and [array]::IndexOf($ins, $_.TryStart) -eq 4 -and [array]::IndexOf($ins, $_.HandlerEnd) -eq ($ins.Count - 1) })
+        if ($outer.Count -ne 1) { $why += ("Events.{0}: its body is not inside one catch (System.Exception) up to its return" -f $m.Name); continue }
+        $h0 = [array]::IndexOf($ins, $outer[0].HandlerStart)
+        $hBody = @($sh[$h0..($ins.Count - 2)])
+        if ($hBody.Count -ne 5 -or $hBody[0] -cnotlike "stloc V*" -or $hBody[1] -cnotlike "ldstr *" -or $hBody[2] -cnotlike "ldloc V*" -or $hBody[3] -cne "call Events::Failed" -or $hBody[4] -cnotlike "leave ->*") { $why += ("Events.{0}: its catch does more than Events.Failed: {1}" -f $m.Name, ($hBody -join "; ")) }
+    }
+    foreach ($m in $evType.Methods) { if ($m.HasBody) { foreach ($x in $m.Body.Instructions) { if ($x.OpCode.Name -eq "throw" -or $x.OpCode.Name -eq "rethrow") { $why += ("Events.{0} has a {1}" -f $m.Name, $x.OpCode.Name) } } } }
+    if ($guarded -lt 30) { $why += "only $guarded public Events methods found" }
+}
+if ($why.Count -eq 0) { Ok ("every one of the {0} verbose methods of Events returns first while VerboseLog is off and does the rest in a catch that only says so once; Events throws nothing" -f $guarded) }
+else { Fail ("Events: " + ($why -join "; ")) }
+
+# Verbose changes nothing: Events, LogObserver and Tracker.LogPath only read what they describe - no alert gate
+# answered or cleared, no setting written, no tracking, re-track, list, pin, message or ding started or ended, no key
+# read but ListKey through Hotkeys.Pressed in ListKeyCheck (which can refuse an unreadable key a press earlier than
+# HandleKeys would, with the same warning) - and they store only their own fields.
+$checks++
+$why = @()
+$forbidden = '^(AlertGate`1::(ShouldAlert|Clear)|ConfigEntry`1::set_Value|ConfigEntryBase::(set_BoxedValue|SetSerializedValue)|ConfigFile::(Save|Reload)|Tracker::(Track|TrackPoint|Stop)|NearestWatched::(Cancel|Lost)|Retrack::|EntityListWindow::(Open|Close)|ModConfig::(ToggleWatch|ResetSession|Bind)|SpawnFinder::(Find|Clear|StartFind|RemovePins|RemovePinNear)|Minimap::|MessageHud::|Ding::|Hotkeys::(Forget|Refuse)|StarSetSettler::|WatchAlerts::ResetSession|ZInput::|Object::Destroy|GameObject::SetActive|Renderer::set_enabled)'
+$bodies = @()
+foreach ($t in $plug.GetTypes()) {
+    if ($t.FullName -ceq "MobTracker.Events" -or $t.FullName -clike "MobTracker.Events/*" -or $t.FullName -ceq "MobTracker.LogObserver") { $bodies += @($t.Methods | Where-Object { $_.HasBody }) }
+    if ($t.FullName -ceq "MobTracker.Tracker") { $bodies += @($t.Methods | Where-Object { $_.HasBody -and $_.Name -ceq "LogPath" }) }
+}
+foreach ($m in $bodies) {
+    $own = $m.DeclaringType.Name
+    foreach ($x in $m.Body.Instructions) {
+        $o = $x.Operand
+        if ($o -is [Mono.Cecil.MethodReference]) {
+            $callee = $o.DeclaringType.Name + "::" + $o.Name
+            if ($callee -cmatch $forbidden) { $why += ("{0}.{1} calls {2}" -f $own, $m.Name, $callee) }
+            if ($callee -ceq "Hotkeys::Pressed" -and -not ($own -ceq "Events" -and $m.Name -ceq "ListKeyCheck")) { $why += ("{0}.{1} reads a key" -f $own, $m.Name) }
+        }
+        if (($x.OpCode.Name -eq "stsfld" -or $x.OpCode.Name -eq "stfld") -and $o -is [Mono.Cecil.FieldReference]) {
+            $fOwner = $o.DeclaringType.Name
+            $okStore = ($own -ceq "Events" -and $fOwner -ceq "Events") -or ($own -ceq "LogObserver" -and $fOwner -ceq "LogObserver") -or ($own -clike "<>*") -or ($fOwner -clike "<>*") -or ($own -ceq "Tracker" -and @("_loggedPathState", "_loggedGeneration") -ccontains $o.Name)
+            if (-not $okStore) { $why += ("{0}.{1} stores {2}::{3}" -f $own, $m.Name, $fOwner, $o.Name) }
+        }
+    }
+}
+if ($bodies.Count -lt 30) { $why += "only $($bodies.Count) verbose method bodies found" }
+if ($why.Count -eq 0) { Ok ("the {0} verbose methods (Events, LogObserver, Tracker.LogPath) change nothing they describe and store only their own fields" -f $bodies.Count) }
+else { Fail ("verbose changes something: " + ($why -join "; ")) }
+
+# The loss line asks the lost block's own question - tracking a creature, its Target destroyed or dead - after the
+# no-player one, and clears the empty-look memory for the wait that may follow.
+Test-ExactShape "MobTracker.Events" "TrackEnding" $Shape_Events_TrackEnding "no local player, or the tracked creature lost (Target null or dead, as Tracker's lost block asks), each said; nothing else" $Handlers_Events_TrackEnding
+# LogObserver: says why the file stopped whatever VerboseLog says, then, with it on, writes each watched state on its
+# change only (the guide and tamed state taken as a baseline two frames after each tracking change, not written).
+Test-ExactShape "MobTracker.LogObserver" "Update" $Shape_LogObserver_Update "says a stopped file first, whatever VerboseLog says; with it on, the player, the Alerts: stars, the guide and tamed on change only"
+# The ding's lines: not played (no source, or no GUI mixer group) right before that return, played right after
+# PlayOneShot; the mixer search's caught failure goes to its verbose line and nowhere else.
+Test-ExactShape "MobTracker.Ding" "Play" $Shape_Ding_Play "the not-played line before the not-routed return, the played line after PlayOneShot"
+$checks++
+$fg = Get-Method "MobTracker.Ding" "FindGuiGroup"
+$fgH = if ($fg) { @($fg.Body.ExceptionHandlers | Where-Object { "$($_.HandlerType)" -eq "Catch" }) } else { @() }
+$fgBody = @()
+if ($fgH.Count -eq 1) { $fi = @($fg.Body.Instructions); $fgSh = @(Get-Shape $fg); $fgBody = @($fgSh[([array]::IndexOf($fi, $fgH[0].HandlerStart))..([array]::IndexOf($fi, $fgH[0].HandlerEnd) - 1)]) }
+if (($fgBody -join "; ") -clike "call Events::DingGroupSearchFailed; leave ->*") { Ok "Ding.FindGuiGroup: its one catch hands the exception to its verbose line and goes on" }
+else { Fail ("Ding.FindGuiGroup: its catch is not 'Events.DingGroupSearchFailed(e)' alone: " + ($fgBody -join "; ")) }
+# Every setting's change reaches the verbose log through one handler on the whole cfg, added by Events.Watch as the
+# last call of ModConfig.Bind - after every setting's own handler, which therefore runs first.
+Test-ExactShape "MobTracker.Events" "Watch" $Shape_Events_Watch "keeps the cfg, adds the one file-wide SettingChanged handler, and takes the values as they are when VerboseLog is on"
+$checks++
+$why = @()
+$bd2 = Get-Method "MobTracker.ModConfig" "Bind"
+$bdSh = if ($bd2) { @(Get-Shape $bd2) } else { @() }
+if ($bdSh.Count -lt 3 -or $bdSh[$bdSh.Count - 2] -cne "call Events::Watch" -or $bdSh[$bdSh.Count - 3] -cne "ldarg.0") { $why += "ModConfig.Bind does not end with Events.Watch(config)" }
+$addSc = Get-CallTable '^ConfigFile::add_SettingChanged$'
+if (($addSc -join "; ") -cne "Events.Watch -> ConfigFile::add_SettingChanged x1") { $why += ("the cfg-wide handler is added by: " + ($addSc -join "; ")) }
+if ($why.Count -eq 0) { Ok "ModConfig.Bind ends with Events.Watch, the only place a cfg-wide SettingChanged handler is added" } else { Fail ("settings' changes: " + ($why -join "; ")) }
+# The ground path's line: only with VerboseLog on and only when the state or the tracking changed, from LateUpdate
+# right after UpdatePath (at most once a second).
+Test-ExactShape "MobTracker.Tracker" "LogPath" $Shape_Tracker_LogPath "only with VerboseLog on, only when the path's state or the tracking changed"
+$checks++
+$lsh2 = if ($lu2) { @(Get-Shape $lu2) } else { @() }
+$up = [array]::IndexOf($lsh2, "call Tracker::UpdatePath")
+# Inside UpdatePath's once-a-second branch: nothing branches to the LogPath statement, as something would if it stood
+# after the branch's end.
+$luIns = if ($lu2) { @($lu2.Body.Instructions) } else { @() }
+$intoLog = if ($up -ge 0 -and $up + 1 -lt $luIns.Count) { @($luIns | Where-Object { $_.Operand -is [Mono.Cecil.Cil.Instruction] -and [object]::ReferenceEquals($_.Operand, $luIns[$up + 1]) }).Count } else { -1 }
+if ($up -ge 0 -and $lsh2[$up + 1] -ceq "ldarg.0" -and $lsh2[$up + 2] -ceq "call Tracker::LogPath" -and $intoLog -eq 0 -and @($lsh2 | Where-Object { $_ -ceq "call Tracker::LogPath" }).Count -eq 1) { Ok "Tracker.LateUpdate calls LogPath once, right after UpdatePath, inside its once-a-second branch" }
+else { Fail "Tracker.LateUpdate does not call LogPath once, right after UpdatePath, inside its once-a-second branch" }
+# The guards and decisions inside Events, whole: each rate guard - a failure said once per site, the
+# not-alerting line once per creature, the empty look's line only when it differs from the last, the refused-key line
+# only on a press of ListKey, a setting's burst through the settler, the cleared alert memory only when it held some -
+# and what each hands to EventLines, whose decisions (AutoTrackOutcome, TurnedAway, ClosedUnseen) the unit tests pin.
+Test-ExactShape "MobTracker.Events" "Failed" $Shape_Events_Failed "a verbose line's failure is warned about once per site (FailedOnce), its words EventLines'"
+Test-ExactShape "MobTracker.Events" "AlertMemoryClearing" $Shape_Events_AlertMemoryClearing "forgets the creatures told about, and says the memory is cleared only when it held some" $Handlers_Events_AlertMemoryClearing
+Test-ExactShape "MobTracker.Events" "AutoTrack" $Shape_Events_AutoTrack "hands EventLines.AutoTrackOutcome the generation now and at the alert, the creature tracked, whether it is the alerted one, AutoTrack and the re-track's wait" $Handlers_Events_AutoTrack
+Test-ExactShape "MobTracker.Events" "NotAlertingEach" $Shape_Events_NotAlertingEach "each watched creature without its alert, not told before, once (ToldNotAlerting), with the first reason EventLines.TurnedAway names - the dungeon side never asked - each in its own catch" $Handlers_Events_NotAlertingEach
+Test-ExactShape "MobTracker.Events" "EmptyLookEach" $Shape_Events_EmptyLookEach "counts each watched creature by EventLines.TurnedAway's answer, each in its own catch, and writes the line only when it differs from the last look's" $Handlers_Events_EmptyLookEach
+Test-ExactShape "MobTracker.Events" "ListClosed" $Shape_Events_ListClosed "a cause no caller named is EventLines.ClosedUnseen's, from the inventory and the local player" $Handlers_Events_ListClosed
+Test-ExactShape "MobTracker.Events" "ListKeyCheck" $Shape_Events_ListKeyCheck "says nothing while the list may toggle, and nothing unless ListKey was pressed (Hotkeys.Pressed), then the reasons HandleKeys reads" $Handlers_Events_ListKeyCheck
+Test-ExactShape "MobTracker.Events" "SettingChanged" $Shape_Events_SettingChanged "the Logging switches as no Setting line (VerboseLog turned on: the settings and the once-only lines afresh); every other change through the settler, which merges a burst" $Handlers_Events_SettingChanged
+
+# Two guards that sit in the caller, not in Events: the list's close line only past Close's IsOpen test - Update calls
+# Close on every frame with no local player - and the reached line only inside the reached block. And the file's failure
+# paths, which the walk above (it starts at LogEvent) does not reach: Shut, called from Open's catch in Awake, from
+# Broke and from Stop; Stop itself, in OnDestroy; the stop notice said once; Broke; Dispose; CloseQuietly. Exact IL
+# shapes, as above: a legitimate rewrite must re-read the IL and rewrite them.
+$Shape_EntityListWindow_Close = @('ldnull', 'stsfld EntityListWindow::_pendingWatchToggle', 'ldarg.0', 'ldflda EntityListWindow::_pendingFind',
+    'initobj System.Nullable`1<MobTracker.EntityListWindow/Row>', 'call EntityListWindow::get_IsOpen', 'brtrue ->8', 'ret', 'ldc.i4.0',
+    'call EntityListWindow::set_IsOpen', 'call Time::get_frameCount', 'stsfld EntityListWindow::_closedFrame', 'ldarg.0', 'ldc.i4.0',
+    'stfld EntityListWindow::_focusSearch', 'ldarg.0', 'ldc.i4.0', 'stfld EntityListWindow::_searchFocused', 'ldarg.0',
+    'ldfld EntityListWindow::_closeCause', 'call Events::ListClosed', 'ldarg.0', 'ldnull', 'stfld EntityListWindow::_closeCause', 'ret')
+$Shape_LogFile_Shut = @('ldarg.0', 'ldfld LogFile::_writer', 'stloc V0', 'ldarg.0', 'ldnull', 'stfld LogFile::_writer', 'ldloc V0', 'brtrue ->9', 'ret', 'nop',
+    'ldloc V0', 'callvirt TextWriter::Dispose', 'leave ->15', 'pop', 'leave ->15', 'ret')
+$Handlers_LogFile_Shut = @('Catch System.Exception 10..13 13..15')
+$Shape_LogFile_Stop = @('ldsfld LogFile::_tee', 'stloc V0', 'ldnull', 'stsfld LogFile::_tee', 'ldloc V0', 'brtrue ->7', 'ret', 'nop', 'call Logger::get_Listeners',
+    'ldloc V0', 'callvirt ICollection`1::Remove', 'pop', 'ldloc V0', 'ldloc V0', 'callvirt LogFile::LeftOutInAll', 'call EventLines::Closing',
+    'callvirt LogFile::WriteFile', 'leave ->20', 'pop', 'leave ->20', 'ldloc V0', 'callvirt LogFile::Dispose', 'ret')
+$Handlers_LogFile_Stop = @('Catch System.Exception 8..18 18..20')
+$Shape_LogFile_ReportNotice = @('ldsfld LogFile::_notice', 'stloc V0', 'ldloc V0', 'brtrue ->5', 'ret', 'ldnull', 'stsfld LogFile::_notice', 'ldsfld MobTrackerPlugin::Log',
+    'ldloc V0', 'callvirt ManualLogSource::LogWarning', 'ret')
+$Shape_LogFile_Dispose = @('ldarg.0', 'ldfld LogFile::_gate', 'stloc V0', 'ldc.i4.0', 'stloc V1', 'ldloc V0', 'ldloca V_1', 'call Monitor::Enter', 'ldarg.0',
+    'call LogFile::Shut', 'leave ->16', 'ldloc V1', 'brfalse ->15', 'ldloc V0', 'call Monitor::Exit', 'endfinally', 'ret')
+$Handlers_LogFile_Dispose = @('Finally - 5..11 11..16')
+$Shape_LogFile_Broke = @('ldsfld LogFile::_notice', 'brtrue ->7', 'ldarg.1', 'callvirt Exception::GetType', 'callvirt MemberInfo::get_Name',
+    'call EventLines::WriteFailed', 'stsfld LogFile::_notice', 'ldarg.0', 'call LogFile::Dispose', 'leave ->12', 'pop', 'leave ->12', 'ret')
+$Handlers_LogFile_Broke = @('Catch System.Exception 0..10 10..12')
+$Shape_LogFile_CloseQuietly = @('ldarg.0', 'callvirt Stream::Dispose', 'leave ->5', 'pop', 'leave ->5', 'ret')
+$Handlers_LogFile_CloseQuietly = @('Catch System.Exception 0..3 3..5')
+Test-ExactShape "MobTracker.EntityListWindow" "Close" $Shape_EntityListWindow_Close "drops a waiting click first, and writes the close line only past its IsOpen test - at a real close, not on every frame with no local player"
+Test-ExactShape "MobTracker.LogFile" "Shut" $Shape_LogFile_Shut "lets the writer go, then disposes it inside a catch - Open's catch (in Awake), Broke and Stop reach it" $Handlers_LogFile_Shut
+Test-ExactShape "MobTracker.LogFile" "Stop" $Shape_LogFile_Stop "takes the listener off and writes the closing line inside a catch, then shuts the file" $Handlers_LogFile_Stop
+Test-ExactShape "MobTracker.LogFile" "ReportNotice" $Shape_LogFile_ReportNotice "the stop notice is cleared before its warning: said once"
+Test-ExactShape "MobTracker.LogFile" "Dispose" $Shape_LogFile_Dispose "Shut under the lock" $Handlers_LogFile_Dispose
+Test-ExactShape "MobTracker.LogFile" "Broke" $Shape_LogFile_Broke "keeps the first failure's notice and shuts the file, inside a catch" $Handlers_LogFile_Broke
+Test-ExactShape "MobTracker.LogFile" "CloseQuietly" $Shape_LogFile_CloseQuietly "disposes the stream inside a catch" $Handlers_LogFile_CloseQuietly
+# The reached line only inside the reached block, right before its Stop: an exact window of LateUpdate ending there,
+# branch targets relative to its start, as the Auto-track check does.
+$checks++
+$why = @()
+$rShape = if ($lu2) { @(Get-Shape $lu2) } else { @() }
+$trAt = [array]::IndexOf($rShape, "call Events::TrackReached")
+$rWant = @("call Tracker::get_IsTracking", "brfalse ->27", "ldsfld Tracker::_isPoint", "brfalse ->27", "ldloc V0", "callvirt Component::get_transform",
+    "callvirt Transform::get_position", "ldsfld Tracker::_point", "call Utils::DistanceXZ", "ldc.r4 30", "bge.un ->27", "call MessageHud::get_instance", "ldnull",
+    "call Object::op_Inequality", "brfalse ->25", "call MessageHud::get_instance", "ldc.i4.1", "ldstr Reached ", "ldsfld Tracker::_targetName", "call String::Concat",
+    "ldc.i4.0", "ldnull", "ldc.i4.0", "ldc.i4.1", "callvirt MessageHud::ShowMessage", "call Events::TrackReached", "call Tracker::Stop")
+$rStart = $trAt - 25
+if ($trAt -lt 25 -or $rShape.Count -lt $trAt + 2) { $why += "no Events.TrackReached call where the reached block can be" }
+else {
+    $rGot = @(for ($k = $rStart; $k -le $trAt + 1; $k++) { $line = $rShape[$k]; if ($line -match '^(\S+) ->(\d+)$') { "{0} ->{1}" -f $Matches[1], ([int]$Matches[2] - $rStart) } else { $line } })
+    if (($rGot -join "`n") -cne ($rWant -join "`n")) { $why += ("the block that ends in Events.TrackReached and Stop is not: {0} - it is: {1}" -f ($rWant -join "; "), ($rGot -join "; ")) }
+}
+if ($why.Count -eq 0) { Ok "Tracker.LateUpdate: the reached line only inside the reached block (tracking a point, within 30 m on the flat), after its message and right before its Stop" }
+else { Fail ("Tracker.LateUpdate: " + ($why -join "; ")) }
+
+# The alert poll's own guards round its verbose lines: the alert memory's line
+# only inside the no-player block, right before the gate is cleared - above the test it would be written every second
+# with a player there, and clear the not-alerting memory with it; and, after the not-alerting pass, nothing alerted
+# returns at once, so the alert and Auto-track lines come only after that return. Exact windows, branch targets
+# relative to their start, as the reached line's check does.
+$checks++
+$why = @()
+$waP = Get-Method "MobTracker.WatchAlerts" "Update"
+$wpS = if ($waP) { @(Get-Shape $waP) } else { @() }
+$amAt = [array]::IndexOf($wpS, "call Events::AlertMemoryClearing")
+$amWant = @('ldsfld Player::m_localPlayer', 'stloc V0', 'ldloc V0', 'ldnull', 'call Object::op_Equality', 'brfalse ->14', 'ldarg.0',
+    'ldfld WatchAlerts::_gate', 'callvirt AlertGate`1::get_Count', 'call Events::AlertMemoryClearing', 'ldarg.0', 'ldfld WatchAlerts::_gate',
+    'callvirt AlertGate`1::Clear', 'ret')
+$amStart = $amAt - 9
+if ($amAt -lt 9 -or $wpS.Count -lt $amAt + 5) { $why += "no Events.AlertMemoryClearing call where the no-player block can be" }
+else {
+    $amGot = @(for ($k = $amStart; $k -le $amAt + 4; $k++) { $line = $wpS[$k]; if ($line -match '^(\S+) ->(\d+)$') { "{0} ->{1}" -f $Matches[1], ([int]$Matches[2] - $amStart) } else { $line } })
+    if (($amGot -join "`n") -cne ($amWant -join "`n")) { $why += ("the no-player block is not: {0} - it is: {1}" -f ($amWant -join "; "), ($amGot -join "; ")) }
+}
+$naAt = [array]::IndexOf($wpS, "call Events::NotAlerting")
+$naWant = @('call Events::NotAlerting', 'ldloc V2', 'ldnull', 'call Object::op_Equality', 'brfalse ->6', 'ret')
+if ($naAt -lt 0 -or $wpS.Count -lt $naAt + 6) { $why += "no Events.NotAlerting call" }
+else {
+    $naGot = @(for ($k = $naAt; $k -le $naAt + 5; $k++) { $line = $wpS[$k]; if ($line -match '^(\S+) ->(\d+)$') { "{0} ->{1}" -f $Matches[1], ([int]$Matches[2] - $naAt) } else { $line } })
+    if (($naGot -join "`n") -cne ($naWant -join "`n")) { $why += ("the not-alerting pass is not followed by the nothing-alerted return: {0} - it is: {1}" -f ($naWant -join "; "), ($naGot -join "; ")) }
+    $early = @(for ($k = 0; $k -le [Math]::Min($naAt + 5, $wpS.Count - 1); $k++) { if (@('call Events::Alert', 'call Events::AutoTrack') -ccontains $wpS[$k]) { "{0} at {1}" -f $wpS[$k], $k } })
+    if ($early.Count -gt 0) { $why += ("before the nothing-alerted return: " + ($early -join ", ")) }
+}
+if ($why.Count -eq 0) { Ok "WatchAlerts.Update: the alert memory's line only in the no-player block, before the gate is cleared; the alert and Auto-track lines only after the nothing-alerted return" }
+else { Fail ("WatchAlerts.Update: " + ($why -join "; ")) }
+# The settings' snapshot: Events.Watch calls it outside any catch, from ModConfig.Bind in Awake.
+$Shape_Events_Snapshot = @('ldnull', 'stloc V0', 'ldsfld Events::Config', 'brtrue ->7', 'ldnull', 'stloc V1', 'leave ->41', 'ldsfld Events::Config',
+    'call LogFile::Settings', 'stloc V0', 'ldsfld Events::Values', 'callvirt Dictionary`2::Clear', 'ldloc V0', 'callvirt List`1::GetEnumerator',
+    'stloc V2', 'br ->25', 'ldloca V_2', 'call Enumerator::get_Current', 'stloc V3', 'ldsfld Events::Values', 'ldloca V_3',
+    'call KeyValuePair`2::get_Key', 'ldloca V_3', 'call KeyValuePair`2::get_Value', 'callvirt Dictionary`2::set_Item', 'ldloca V_2',
+    'call Enumerator::MoveNext', 'brtrue ->16', 'leave ->33', 'ldloca V_2',
+    'constrained. System.Collections.Generic.List`1/Enumerator<System.Collections.Generic.KeyValuePair`2<System.String,System.String>>',
+    'callvirt IDisposable::Dispose', 'endfinally', 'leave ->39', 'stloc V4', 'ldstr Snapshot', 'ldloc V4', 'call Events::Failed', 'leave ->39',
+    'ldloc V0', 'ret', 'ldloc V1', 'ret')
+$Handlers_Events_Snapshot = @('Finally - 15..29 29..33', 'Catch System.Exception 2..34 34..39')
+Test-ExactShape "MobTracker.Events" "Snapshot" $Shape_Events_Snapshot "reads every setting's value inside a catch that only says so once - Events.Watch calls it outside any catch, from ModConfig.Bind in Awake" $Handlers_Events_Snapshot
+# Nothing that would put a player, a character, a world or the PC into a log line is read anywhere in the plugin.
+$checks++
+$priv = '^(Player::(GetPlayerName|GetPlayerID)|Game::GetPlayerProfile|PlayerProfile::|ZNet::(GetWorldName|GetWorld)|World::|ZNetPeer::|ZDOID::(get_UserID|get_ID)|Character::GetHoverName|Tameable::|Environment::(get_UserName|get_MachineName|get_UserDomainName)|Application::get_persistentDataPath|Utils::GetSaveDataPath|SteamFriends::|PlatformManager)'
+$privHits = @()
+foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if ($m.HasBody) { foreach ($x in $m.Body.Instructions) {
+    $o = $x.Operand
+    if ($o -is [Mono.Cecil.MemberReference] -and $o.DeclaringType -and ($o.DeclaringType.Name + "::" + $o.Name) -cmatch $priv) { $privHits += ("{0}.{1} -> {2}::{3}" -f $t.Name, $m.Name, $o.DeclaringType.Name, $o.Name) } } } } }
+if ($privHits.Count -eq 0) { Ok "no player, character, world or PC name, ID or save path is read anywhere (the log lines name creature types and distances)" }
+else { Fail ("reads what could put a player, a world or the PC into a log line: " + ($privHits -join "; ")) }
 
 Write-Output "== assembly references =="
 foreach ($ar in $plug.AssemblyReferences) {

@@ -1,15 +1,17 @@
 <#
 .SYNOPSIS
   Proves the unit tests catch the defects only they can see: plants each one in a copy of the rules that need no game
-  (StarFilter.cs, Rules.cs), runs tests\ and expects it to FAIL.
+  (StarFilter.cs, Rules.cs, and since 0.7.0 LogRules.cs and EventLines.cs), runs tests\ and expects it to FAIL.
 
 .DESCRIPTION
   tools\mutants.ps1 proves tools\preflight.ps1 on the built plugin; the decisions inside StarFilter.cs and Rules.cs -
-  which levels a star set lets through, what a click does to it, the cfg text, the Alerts: row's wait - compile to the
-  same calls whether right or wrong, so only the unit tests can tell. This script plants one such defect at a time.
+  which levels a star set lets through, what a click does to it, the cfg text, the Alerts: row's wait - and inside
+  LogRules.cs and EventLines.cs - which lines MobTracker.log takes, how they look, the verbose lines' words and the
+  decisions they report (Auto-track's outcome, which test turned a creature away) - compile to the same calls whether
+  right or wrong, so only the unit tests can tell. This script plants one such defect at a time.
 
   Works in build\unit-mutants\ of the repository this script is in (git ignores build\), emptied first, on a copy of
-  -Source's top-level .cs files and tests\ folder (the test project compiles StarFilter.cs and Rules.cs from the top
+  -Source's top-level .cs files and tests\ folder (the test project compiles StarFilter.cs, Rules.cs, LogRules.cs and EventLines.cs from the top
   level), so -Source is only read. The copy's line endings are made LF first, so the needles below match a checkout
   with CRLF (Git for Windows' default) as well as one with LF. Each defect is one literal replacement whose needle must
   occur exactly once. First the unmutated copy must build and pass, so a failure below is the defect's. A defect counts
@@ -158,7 +160,69 @@ $mutants = @(
     # Since 0.6.0: the log lines' rounding, and their seconds counted from the loss.
     @("U99 the log lines' seconds truncated, not rounded", "Rules.cs", "(int)Math.Round(now - _lostAt)", "(int)(now - _lostAt)"),
     @("U100 the took line's metres rounded up", "Rules.cs", "(int)Math.Round(distance)", "(int)Math.Ceiling(distance)"),
-    @("U101 the seconds counted from the next look less the delay - wrong after the first look", "Rules.cs", "(int)Math.Round(now - _lostAt)", "(int)Math.Round(now - _nextLook + Delay)")
+    @("U101 the seconds counted from the next look less the delay - wrong after the first look", "Rules.cs", "(int)Math.Round(now - _lostAt)", "(int)Math.Round(now - _nextLook + Delay)"),
+    # MobTracker.log's rules (LogRules.cs, 0.7.0).
+    @("U102 the switches' notes not always written - a switch turned off is not said in the file", "LogRules.cs", "            if ((level & Message) != 0)`n                return true;`n", ""),
+    @("U103 VerboseLog on without ErrorLog leaves the warnings and errors out", "LogRules.cs", "return errorLog || verbose;", "return errorLog;"),
+    @("U104 ErrorLog takes Info lines too", "LogRules.cs", "            return verbose;`n        }", "            return verbose || errorLog;`n        }"),
+    @("U105 another source's lines looked at with both switches off", "LogRules.cs", "            if (!anySwitch)`n                return Skip;`n", ""),
+    @("U106 BepInEx's warnings taken after MobTracker's settings were read", "LogRules.cs", "if (binding && sourceName == ""BepInEx"" && (level & Warning) != 0)", "if (sourceName == ""BepInEx"" && (level & Warning) != 0)"),
+    @("U107 another plugin's errors looked at", "LogRules.cs", "if ((level & (Fatal | Error)) != 0 && (sourceName == ""Unity Log"" || sourceName == ""BepInEx""))", "if ((level & (Fatal | Error)) != 0)"),
+    @("U108 Unity's warnings looked at as errors", "LogRules.cs", "if ((level & (Fatal | Error)) != 0 && (sourceName", "if ((level & (Fatal | Error | Warning)) != 0 && (sourceName"),
+    @("U109 an exception's message read as a frame", "LogRules.cs", "            for (int i = 1; i < lines.Length; i++)`n            {`n                if (OurFrame(lines[i]) != null)", "            for (int i = 0; i < lines.Length; i++)`n            {`n                if (OurFrame(lines[i]) != null)"),
+    @("U110 Mono's 'at ' not taken off - its frames never MobTracker's", "LogRules.cs", "frame = frame.Substring(3);", "frame = frame.Substring(0);"),
+    @("U111 the namespace tested without its dot - MobTrackerExtras is MobTracker", "LogRules.cs", "return frame.StartsWith(""MobTracker."", StringComparison.Ordinal) ? frame : null;", "return frame.StartsWith(""MobTracker"", StringComparison.Ordinal) ? frame : null;"),
+    @("U112 the repeat key without its frame - the same throw from two places counted as one", "LogRules.cs", "return lines[0].TrimEnd('\r') + ""|"" + frame;", "return lines[0].TrimEnd('\r');"),
+    @("U113 the file line without its date", "LogRules.cs", "now.ToString(""yyyy-MM-dd HH:mm:ss.fff"", CultureInfo.InvariantCulture)", "now.ToString(""HH:mm:ss.fff"", CultureInfo.InvariantCulture)"),
+    @("U114 a line off the main thread given frame -1", "LogRules.cs", "(frame >= 0 ? ", "(frame >= -1 ? "),
+    @("U115 a stack trace's further lines not indented", "LogRules.cs", ".Replace(""\n"", ""\r\n    "");", ".Replace(""\n"", ""\r\n"");"),
+    @("U116 the folders scrubbed only in their own case", "LogRules.cs", "StringComparison.OrdinalIgnoreCase", "StringComparison.Ordinal"),
+    @("U117 the shorter folder scrubbed first - a game folder inside the user folder left half written", "LogRules.cs", "bool gameFirst = (gameFolder ?? """").Length >= (userFolder ?? """").Length;", "bool gameFirst = (gameFolder ?? """").Length < (userFolder ?? """").Length;"),
+    @("U118 a folder given with a trailing backslash never found", "LogRules.cs", "            folder = folder.TrimEnd('\\', '/');`n", ""),
+    @("U119 a line that reaches the cap exactly refused", "LogRules.cs", "return written + lineBytes <= cap;", "return written + lineBytes < cap;"),
+    @("U120 an error's inner cause left out - a patch failure says only where", "LogRules.cs", "x != null && depth < 5;", "x != null && depth < 1;"),
+    @("U121 a repeated error written every 6 s", "LogRules.cs", "public const double Window = 60.0;", "public const double Window = 6.0;"),
+    @("U122 the left-out count never reset - counted twice", "LogRules.cs", "            seen.Left = 0;`n", ""),
+    @("U123 every repeat of an error written", "LogRules.cs", "            if (now - seen.WrittenAt < Window)", "            if (false)"),
+    @("U124 a dragged slider written at every step", "LogRules.cs", "if (_bursts.TryGetValue(key, out burst) && t - burst.Last < Quiet)", "if (false)"),
+    @("U125 a lone setting change written twice", "LogRules.cs", "if (pair.Value.Changes > 1)", "if (pair.Value.Changes > 0)"),
+    @("U126 a line not padded as LogOutput.log's", "LogRules.cs", """[{0,-7}:{1,10}] {2}""", """[{0}:{1}] {2}"""),
+    @("U127 a line whose text cannot be read written empty", "LogRules.cs", "return ""(the text of this line could not be read: "" + e.GetType().Name + "")"";", "return """";"),
+    # The verbose lines' texts (EventLines.cs, 0.7.0).
+    @("U128 stars counted from the level - a no-star creature called 1 star", "EventLines.cs", "int stars = level - 1;", "int stars = level;"),
+    @("U129 distances cut, not rounded", "EventLines.cs", "return ((int)Math.Round(distance)).ToString(CultureInfo.InvariantCulture) + "" m"";", "return ((int)distance).ToString(CultureInfo.InvariantCulture) + "" m"";"),
+    @("U130 the ding's volume written with the system's comma", "EventLines.cs", "volume.ToString(""0.##"", CultureInfo.InvariantCulture)", "volume.ToString(""0.##"")"),
+    @("U131 the empty look's line without the re-track's prefix", "EventLines.cs", "return Retrack.LogPrefix + ""look found nothing to take - "" + Count(loaded)", "return ""look found nothing to take - "" + Count(loaded)"),
+    @("U132 a refused ListKey never names the inventory", "EventLines.cs", "+ (inventory ? "", the inventory is open"" : """")", ""),
+    @("U133 Auto-track off said as taken", "EventLines.cs", "                case AutoOff:`n                    return ""Auto-track: off, so not taken"";", "                case AutoOff:`n                    return ""Auto-track: took it"";"),
+    @("U134 the file's notes ignore VerboseLog", "EventLines.cs", "            if (verbose)`n                return ""MobTracker.log gets every MobTracker line, events included"";`n", ""),
+    @("U135 the open's failure says this game start, though a switch tries again", "EventLines.cs", "so none is written for now;", "so none is written this game start;"),
+    @("U136 a kill said as an unload and an unload as a kill", "EventLines.cs", "(killed ? ""seen dead on this client"" : ", "(!killed ? ""seen dead on this client"" : "),
+    @("U137 the guide's cutscene reason never said", "EventLines.cs", "+ (cutscene ? "", in a cutscene"" : """")", ""),
+    @("U138 a partial ground path never says how short", "EventLines.cs", "return ""Ground path: partial - ends "" + Metres(shortBy)", "return ""Ground path: partial - ends "" + Metres(0f)"),
+    @("U139 the cap said in KB as MB", "EventLines.cs", "(cap / (1024 * 1024))", "(cap / 1024)"),
+    # The decisions the verbose lines report, out of Events since 0.7.0 (EventLines.cs).
+    @("U140 Auto-track's take read without the generation - a creature tracked before the alert said as taken", "EventLines.cs", "if (generationNow != generationAtAlert && trackingCreature && targetIsAlerted)", "if (trackingCreature && targetIsAlerted)"),
+    @("U141 Auto-track's take read without the target - a tracking changed to another creature said as taken", "EventLines.cs", "if (generationNow != generationAtAlert && trackingCreature && targetIsAlerted)", "if (generationNow != generationAtAlert && trackingCreature)"),
+    @("U142 Auto-track's take read without a creature tracked - a stale target said as taken", "EventLines.cs", "if (generationNow != generationAtAlert && trackingCreature && targetIsAlerted)", "if (generationNow != generationAtAlert && targetIsAlerted)"),
+    @("U143 Auto-track off asked after a creature tracked - off said as tracked", "EventLines.cs", "            if (!autoTrackOn)`n                return AutoOff;`n            if (trackingCreature)`n                return AutoTracking;`n", "            if (trackingCreature)`n                return AutoTracking;`n            if (!autoTrackOn)`n                return AutoOff;`n"),
+    @("U144 the re-track's wait asked before a creature tracked", "EventLines.cs", "            if (trackingCreature)`n                return AutoTracking;`n            if (retrackWaiting)`n                return AutoWaiting;`n", "            if (retrackWaiting)`n                return AutoWaiting;`n            if (trackingCreature)`n                return AutoTracking;`n"),
+    @("U145 the other side of a dungeon entrance never said - waiting said instead", "EventLines.cs", "                return AutoWaiting;`n            return AutoOtherSide;", "                return AutoWaiting;`n            return AutoWaiting;"),
+    @("U146 tamed asked before the network - a creature not on the network yet said as tamed", "EventLines.cs", "            if (!networked)`n                return AwayNotNetworked;`n            if (tamed)`n                return AwayTamed;`n", "            if (tamed)`n                return AwayTamed;`n            if (!networked)`n                return AwayNotNetworked;`n"),
+    @("U147 the radius asked before the stars", "EventLines.cs", "            if (!starsAccepted)`n                return AwayStars;`n            if (!withinRadius)`n                return AwayRadius;`n", "            if (!withinRadius)`n                return AwayRadius;`n            if (!starsAccepted)`n                return AwayStars;`n"),
+    @("U148 the dungeon side never asked - the empty look counts none on the other side", "EventLines.cs", "            if (!sameSide)`n                return AwayOtherSide;`n", ""),
+    @("U149 the stars reason without the filter in effect", "EventLines.cs", "why = ""its stars are not in the Alerts: filter ("" + alertStars + "")"";", "why = ""its stars are not in the Alerts: filter"";"),
+    @("U150 a creature not on the network yet said as tamed", "EventLines.cs", "why = ""not on the network yet"";", "why = ""tamed"";"),
+    @("U151 a close with no player said as not known", "EventLines.cs", "return playerHere ? ""(cause not known)"" : ""no local player"";", "return ""(cause not known)"";"),
+    @("U152 the inventory named only while a player is here", "EventLines.cs", "if (inventoryOpen)", "if (inventoryOpen && playerHere)"),
+    @("U153 a failed verbose line's warning without its site", "EventLines.cs", """ in "" + site + ""); what it describes", """); what it describes"),
+    @("U154 both switches off said as nothing more - the switch notes and the closing line still come", "EventLines.cs", """MobTracker.log gets only these Logging notes and its closing line until ErrorLog or VerboseLog is turned on""", """MobTracker.log gets nothing more until ErrorLog or VerboseLog is turned on"""),
+    @("U155 both switches on said as warnings and errors only - the switch note and the header", "EventLines.cs", "            if (verbose)`n", "            if (verbose && !errorLog)`n"),
+    @("U156 the not-alerting line's dungeon side said as outside AlertRadius", "EventLines.cs", "why = ""on the other side of a dungeon entrance"";", "why = ""outside AlertRadius"";"),
+    @("U157 a creature that passes every test said as outside AlertRadius", "EventLines.cs", "why = ""no test turns it away"";", "why = ""outside AlertRadius"";"),
+    @("U158 the radius reason left to the default - outside AlertRadius said as a code not known", "EventLines.cs", "                case AwayRadius:`n                    why = ""outside AlertRadius"";`n                    break;`n", ""),
+    # Since 0.7.0: the settings' settler forgets a burst once said.
+    @("U159 a burst never forgotten once said - its settled line again on every frame of the settings flush", "LogRules.cs", "                done.Add(pair.Key);`n", "")
 )
 $ids = @($mutants | ForEach-Object { ($_[0] -split " ")[0] })
 $unknown = @($Only | Where-Object { $ids -notcontains $_ })

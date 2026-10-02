@@ -2,9 +2,9 @@
 
   <!--
     Tests the parts of MobTracker that need no game objects - the star filters, their cfg text and the Alerts: row's
-    settling (StarFilter.cs), and the search,
-    watchlist, spacing, spawn-rule, alert-gate, re-track, dungeon-side, row-refresh, pointer and key rules
-    (Rules.cs) - compiled from the real source files.
+    settling (StarFilter.cs); the search, watchlist, spacing, spawn-rule, alert-gate, re-track, dungeon-side,
+    row-refresh, pointer and key rules (Rules.cs); and MobTracker.log's rules and the text of every line it and
+    VerboseLog write (LogRules.cs, EventLines.cs) - compiled from the real source files.
     Run with "dotnet run" from this folder.
   -->
 
@@ -23,8 +23,11 @@
 
   <ItemGroup>
     <Compile Include="TestMain.cs" />
+    <Compile Include="LogTests.cs" />
     <Compile Include="..\StarFilter.cs" />
     <Compile Include="..\Rules.cs" />
+    <Compile Include="..\LogRules.cs" />
+    <Compile Include="..\EventLines.cs" />
   </ItemGroup>
 
 </Project>

@@ -95,6 +95,7 @@ namespace MobTracker
             if (nearest < 0)
                 return false;
 
+            Events.MapDeleteTookAreaPin(pins[nearest].m_name);
             map.RemovePin(pins[nearest]);
             pins.RemoveAt(nearest);
             return true;
@@ -102,6 +103,7 @@ namespace MobTracker
 
         private void RemovePins()
         {
+            Events.PinsRemoved(_pins.Count);
             if (_pinsMap != null)
             {
                 foreach (Minimap.PinData pin in _pins)
@@ -115,7 +117,10 @@ namespace MobTracker
         {
             Player player = Player.m_localPlayer;
             if (player == null || WorldGenerator.instance == null || ZoneSystem.instance == null)
+            {
+                Events.FindNotStarted();
                 return;
+            }
 
             // Every SpawnSystem carries the same lists; any loaded zone's will do.
             if (SpawnSystem.m_instances.Count == 0)
@@ -155,7 +160,10 @@ namespace MobTracker
             }
 
             if (_search != null)
+            {
+                Events.FindReplaced();
                 StopCoroutine(_search);
+            }
             _search = StartCoroutine(Search(rules, displayName, player.transform.position));
         }
 
@@ -164,6 +172,8 @@ namespace MobTracker
             Say("Searching the world for " + displayName + " spawn areas...");
             WorldGenerator world = WorldGenerator.instance;
             var clock = Stopwatch.StartNew();
+            var total = Stopwatch.StartNew(); // for the verbose log: the whole search, and the frames it took
+            int frames = 0;
 
             // Pass 1, cheap: every zone whose centre has a biome and centre-distance some rule allows.
             var candidates = new List<Vector2>();
@@ -195,12 +205,14 @@ namespace MobTracker
 
                 if (clock.ElapsedMilliseconds > FrameBudgetMs)
                 {
+                    frames++;
                     yield return null;
                     clock.Restart();
                 }
             }
 
             // The sort gets a frame of its own: an ocean creature has some 25,000 candidates, about 8 ms.
+            frames++;
             yield return null;
             clock.Restart();
 
@@ -229,12 +241,14 @@ namespace MobTracker
 
                 if (clock.ElapsedMilliseconds > FrameBudgetMs)
                 {
+                    frames++;
                     yield return null;
                     clock.Restart();
                 }
             }
 
             _search = null;
+            Events.FindDone(displayName, total.ElapsedMilliseconds, frames, candidates.Count, areas.Count);
             Report(rules, nearestRule, displayName, from, areas);
         }
 
@@ -357,6 +371,7 @@ namespace MobTracker
 
         private static void Say(string text)
         {
+            Events.FindSays(text);
             if (MessageHud.instance != null)
                 MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, text);
         }

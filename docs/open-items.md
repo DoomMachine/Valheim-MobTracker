@@ -4,7 +4,7 @@ The one list of what is untested, unverified, open or only an idea for MobTracke
 again. It lives with the code, so each release can check it. What a player meets is in the README's "Known limits";
 what each release changed is in its "History".
 
-As of **0.6.0**.
+As of **0.7.0**.
 
 ## Keeping it up to date
 
@@ -20,23 +20,26 @@ As of **0.6.0**.
 - Change "As of" to the release's version.
 
 Ids: **OI** open issues, **KL** known limits, **LT** checks in play, **SC** safety checks, **TL** tooling, **FW** future
-work.
+work, **OQ** open questions - behaviour choices discussed and not taken (yet).
 
 ## Not yet tried in play
 
-0.6.0 has not been played yet. 0.5.1 ran through a long play session without errors, in which Always track nearest
-watched was seen acting (LT-4); none of LT-15's checks was confirmed in it. 0.5.0 ran through a long play session, with several logouts, without errors: at its
-first world entry it set back the **Alerts:** filter 0.4.1 had saved (LT-14), but nothing was watched in it, so a reset
-at a logout was not seen. 0.4.1 - and with it the changes of 0.4.0 and 0.3.1 - ran through a long play session
-without errors, in which a watch alert came, the `AlertStarFilter` held several categories at once, types were watched
-and unwatched and the guide mode was switched; none of the checks below was run in it as written. 0.3.0 and 0.2.0 each
-ran through play sessions without errors; Always track nearest watched (0.3.0) was first reported acting in 0.5.1's
-session, not yet checked for taking the nearest, and 0.2.0's new features have not been confirmed in the game (LT-2,
-LT-4 to LT-6).
+0.7.0 has not been played yet (LT-17). 0.6.0 ran through a play session without errors, but its new rule did not act in
+it: the log has no `Always track nearest watched:` line (LT-16). 0.5.1 ran through a long play session without errors,
+in which Always track nearest watched was seen acting (LT-4); none of LT-15's checks was confirmed in it. 0.5.0 ran
+through a long play session, with several logouts, without errors: at its first world entry it set back the **Alerts:**
+filter 0.4.1 had saved (LT-14), but nothing was watched in it, so a reset at a logout was not seen. 0.4.1 - and with it
+the changes of 0.4.0 and 0.3.1 - ran through a long play session without errors, in which a watch alert came, the
+`AlertStarFilter` held several categories at once, types were watched and unwatched and the guide mode was switched;
+none of the checks below was run in it as written. 0.3.0 and 0.2.0 each ran through play sessions without errors; Always
+track nearest watched (0.3.0) was first reported acting in 0.5.1's session, not yet checked for taking the nearest, and
+0.2.0's new features have not been confirmed in the game (LT-2, LT-4 to LT-6).
 
 Single player is enough except for LT-7 and LT-11's second check (a dedicated server). Where creatures of a given star
 level are needed, the console's `spawn` command (with `devcommands` on) makes them: level 1 is no star, 2 one star, 3
-two stars. Afterwards, `BepInEx/LogOutput.log` should have no exception naming MobTracker.
+two stars. Afterwards, `BepInEx/LogOutput.log` should have no exception naming MobTracker, and from 0.7.0
+`BepInEx/MobTracker.log` no `[Error  : Unity Log]` line. With `VerboseLog` on (0.7.0), most checks below can be read
+from its lines as well: what was tracked, lost and taken, each alert and what Auto-track did.
 
 ### LT-14 0.5.0: one game session
 
@@ -98,6 +101,43 @@ start rewrites it), and read its `Always track nearest watched:` lines.
 - [ ] With the option off, a tracked creature's loss writes no `Always track nearest watched:` line.
 - [ ] In the whole log, each `waiting` line is followed by one `took` or `wait ended` line before the next `waiting`
   line (the last one may stand alone if the game was closed during a wait), and no exception names MobTracker.
+
+### LT-17 0.7.0: the logs
+
+Copy `BepInEx/MobTracker.log`, `MobTracker-prev.log` and `LogOutput.log` before the game starts again.
+
+- [ ] The log says `MobTracker 0.7.0 loaded`. The cfg has `[Logging]` with `ErrorLog = true` and `VerboseLog = false`,
+  and ConfigurationManager shows both as Enabled/Disabled toggles, in a **Logging** section listed first.
+- [ ] `BepInEx/MobTracker.log` begins with `MobTracker 0.7.0 - MobTracker.log opened at the game's start; Valheim ...;
+  BepInEx ...`, a `Logging: ErrorLog on, VerboseLog off` line and a `Settings:` line, and every entry starts with the
+  date, the time and `f` and the frame.
+- [ ] Start the game again: the last start's file is now `MobTracker-prev.log`, and `MobTracker.log` starts afresh.
+- [ ] With the game closed, set `ListStarFilter = Foo` and `GuideMode = Foo` in the cfg. At the next start
+  `MobTracker.log` has MobTracker's `General.ListStarFilter is 'Foo'` warning and BepInEx's `Config value of setting
+  "Tracking.GuideMode" could not be parsed` warning, as `LogOutput.log` does (set both back afterwards).
+- [ ] Set `ListKey` to `WheelUp`: the warning is in `LogOutput.log` and in `MobTracker.log`, with the same text after
+  the date, time and frame.
+- [ ] Turn `VerboseLog` on in ConfigurationManager: both logs get `Logging: VerboseLog turned on - ...` and a
+  `Settings:` line. Then open the list, track a creature, let a watched one alert, click Find area: each has its
+  `List:`, `Track:`, `Alert:`, `Auto-track:`, `Ding:` and `Find area:` lines in both logs, in the order they happened.
+- [ ] With `VerboseLog` on, kill a tracked creature: `Track: lost <name> (<prefab>) - seen dead on this client`. Track
+  another and walk away until it unloads: `... - gone from this client (...)`.
+- [ ] With `VerboseLog` on, drag `ArrowSize` in ConfigurationManager: one `Setting: Tracking.ArrowSize` line at once
+  and one more about a second after you let go, not one per step.
+- [ ] With `VerboseLog` on, press F7 while typing in chat: `List: F7 pressed - the list stays shut: you are typing ...`.
+- [ ] With `VerboseLog` on and **Always track nearest watched** ticked, lose a tracked watched creature with none other
+  around: an `Always track nearest watched: look found nothing to take - ...` line after the `waiting` line, and
+  another only when what the looks see changes.
+- [ ] With `VerboseLog` on, Ctrl+F3 while tracking: `Guide: hidden - HUD hidden (Ctrl+F3)`, then `Guide: shown again`.
+- [ ] Turn both settings off while the game runs: the last line of `MobTracker.log` is then `Logging: ... turned off -
+  MobTracker.log gets only these Logging notes and its closing line until ErrorLog or VerboseLog is turned on`, and
+  until one is turned on again only such notes and, at quit, the closing line are added. Start the game with both
+  off: `MobTracker.log` and `MobTracker-prev.log` keep their times and contents; turning `ErrorLog` on then opens the
+  file (`opened when ErrorLog was turned on`) and keeps the last one as `MobTracker-prev.log`.
+- [ ] Open `MobTracker.log` in Notepad while the game runs: it opens, and the game goes on writing to it.
+- [ ] Quit the game normally: the last line of `MobTracker.log` is `MobTracker.log closed - the game is quitting`
+  (LT-18).
+- [ ] Nothing in `MobTracker.log` names your Windows user folder in full, a player, a character or a world.
 
 ### LT-1 0.4.1's fixes
 
@@ -214,7 +254,8 @@ game does not make public, and whether the game's runtime allows that has not be
 - [ ] Track a creature within 250 m and click **Guide: 3D arrow** to switch to the ground path: a line appears, and the
   log shows no access error.
 
-If it fails: fall back to the game's public path query, or turn GroundPath off with a reason in the log.
+If it fails: fall back to the game's public path query, or turn GroundPath off with a reason in the log. Since 0.7.0,
+with `VerboseLog` on, a `Ground path:` line says whether the line was complete, stopped short or was not built, and why.
 
 ## Not verified
 
@@ -229,14 +270,17 @@ whether either then carries over to the new character is not known.
 - [ ] With no bed set, track a creature and let a watched one alert; die close to the start, where you will respawn.
   After the respawn, check whether the arrow still shows and whether that creature alerts again.
 
-If either carries over: also reset both when the local player changes.
+If either carries over: also reset both when the local player changes. Since 0.7.0, with `VerboseLog` on, the `Player:`
+lines and `Alert: no local player, so the alert memory of ... is cleared` show whether the memory was cleared between
+the death and the respawn.
 
 ### LT-10 A ding on every alert
 
 The ding is made by a sample-reader callback whose position is never reset. Unity is expected to read such a clip
 once; if it ever read it again, later dings would be silent. A position-reset callback would remove the question.
 
-- [ ] With `AlertVolume` above 0, let several alerts come in one session: each one dings.
+- [ ] With `AlertVolume` above 0, let several alerts come in one session: each one dings. (Since 0.7.0, with
+  `VerboseLog` on, a `Ding: played` line shows each ding was started; whether it was heard is still the check.)
 
 ### LT-11 How far creatures load
 
@@ -264,6 +308,20 @@ let go of it: the game reads that button there with no test the list can hold sh
 - [ ] If you can hang from a grappling line: open the list and hold the right mouse button on the window. If the
   character lets go, add it to the README's Known limits.
 
+### LT-18 MobTracker.log on the game's runtime
+
+How `MobTracker.log` is taken, copied to `MobTracker-prev.log` and shared was proved by `tools/log-harness/` on .NET
+Framework on Windows, not on the game's own runtime. That an error of MobTracker's code nobody caught reaches the file
+is decompiled and unit-tested on sample text, never seen: no such error has happened in a log kept so far. Whether the
+plugin is told when the game quits - the file's closing line - is not known.
+
+- [ ] LT-17's first checks settle the first.
+- [ ] If an error naming MobTracker ever reaches `LogOutput.log` (only with BepInEx's `WriteUnityLog` on, which is off
+  by default - with it off, `MobTracker.log` is the one BepInEx-side log that holds it) or `Player.log`,
+  `MobTracker.log` has it as an `[Error  : Unity Log]` line.
+- [ ] After a normal quit, the last line of `MobTracker.log` is `MobTracker.log closed - the game is quitting`. If it
+  is not, nothing may lean on that line.
+
 ### OI-3 Edge cases never seen
 
 These would matter only if they happen:
@@ -287,6 +345,20 @@ nearest watched ends its wait at a death by design.)
 Whether tracking should carry on after the respawn is open: the tracker would have to keep its target while there is
 no player, and say so.
 
+### OI-5 A cfg that cannot be written
+
+BepInEx saves the cfg before it tells a setting's own handlers about a change. While `com.mobtracker.plugin.cfg` cannot
+be written (read-only, or locked by another program), a click that changes a setting - the Guide button, both
+checkboxes, the star rows, Watch - throws out of the window, and the parsed watchlist or star filter stays behind its
+setting, the window showing the old state: the same click made again writes the text the setting already holds, which
+BepInEx does not count as a change, so nothing happens; a change of that setting that can be saved (another creature's
+Watch, another star in that row, ConfigurationManager) or a session reset that writes that setting back to its default
+brings the two together again, and the failed click's change is dropped then unless ConfigurationManager's text kept it;
+`VerboseLog` turned on or off in ConfigurationManager then does not take effect, and a change of either logging setting
+neither opens `MobTracker.log` nor is noted in it. Already so in 0.6.0, and rare; found while designing 0.7.0, whose
+`MobTracker.log` now records the error. The session reset does not have this problem: it saves once, after its writes. A
+fix - writing with saving off and saving once, caught, as the session reset does - is its own patch release.
+
 **Safety checks**
 
 `tools/preflight.ps1` checks a build's IL against what the code must do, and `tools/mutants.ps1` plants defects to
@@ -302,9 +374,50 @@ skipping creatures once one is kept - are checked since 0.6.0.)
 
 Many checks match exact IL shapes, so a legitimate rewrite of the code they cover (the re-track, Auto-track's line,
 the star rows, the window clamp, the game session) fails them: re-read the IL and rewrite the check rather than loosen
-it. The unit tests link only `StarFilter.cs` and `Rules.cs`; the rest is proved by preflight and planted defects. So
+it. The unit tests link only `StarFilter.cs` and `Rules.cs`, and since 0.7.0 `LogRules.cs` and `EventLines.cs`; the
+rest is proved by preflight and planted defects (and `MobTracker.log`'s file handling by `tools/log-harness/`). So
 prove each new check with defects planted in how its answer is used, its true path, how two tested facts combine, its
 loop bounds and its operands - not only in its wiring.
+
+### SC-6 What the logging checks cannot see
+
+The checks hold where each verbose line may be written from, that each returns first while `VerboseLog` is off, catches
+its own failure and changes nothing it describes, and, instruction by instruction, the listener, the file's opening, the
+catch round the settings line written at the game's start, and the file's failure paths: `Shut` (which `Open`'s catch
+reaches in `Awake`), `Dispose`, `Broke`, `Stop`, the stop notice said once, `CloseQuietly`. The guards that keep a line
+from repeating every frame, second, look or keystroke are held to their methods' exact shapes: a failure warned about
+once per site, the loss line only at a loss, the not-alerting line once per creature, the empty look's line only when it
+changes, the refused-key line only on a press, a setting's burst through the settler, the cleared alert memory only when
+it held some, and `LogObserver`'s and the ground path's lines only on a change; and four that sit in the caller - the
+list's close line only past `Close`'s `IsOpen` test (with no local player `Close` runs every frame), the reached line
+only inside the reached block, the alert memory's line only in the alert poll's no-player block, and the alert and
+Auto-track lines only after the poll's return when nothing alerted. The wording of every verbose line and of the file's
+own lines, and the decisions behind three of them - what Auto-track did, which test turned a watched creature away, why
+the list closed when no caller said - are in `EventLines` and unit-tested; the game side hands over only names and
+values (a button's name, a setting's key, a creature's label, the HUD's answer, a count).
+
+What they still do not see:
+- Where a site sits in its caller, beyond the places checked - the alert poll's lines after its once-a-second return,
+  the loss line before the lost block, the window's clicks inside their buttons, the ground path's and the empty look's
+  lines, the list's close, the reached line and the alert poll's no-player block and nothing-alerted return: elsewhere
+  the site table holds only which methods call a site, and how many times. Find area's done line moved into its search
+  loop would repeat once per zone searched; it passes every check today.
+- What the walk that finds no throw and no log call does not reach: it starts at the listener (`LogEvent`) and reads
+  only explicit throws. The file's other paths - `Start`, `Bound`, `Open`, `Switched`, `Stop` and the failure paths
+  above - are held by their exact shapes and catches instead, so a new method on one of them needs a shape of its own.
+- Inside the other `Events` methods, held only to the guard, the catch, no forbidden call and their own fields: a defect
+  there - the area-pin line without its count test, the stop line without its tracking test, the guide line reading
+  the wrong reason - writes a wrong or an extra line unseen. None of them runs every frame except the settings flush,
+  whose settler the tests pin.
+- Whether a site hands over the right value: at most sites the checks see that each argument is a plain value, not which
+  one - the empty look's are traced to their source, and `LogObserver`'s, the ground path's and the ding's sites are
+  held to exact shapes - so Find area's two counts swapped at its site would pass.
+- What `LogObserver` writes over time: its "on change only" is checked by its shape, not by driving frames.
+- Whether an inference is true of the moment: Auto-track's outcome is read from `Tracker.Generation`, and is only as
+  true as the code that counts it.
+- The clocks the rules are given: the repeat limit's and the settler's timing is unit-tested, but which clock each is
+  fed is seen only in the methods held to exact shapes - not in the settings flush.
+- The file's handling on the game's own runtime: `tools/log-harness/` runs on .NET Framework (LT-18).
 
 ## Known limits
 
@@ -329,6 +442,8 @@ states one, the item says so.
 | FW-1, FW-2 | The window's place not kept; GUI scale | See FW-1 and FW-2. |
 | KL-11 | Find area's limits | Sub-biomes and the game's corner biome test: see FW-5 and FW-6. The rest is how Find area works: it tells the land from the world seed, not from the loaded ground, and the terrain it cannot check (slope, lava, player bases, water depth) is known only where the land is loaded. |
 | KL-12 | Always track nearest watched: its rules | Chosen when it was made (0.3.0), and each could change if players ask; the dungeon side (0.3.1) and the settled **Alerts:** stars (0.4.1) are fixes. Since 0.6.0 it takes the nearest creature of any watched type, not only of the lost one's (asked for after play); every watch alert during its wait leaves the choice to it, and unwatching the lost type no longer ends the wait (unwatching every type does). A setting for the lost type only would be a new feature; watching only that type does much the same for the re-track, at the cost of the other types' alerts. Taking a creature that alerted during the wait and then left the `AlertRadius` would need the wait to remember that creature. |
+| KL-26 | `MobTracker.log`'s reach | An error nobody caught comes through BepInEx's "Unity Log" source, so `UnityLogListening` must be on and only main-thread messages arrive; a Unity log callback of MobTracker's own would remove the setting's part, as a second capture route (FW-9). The 5 MB cap keeps the next start's copy to -prev small (OQ-9). A second copy of the game fails at the open and touches nothing (OQ-11). The folder scrub replaces full spellings only. |
+| KL-27 | What `VerboseLog` does not say yet | See FW-9; the README names each of its items but the last, which KL-26's limit covers. States it learns by watching are read once a frame, after the code that changes them (Tracker works the guide out in its `LateUpdate`), and taken as they are, without a line, when `VerboseLog` is turned on and in each tracking's first two frames. |
 | KL-24 | Tracking usually ends at a death | The game removes the body about 10 seconds after a death, and with it the local player the tracker follows (a respawn at once may carry it on: LT-9); OI-4 asks whether tracking should carry on after the respawn. |
 
 ### KL-13 Touch screens
@@ -370,11 +485,12 @@ others found in the same check, and one ding. Auto-track takes only that nearest
 while you are tracking a creature, while Always track nearest watched waits, or in the same check as a nearer one, has
 had its alert: Auto-track does not take it later, nor when you turn Auto-track on afterwards (Always track nearest
 watched can, at a look after a loss), until it alerts again - and every watched creature can alert again once a
-once-a-second alert check finds no local player: after a death (the body is removed about 10 seconds after it, and a bed
-respawn takes at least 8 seconds more) and when you leave the world. So if Stop tracking or turning the option off ends
-such a wait without a take, a creature that alerted during it is not auto-tracked later unless it alerts again. The ding
-and Auto-track also act while the HUD is hidden, when the message is not shown; skipping them then would be a behaviour
-change, not taken so far.
+once-a-second alert check finds no local player: after a death with a respawn slow enough for it (the body is removed
+about 10 seconds after it, and a bed respawn takes at least 8 seconds more; a respawn at once at the start may leave no
+such check: LT-9) and when you leave the world. So if Stop tracking or turning the option off ends such a wait without a
+take, a creature that alerted during it is not auto-tracked later unless it alerts again. The ding and Auto-track also
+act while the HUD is hidden, when the message is not shown; skipping them then would be a behaviour change, not taken so
+far.
 
 ### KL-19 Watchlist and AlertRadius matching
 
@@ -420,7 +536,8 @@ The `wait ended ... nothing taken - <reason>` line names the first that holds, w
 is tracked, the option is off, nothing is watched; otherwise it says the player died or left the world. At a logout
 with `KeepBetweenSessions` off and something watched, the session reset that empties the watchlist may run first in
 that frame (Unity does not order the two components), and the line then says `nothing is watched`. Inferred from the
-code; not seen in play.
+code; not seen in play. Since 0.7.0, with `VerboseLog` on, the `Session:` line and the frame numbers in `MobTracker.log`
+show which ran first.
 
 ## Watching the game
 
@@ -435,7 +552,101 @@ code; not seen in play.
   sets (KL-8); since 0.5.1 `tools/mutants.ps1` names the DLLs a run was checked against.
 - **ConfigurationManager:** it applies MobTracker's two star filters, which are text settings, at every keystroke - one
   reason an **Alerts:** change waits until it holds still (KL-5). While its window blocks input, F7 does not reach the
-  list (KL-17).
+  list (KL-17). It lists MobTracker's **Logging** section first: sections in the order they are bound, unless its
+  "Sort by name" is on (OQ-10).
+- **BepInEx:** `MobTracker.log` hangs on BepInEx 5's log - its listeners, the `UnityLogListening` setting, the "Unity
+  Log" source's `Stack trace:` text - and on its config's change events (BepInEx 5.4.23.3). A BepInEx update should be
+  checked against them; `tools/preflight.ps1` checks that the members it uses still exist and that its level values
+  are BepInEx's.
+
+## Open questions for future releases
+
+Behaviour choices that have been discussed but not made. Each says what MobTracker does now, which is what stays unless
+the question is answered otherwise, and what the other answer would change. An answer that changes behaviour is a new
+feature (a minor version).
+
+### OQ-1 Auto-track's choice when nothing is tracked
+
+Now: with nothing tracked and no Always track nearest watched wait running (after Stop tracking, or at a world start),
+Auto-track takes the nearest of the creatures that alert in one once-a-second check - the ones that just came into
+range. A watched creature that alerted earlier and stands nearer is not taken, because each creature alerts once
+(KL-18). Example: a Boar alerting at 150 m is taken while a Deer that alerted before stands at 30 m.
+The other answer: Auto-track takes the nearest loaded watched creature whenever nothing is tracked. Auto-track would
+then follow the nearest watched creature rather than the one that just turned up.
+
+### OQ-2 Moving on to a nearer watched creature while tracking
+
+Now: Always track nearest watched chooses only after a loss. Once it has taken a creature it stays on it, even when a
+nearer watched creature comes along (it stays on a Boar at 80 m when a Deer walks up to 5 m), so the arrow does not
+jump in the middle of a chase.
+The other answer: while it tracks a creature it took itself, it moves to any nearer watched creature, at once or after
+a margin or a delay that stops the arrow flicking between two creatures at about the same distance.
+
+### OQ-3 A creature of an unwatched type tracked by hand
+
+Now: a wait starts only when the lost creature's type is watched. Track a Neck by hand while watching Deer and Boar,
+and its death points you at nothing (the log's `no wait` line says why).
+The other answer: any tracked creature's loss starts a wait while something is watched. Related: a lost creature of
+a watched type tracked by hand outside the **Alerts:** stars does start a wait (KL-20).
+
+### OQ-4 Keeping the choice to the lost creature's type
+
+Now: since 0.6.0 Always track nearest watched takes the nearest creature of any watched type; before, it looked only
+for the lost creature's type. Watching only that type does much the same, at the cost of the other types' alerts.
+The other answer: a setting that keeps the choice to the lost creature's type, as before 0.6.0.
+
+### OQ-5 Choices 0.6.0 made with the change
+
+Now, each reversible if players ask:
+- every watch alert during a wait leaves the choice to the wait, also with Auto-track on (before 0.6.0, an alert for
+  another watched type took the arrow at once and ended the wait);
+- unwatching the lost type no longer ends the wait, unwatching every type does;
+- at equal distances no type is preferred: the nearer creature wins, whatever kind was lost.
+
+### OQ-6 Tracking after a death
+
+OI-4 asks whether tracking should carry on after the respawn: today it usually ends when the game removes your body.
+
+### OQ-7 MobTracker.log with both logging settings off
+
+Now (0.7.0): with `ErrorLog` and `VerboseLog` both off from the game's start, neither `MobTracker.log` nor
+`MobTracker-prev.log` is touched; the file opens the first time a setting is on in a game start, and at most once.
+The other answer: start a fresh file, holding only its first lines, at every start of the game - which then moves the
+last real log to -prev even with logging off.
+
+### OQ-8 The level of the verbose lines
+
+Now: Info, so they reach `LogOutput.log` too, as asked ("the same lines still go to LogOutput.log"). The other answer:
+BepInEx's Debug level, which BepInEx's default settings leave out of `LogOutput.log` and its console; `MobTracker.log`
+and the game's `Player.log` would still have them, and `LogOutput.log` would stay as quiet as before with
+`VerboseLog` on.
+
+### OQ-9 MobTracker.log's size and repeated errors
+
+Now: at most 5 MB per game start, then one last line and nothing more until the next start; one earlier start kept
+(`MobTracker-prev.log`); an error of MobTracker's code that repeats written at most once a minute, with a count of
+those left out. The other answers: a larger cap, starting a fresh file at the cap, keeping more than one earlier start,
+or another pace for repeats. MobTracker's own warnings are not thinned: one per ConfigurationManager keystroke in a
+star filter, as in `LogOutput.log`.
+
+### OQ-10 Where the Logging settings show
+
+Now: ConfigurationManager lists MobTracker's **Logging** section first, because its two settings are bound before the
+others, so that `MobTracker.log` is open when the others are read and their warnings reach it. The other answer: bind
+them last (listed last) and hold the warnings that come before in memory until the file opens.
+
+### OQ-11 A second copy of the game
+
+Now: a second copy of the game running at the same time writes no `MobTracker.log`, and says so in its own
+`LogOutput.log`; the first copy's two files are untouched. The other answer: a file of its own, numbered as BepInEx
+numbers `LogOutput.log`'s.
+
+### OQ-12 What VerboseLog writes on its own lines, and what ErrorLog covers
+
+Now: with `VerboseLog` on, `MobTracker.log` gets every MobTracker line, the warnings and errors too, whatever `ErrorLog`
+says; `ErrorLog` alone does not write `MobTracker <version> loaded` (an Info line) - the file's own line at its opening
+names the version instead; the window's Watch, Unwatch, Guide and checkbox clicks show as the `Setting:` lines they
+cause. The other answers: verbose lines only, separate from the errors; a line per click as well.
 
 ## Ideas (not planned)
 
@@ -521,6 +732,40 @@ tracker, the window, the alerts) is internal, and it raises no events.
   the next frame reports the old target lost. An integration that patches MobTracker should first check with a
   Harmony test that the members it patches can be patched on the game's runtime.
 
+### FW-9 What VerboseLog does not say yet
+
+- A Watch or Find area click dropped because the list closed in the same frame: `EntityListWindow.Close` is an exact
+  shape the checks hold.
+- A failing cutscene test: `Tracker.InCutscene` swallows the exception, and its exact shape and four planted defects
+  pin that.
+- Which of Escape and the gamepad's B closed the list: both are read inside one call the checks trace.
+- Why a watched creature was passed over for a reason other than the four `Alert: none for ...` names.
+- The search changing the list: the row count after the search applied changes (the search text itself is left out of
+  the log on purpose). It can change at each refresh while you type, twice a second, so a line would need a settle like
+  the `Setting:` lines', inside the list's refresh, which the checks trace argument by argument.
+- The alert poll finding nothing watched: it returns before its creature loop once a second while the watchlist is
+  empty. The watchlist is in the `Settings:` and `Setting:` lines, so that state can be read from them; a line of its
+  own would need an on-change guard and checks of its own.
+- The map's delete gesture already taken by another mod's prefix (TomTom's, say) before MobTracker's turn: that is
+  decided in MobTracker's Harmony prefix, where the checks allow no verbose line. LT-6's last check would read it.
+- The map's delete gesture with no area pin in reach: every other use of the gesture, after which the game removes one
+  of your own pins, or none, as before - a line at each would not say anything MobTracker did.
+- An error nobody caught without BepInEx's `UnityLogListening`: a Unity log callback of MobTracker's own, kept to one
+  capture route.
+- Not yet: each needs safety checks re-read from the compiled code for little gain, or it is rare.
+- Would take: those re-derivations, and planted defects for each new line.
+
+### FW-10 Errors still said once, or not at all
+
+The cutscene test's error (counted as no cutscene) is not logged; a creature that cannot be checked for an alert is
+said once per start of the game, not once per session; and the list's refresh and the re-track's look have no
+per-creature catch, so a creature another mod breaks repeats its error at each look or refresh (`MobTracker.log` writes
+it at most once a minute, with a count).
+
+- Not yet: each sits in code the safety checks pin exactly.
+- Would take: a once-only warning in the cutscene test, a per-session count for the alert check, and per-creature
+  catches as the alert check has, with the checks re-derived.
+
 ## Decided or not planned - reopen only with a new reason
 
 - **The list keeps the game out while it is open:** Tab, the mouse wheel and the keys typed in its search do not reach
@@ -544,11 +789,21 @@ tracker, the window, the alerts) is internal, and it raises no events.
 
 ## Done
 
-- 0.6.0, asked for during 0.5.1's play session: Always track nearest watched takes the nearest creature of any
-  watched type, not only of the lost one's; during its wait every watch alert leaves the choice to it, also with Auto-track on; unwatching the lost type
-  no longer ends the wait (unwatching every type does); with the option on, each loss of a tracked creature, and what
-  each wait took or why it ended, is written to the log. SC-3 in part: preflight checks that the re-track's creature
-  loop runs to its end and keeps only the nearest, and every call NearestWatched.Update makes.
+- 0.7.0, asked for on 2026-10-02: `BepInEx/MobTracker.log` with every MobTracker warning and error, an error of its code
+  the game or BepInEx reports (KL-26 says which) and BepInEx's warnings about its cfg (`ErrorLog`, on by default; the
+  start before kept as `MobTracker-prev.log`), and `VerboseLog` (off by default) for the events the README lists (what
+  it does not say yet: KL-27, FW-9), in it and in `LogOutput.log`; the error lines about a patch, and about TomTom's and
+  Wayfinder's keys, give their cause. Preflight checks the switches, the file's opening and its failure paths, the
+  listener, every log line by level, every verbose site, the guards inside the verbose methods that keep a line from
+  repeating, and those in the callers round the list's close, the reached and loss lines, the window's clicks, the
+  ground path, the empty look, the alert poll's once-a-second return, its no-player block and its nothing-alerted return
+  (SC-6 names a caller's guard it does not hold); planted defects prove each check, the unit tests pin the lines' words
+  and the decisions they report, and `tools/log-harness/` proves the file's handling outside the game.
+- 0.6.0, asked for during 0.5.1's play session: Always track nearest watched takes the nearest creature of any watched
+  type, not only of the lost one's; during its wait every watch alert leaves the choice to it, also with Auto-track on;
+  unwatching the lost type no longer ends the wait (unwatching every type does); with the option on, each loss of a
+  tracked creature, and what each wait took or why it ended, is written to the log. SC-3 in part: preflight checks that
+  the re-track's creature loop runs to its end and keeps only the nearest, and every call NearestWatched.Update makes.
 - 0.5.1: OI-1 - the tracking arrow, the ground-path line and the "Tracking:" label hide while the HUD is hidden, in a
   cutscene (sleep included), while the player is dead, in the frame the body is removed for the respawn, and during a
   teleport; `ArrowSize` (0.1 to 3) and `ArrowHeight` (0 to 5) have allowed ranges. Its earlier wording - the arrow

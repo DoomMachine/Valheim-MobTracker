@@ -32,6 +32,7 @@ namespace MobTracker
         internal static void ResetSession()
         {
             AlertStarsSettler.Reset();
+            Events.Session();
         }
 
         private void Update()
@@ -47,6 +48,7 @@ namespace MobTracker
             Player player = Player.m_localPlayer;
             if (player == null)
             {
+                Events.AlertMemoryClearing(_gate.Count);
                 _gate.Clear();
                 return;
             }
@@ -102,6 +104,8 @@ namespace MobTracker
                 }
             }
 
+            Events.NotAlerting(_gate, from); // verbose only: each watched creature that does not alert, and why, once
+
             if (nearest == null)
                 return;
 
@@ -112,6 +116,7 @@ namespace MobTracker
             if (MessageHud.instance != null)
                 MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, text);
 
+            Events.Alert(nearest, nearestDistance, count);
             Ding.Play();
 
             // Not while a creature is tracked: a watched type that keeps spawning would otherwise
@@ -126,6 +131,7 @@ namespace MobTracker
                 && Rules.SameLayer(nearest.InInterior(), Character.InInterior(from))
                 && !NearestWatched.IsPending)
                 Tracker.Track(nearest);
+            Events.AutoTrack(nearest);
         }
     }
 }

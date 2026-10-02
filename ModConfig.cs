@@ -144,6 +144,9 @@ namespace MobTracker
 
             Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value);
             WatchlistEntry.SettingChanged += (sender, args) => Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value);
+
+            // Every setting's change, for the verbose log; added last, so each setting's own handler above has run first.
+            Events.Watch(config);
         }
 
         /// <summary>

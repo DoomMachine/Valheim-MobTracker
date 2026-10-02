@@ -33,6 +33,27 @@ namespace MobTracker
             get { return IsTracking && !_isPoint; }
         }
 
+        /// <summary>What is tracked, as the verbose log names it - "Boar * (Boar)", or "Boar spawn area" - or null.</summary>
+        internal static string Tracked
+        {
+            get { return !IsTracking ? null : _isPoint ? _targetName : EventLines.Creature(_targetName, _targetPrefab); }
+        }
+
+        internal static float TrackedSeconds
+        {
+            get { return Time.time - _since; }
+        }
+
+        internal static bool GuideHiddenNow
+        {
+            get { return _guideHidden; }
+        }
+
+        internal static bool TargetTamed
+        {
+            get { return _targetTamed; }
+        }
+
         // Rules.GuideHidden's answer for this frame, also for the label in OnGUI.
         private static bool _guideHidden;
 
@@ -41,6 +62,9 @@ namespace MobTracker
         private static string _targetPrefab;
         private static bool _targetTamed;
         private static float _nextPath;
+        // For the verbose log (Events, LogObserver): when this tracking began, and a count of tracking changes.
+        private static float _since;
+        internal static int Generation { get; private set; }
 
         private GameObject _arrow;
         private LineRenderer _line;
@@ -51,10 +75,16 @@ namespace MobTracker
         private float _lastKeepAlive = -1f;
         private bool _pathComplete;
         private float _distance;
+        // The ground path's state as UpdatePath last left it (EventLines.Path*), and as the verbose log last said it.
+        private int _pathState = -1;
+        private int _loggedPathState = -1;
+        private int _loggedGeneration = -1;
+        private float _pathShortBy;
         private GUIStyle _hudStyle;
 
         public static void Track(Character character)
         {
+            Events.TrackStarting(character); // before the fields change: it names what this replaces
             Target = character;
             IsTracking = true;
             _isPoint = false;
@@ -62,10 +92,13 @@ namespace MobTracker
             _targetPrefab = Creature.PrefabName(character);
             _targetTamed = character.IsTamed();
             _nextPath = 0f;
+            _since = Time.time;
+            Generation++;
         }
 
         public static void TrackPoint(Vector3 point, string name)
         {
+            Events.TrackStartingArea(point, name);
             Target = null;
             IsTracking = true;
             _isPoint = true;
@@ -74,12 +107,16 @@ namespace MobTracker
             _targetPrefab = null;
             _targetTamed = false;
             _nextPath = 0f;
+            _since = Time.time;
+            Generation++;
         }
 
         public static void Stop()
         {
+            Events.TrackStopping();
             Target = null;
             IsTracking = false;
+            Generation++;
         }
 
         private void Awake()
@@ -134,6 +171,7 @@ namespace MobTracker
         private void LateUpdate()
         {
             Player player = Player.m_localPlayer;
+            Events.TrackEnding(player); // why the tests below end the tracking, if they do
             if (IsTracking && player == null)
                 Stop(); // logged out; nobody to tell
 
@@ -149,6 +187,7 @@ namespace MobTracker
             {
                 if (MessageHud.instance != null)
                     MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, "Reached " + _targetName);
+                Events.TrackReached();
                 Stop();
             }
 
@@ -186,6 +225,7 @@ namespace MobTracker
             {
                 _nextPath = Time.time + PathInterval;
                 UpdatePath(from, to);
+                LogPath();
             }
 
             _line.enabled = wantPath && _points.Count >= 2;
@@ -221,6 +261,7 @@ namespace MobTracker
             {
                 _points.Clear();
                 _pathComplete = false;
+                _pathState = EventLines.PathNoPathfinding;
                 return;
             }
 
@@ -259,18 +300,29 @@ namespace MobTracker
             var filter = new NavMeshQueryFilter { agentTypeID = settings.m_build.agentTypeID, areaMask = settings.m_areaMask };
             Vector3 start = from, end = to;
             if (!pathfinding.SnapToNavMesh(ref start, true, settings) || !pathfinding.SnapToNavMesh(ref end, true, settings))
+            {
+                _pathState = EventLines.PathNoGround;
                 return;
+            }
 
             if (_navPath == null)
                 _navPath = new NavMeshPath();
             if (!NavMesh.CalculatePath(start, end, filter, _navPath) || _navPath.status == NavMeshPathStatus.PathInvalid)
+            {
+                _pathState = EventLines.PathNotFound;
                 return;
+            }
 
             Vector3[] corners = _navPath.corners;
             if (corners.Length < 2)
+            {
+                _pathState = EventLines.PathTooShort;
                 return;
+            }
 
             _pathComplete = Utils.DistanceXZ(corners[corners.Length - 1], to) < ArrivedDistance;
+            _pathShortBy = Utils.DistanceXZ(corners[corners.Length - 1], to);
+            _pathState = _pathComplete ? EventLines.PathComplete : EventLines.PathPartial;
 
             for (int i = 0; i < corners.Length - 1 && _points.Count < MaxPathPoints; i++)
             {
@@ -284,6 +336,16 @@ namespace MobTracker
 
             _line.positionCount = _points.Count;
             _line.SetPositions(_points.ToArray());
+        }
+
+        /// <summary>The ground path's state, when it differs from the one last written for this tracking (verbose only).</summary>
+        private void LogPath()
+        {
+            if (!ModLog.Verbose || (_pathState == _loggedPathState && Generation == _loggedGeneration))
+                return;
+            _loggedPathState = _pathState;
+            _loggedGeneration = Generation;
+            Events.GroundPath(_pathState, _points.Count, _pathShortBy);
         }
 
         /// <summary>

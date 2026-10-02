@@ -13,7 +13,7 @@ namespace MobTracker
         public const string PluginId = "com.mobtracker.plugin";
 
         /// <summary>Also MobTracker.csproj's Version; tools/preflight.ps1 checks that the two agree.</summary>
-        public const string Version = "0.6.0";
+        public const string Version = "0.7.0";
 
         internal static ManualLogSource Log;
 
@@ -22,7 +22,9 @@ namespace MobTracker
         private void Awake()
         {
             Log = Logger;
+            LogFile.Start(Config, Paths.BepInExRootPath, Paths.GameRootPath); // first: ModConfig.Bind's own warnings go to MobTracker.log too
             ModConfig.Bind(Config);
+            LogFile.Bound(Config);
             Ding.Init(gameObject);
 
             gameObject.AddComponent<EntityListWindow>();
@@ -31,6 +33,7 @@ namespace MobTracker
             gameObject.AddComponent<NearestWatched>();
             gameObject.AddComponent<SpawnFinder>();
             gameObject.AddComponent<GameSession>();
+            gameObject.AddComponent<LogObserver>();
 
             // One class at a time: PatchAll stops at the first target a game update renamed, which would also take
             // down the patches that still fit. tools/preflight.ps1 checks that every patch class is listed here.
@@ -56,7 +59,7 @@ namespace MobTracker
             }
             catch (System.Exception e)
             {
-                Log.LogError("TomTom and Wayfinder compatibility could not be set up: " + e.Message);
+                Log.LogError("TomTom and Wayfinder compatibility could not be set up: " + LogRules.Describe(e));
             }
         }
 
@@ -65,16 +68,18 @@ namespace MobTracker
             try
             {
                 _harmony.PatchAll(patchClass);
+                Events.Patched(patchClass.Name);
             }
             catch (System.Exception e)
             {
-                Log.LogError(patchClass.Name + " could not be applied, so that part of MobTracker is off: " + e.Message);
+                Log.LogError(patchClass.Name + " could not be applied, so that part of MobTracker is off: " + LogRules.Describe(e));
             }
         }
 
         private void OnDestroy()
         {
             _harmony?.UnpatchSelf();
+            LogFile.Stop();
         }
     }
 
