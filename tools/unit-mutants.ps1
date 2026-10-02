@@ -110,7 +110,55 @@ $mutants = @(
     @("U56 GuideHidden always false - the guide never hides", "Rules.cs", "return hudHidden || inCutscene || dead || waitingForRespawn || teleporting;", "return false;"),
     @("U57 GuideHidden hides when NOT teleporting", "Rules.cs", "return hudHidden || inCutscene || dead || waitingForRespawn || teleporting;", "return hudHidden || inCutscene || dead || waitingForRespawn || !teleporting;"),
     @("U58 GuideHidden reads dead for the respawn frame", "Rules.cs", "return hudHidden || inCutscene || dead || waitingForRespawn || teleporting;", "return hudHidden || inCutscene || dead || dead || teleporting;"),
-    @("U45 the barber stops the list closing", "Rules.cs", "return !(keyTypesText && (searchFocused || gameTyping));", "return !barber && !(keyTypesText && (searchFocused || gameTyping));")
+    @("U45 the barber stops the list closing", "Rules.cs", "return !(keyTypesText && (searchFocused || gameTyping));", "return !barber && !(keyTypesText && (searchFocused || gameTyping));"),
+    # Always track nearest watched since 0.6.0: the nearest creature of any watched type.
+    @("U59 the re-track's candidate ignores the watchlist - an unwatched Troll is taken", "Rules.cs", "return watched && networked", "return networked"),
+    @("U60 the re-track takes only unwatched types", "Rules.cs", "return watched && networked", "return !watched && networked"),
+    @("U61 emptying the watchlist never ends the wait", "Rules.cs", "|| !enabled || watchedTypes <= 0;", "|| !enabled;"),
+    @("U62 the wait ends while one type is still watched", "Rules.cs", "watchedTypes <= 0;", "watchedTypes <= 1;"),
+    @("U63 the log line's metres unrounded", "Rules.cs", "(int)Math.Round(distance)", "distance"),
+    @("U64 the log line drops the name", "Rules.cs", """ + displayName + """, """ + """),
+    # The Retrack decisions shipped since 0.3.0, proved by planted defects since 0.6.0.
+    @("U65 a loss of an unwatched type starts a wait", "Rules.cs", "if (!enabled || !watched || tamed ||", "if (!enabled || tamed ||"),
+    @("U66 no 5 s delay before the first look", "Rules.cs", "_nextLook = now + Delay;", "_nextLook = now;"),
+    @("U67 it looks on every frame", "Rules.cs", "_nextLook = now + LookInterval;", "_nextLook = now;"),
+    @("U68 the re-track takes tamed creatures", "Rules.cs", "&& !tamed && starsAccepted", "&& starsAccepted"),
+    @("U69 the re-track crosses a dungeon entrance", "Rules.cs", "&& withinRadius && sameLayer;", "&& withinRadius;"),
+    @("U70 a death does not end the wait", "Rules.cs", "return playerDead || tracking ||", "return tracking ||"),
+    @("U71 the re-track ignores the Alerts stars", "Rules.cs", "&& !tamed && starsAccepted && withinRadius", "&& !tamed && withinRadius"),
+    @("U72 the re-track ignores AlertRadius", "Rules.cs", "&& starsAccepted && withinRadius && sameLayer", "&& starsAccepted && sameLayer"),
+    @("U73 a loss of a tamed creature starts a wait", "Rules.cs", "if (!enabled || !watched || tamed ||", "if (!enabled || !watched ||"),
+    @("U74 Cancel leaves the wait on", "Rules.cs", "        public void Cancel()`n        {`n            Prefab = null;", "        public void Cancel()`n        {`n"),
+    # The log lines (0.6.0).
+    @("U75 the loss line never says a wait started", "Rules.cs", "if (IsPending)`n", "if (!IsPending)`n"),
+    @("U76 the loss line written with the option off", "Rules.cs", "if (!enabled)`n                return null;", "if (enabled)`n                return null;"),
+    @("U77 a tamed loss logged as one of an unwatched type", "Rules.cs", "if (tamed)`n", "if (false)`n"),
+    @("U78 the loss time never recorded", "Rules.cs", "_lostAt = now;", "_lostAt = 0f;"),
+    @("U79 the seconds counted from the start of the game", "Rules.cs", "(int)Math.Round(now - _lostAt)", "(int)Math.Round(now)"),
+    @("U80 an emptied watchlist read as a death", "Rules.cs", "string.IsNullOrEmpty(watching)", "watching == null"),
+    @("U81 the end reason never names the tracking", "Rules.cs", "if (tracking)`n", "if (false)`n"),
+    @("U82 the end reason never names the option", "Rules.cs", "if (!enabled)`n                return ""the option", "if (false)`n                return ""the option"),
+    @("U83 the took line drops the lost type", "Rules.cs", """ s after losing "" + Prefab", """ s after losing """),
+    @("U84 the end reason names the option before the tracking", "Rules.cs", "if (tracking)`n                return ""something else is tracked"";`n            if (!enabled)`n                return ""the option was turned off"";", "if (!enabled)`n                return ""the option was turned off"";`n            if (tracking)`n                return ""something else is tracked"";"),
+    @("U85 the end reason names an empty watchlist first", "Rules.cs", "if (tracking)`n                return ""something else is tracked"";`n            if (!enabled)`n                return ""the option was turned off"";`n            if (string.IsNullOrEmpty(watching))`n                return ""nothing is watched"";", "if (string.IsNullOrEmpty(watching))`n                return ""nothing is watched"";`n            if (tracking)`n                return ""something else is tracked"";`n            if (!enabled)`n                return ""the option was turned off"";"),
+    # Since 0.6.0, more of Retrack's decisions and lines.
+    @("U86 the took line's metres truncated", "Rules.cs", "(int)Math.Round(distance)", "(int)distance"),
+    @("U87 the candidate's first && became || - a watched creature passes whatever else holds", "Rules.cs", "return watched && networked && !tamed", "return watched || networked && !tamed"),
+    @("U88 EndsWait: watchedTypes < 0 - emptying the watchlist never ends the wait", "Rules.cs", "watchedTypes <= 0;", "watchedTypes < 0;"),
+    @("U89 the loss line's (empty) dropped", "Rules.cs", "(watching.Length > 0 ? watching : ""empty"")", "watching"),
+    @("U90 the loss time taken as the first look's", "Rules.cs", "_lostAt = now;", "_lostAt = _nextLook;"),
+    @("U91 Cancel forgets the loss time - an end line counts from 0", "Rules.cs", "        public void Cancel()`n        {`n            Prefab = null;`n", "        public void Cancel()`n        {`n            Prefab = null;`n            _lostAt = 0f;`n"),
+    @("U92 a loss with no type (a spawn area) starts a wait", "Rules.cs", " || string.IsNullOrEmpty(prefab))", ")"),
+    @("U93 the first look a frame late (now <= _nextLook)", "Rules.cs", "now < _nextLook)", "now <= _nextLook)"),
+    @("U94 the loss line's waiting read from the inputs, not the outcome", "Rules.cs", "if (IsPending)`n                return LogPrefix + ""waiting", "if (enabled && !tamed)`n                return LogPrefix + ""waiting"),
+    @("U95 EndsWait ignores tracking", "Rules.cs", "return playerDead || tracking || !enabled", "return playerDead || !enabled"),
+    @("U96 EndsWait ignores the option", "Rules.cs", "|| tracking || !enabled ||", "|| tracking ||"),
+    @("U97 the candidate ignores the network test - a creature the game is removing is taken", "Rules.cs", "return watched && networked && !tamed", "return watched && !tamed"),
+    @("U98 the loss line drops the watchlist", "Rules.cs", " + ""; watching "" + watching;", ";"),
+    # Since 0.6.0: the log lines' rounding, and their seconds counted from the loss.
+    @("U99 the log lines' seconds truncated, not rounded", "Rules.cs", "(int)Math.Round(now - _lostAt)", "(int)(now - _lostAt)"),
+    @("U100 the took line's metres rounded up", "Rules.cs", "(int)Math.Round(distance)", "(int)Math.Ceiling(distance)"),
+    @("U101 the seconds counted from the next look less the delay - wrong after the first look", "Rules.cs", "(int)Math.Round(now - _lostAt)", "(int)Math.Round(now - _nextLook + Delay)")
 )
 $ids = @($mutants | ForEach-Object { ($_[0] -split " ")[0] })
 $unknown = @($Only | Where-Object { $ids -notcontains $_ })

@@ -93,7 +93,7 @@ namespace MobTracker
                 catch (System.Exception e)
                 {
                     // e.ToString(), not "+ e": that compiles to a null test, a branch that tools\preflight.ps1's argument
-                    // tracing cannot follow, and the IsPendingFor and Track calls below are traced.
+                    // tracing cannot follow, and the Track call below is traced.
                     if (!_failureLogged)
                     {
                         _failureLogged = true;
@@ -119,11 +119,12 @@ namespace MobTracker
             // guide does give way - the creature turning up is what it was for. Not across a dungeon entrance: the
             // alert above still shows, but the arrow would point some 5 km up or down. (Whenever any alert of this poll
             // is on the player's side, the nearest is: the other side is thousands of metres away, loaded creatures a
-            // few hundred.) Nor while "always track nearest watched" waits for this type: it takes the nearest one at
-            // its next look (5 s after the loss, then once a second).
+            // few hundred.) Nor while "always track nearest watched" waits after a loss: every watched creature it
+            // could take, alerting or not, is its to choose from, and it takes the nearest at its next look (5 s after
+            // the loss, then once a second); taking the alerting one here could pass over a nearer one.
             if (ModConfig.AutoTrack.Value && !Tracker.IsTrackingCreature
                 && Rules.SameLayer(nearest.InInterior(), Character.InInterior(from))
-                && !NearestWatched.IsPendingFor(Creature.PrefabName(nearest)))
+                && !NearestWatched.IsPending)
                 Tracker.Track(nearest);
         }
     }

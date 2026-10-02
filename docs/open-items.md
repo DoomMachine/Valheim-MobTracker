@@ -4,7 +4,7 @@ The one list of what is untested, unverified, open or only an idea for MobTracke
 again. It lives with the code, so each release can check it. What a player meets is in the README's "Known limits";
 what each release changed is in its "History".
 
-As of **0.5.1**.
+As of **0.6.0**.
 
 ## Keeping it up to date
 
@@ -24,13 +24,15 @@ work.
 
 ## Not yet tried in play
 
-0.5.1 has not been played yet. 0.5.0 ran through a long play session, with several logouts, without errors: at its
+0.6.0 has not been played yet. 0.5.1 ran through a long play session without errors, in which Always track nearest
+watched was seen acting (LT-4); none of LT-15's checks was confirmed in it. 0.5.0 ran through a long play session, with several logouts, without errors: at its
 first world entry it set back the **Alerts:** filter 0.4.1 had saved (LT-14), but nothing was watched in it, so a reset
 at a logout was not seen. 0.4.1 - and with it the changes of 0.4.0 and 0.3.1 - ran through a long play session
 without errors, in which a watch alert came, the `AlertStarFilter` held several categories at once, types were watched
 and unwatched and the guide mode was switched; none of the checks below was run in it as written. 0.3.0 and 0.2.0 each
-ran through play sessions without errors, but Always track nearest watched (0.3.0) has not been seen acting, and
-0.2.0's new features have not been confirmed in the game (LT-2, LT-4 to LT-6).
+ran through play sessions without errors; Always track nearest watched (0.3.0) was first reported acting in 0.5.1's
+session, not yet checked for taking the nearest, and 0.2.0's new features have not been confirmed in the game (LT-2,
+LT-4 to LT-6).
 
 Single player is enough except for LT-7 and LT-11's second check (a dedicated server). Where creatures of a given star
 level are needed, the console's `spawn` command (with `devcommands` on) makes them: level 1 is no star, 2 one star, 3
@@ -70,6 +72,32 @@ two stars. Afterwards, `BepInEx/LogOutput.log` should have no exception naming M
   ends (OI-4).
 - [ ] With the game closed, set `ArrowSize = 0` and `ArrowHeight = 9` in the cfg: at the next start the arrow is 0.1 m
   long and 5 m up, and the cfg says `0.1` and `5`.
+
+### LT-16 0.6.0: the nearest creature of any watched type
+
+`spawn` (with `devcommands` on) makes the creatures. Copy `BepInEx/LogOutput.log` before the game starts again (each
+start rewrites it), and read its `Always track nearest watched:` lines.
+
+- [ ] The log says `MobTracker 0.6.0 loaded`.
+- [ ] Watch `Deer` and `Boar`, tick **Always track nearest watched**, and track a Deer that has a Boar nearer than any
+  other Deer; kill it. "Lost track of" shows, and about 5 seconds later the arrow and the "Tracking:" label are on that
+  Boar. The log has `waiting - lost Deer; watching Boar,Deer`, then `took Boar at <m> m, 5 s after losing Deer`, its
+  metres about the label's. The same with the two kinds swapped.
+- [ ] With a Deer nearer than any Boar, the same takes that Deer.
+- [ ] With no watched creature around after the loss, it takes the first one that turns up, and the `took` line's
+  seconds say how long that took.
+- [ ] With Auto-track on, a watch alert during the 5 seconds shows and dings but does not take the arrow; then the arrow
+  goes to the nearest watched creature, which the `took` line names.
+- [ ] Unwatch Deer during the wait with Boar still watched: it still takes a Boar. Unwatch both: nothing is taken, and
+  the log says `wait ended after <s> s, nothing taken - nothing is watched`.
+- [ ] Click **Stop tracking** during the wait: nothing is taken, and the log says `... nothing taken - Stop tracking`.
+- [ ] With only `Boar` watched, track a wild `Neck` by hand and kill it: no wait, and the log says `no wait - lost Neck,
+  not on the watchlist (Boar)`.
+- [ ] Lose a tamed creature of a watched type (kill it, or walk out of its range): no wait, and the log says `no wait -
+  lost tamed <type>`.
+- [ ] With the option off, a tracked creature's loss writes no `Always track nearest watched:` line.
+- [ ] In the whole log, each `waiting` line is followed by one `took` or `wait ended` line before the next `waiting`
+  line (the last one may stand alone if the game was closed during a wait), and no exception names MobTracker.
 
 ### LT-1 0.4.1's fixes
 
@@ -148,11 +176,11 @@ Run on the current version.
 
 ### LT-4 Always track nearest watched acting
 
-It has run in play sessions without errors, but has never been seen acting.
-
-- [ ] Watch a type, tick **Always track nearest watched**, track one of that type and kill it: "Lost track of" shows,
-  and about 5 seconds later the arrow points at the nearest one of that type that the **Alerts:** stars let through.
-- [ ] With none of that type around, it takes the first one that turns up.
+Seen acting in 0.5.1's play session, by a player's report: after a tracked creature died it pointed at another
+of the same type - the rule before 0.6.0, which looked only for the lost creature's type, so a nearer creature of
+another watched type could not be taken. Nothing was logged then: before 0.6.0 MobTracker wrote nothing about which
+creature it tracked. Whether it takes the nearest has not been checked; under 0.6.0's rule that is LT-16, and this
+item closes with it.
 
 ### LT-5 Find area completing a search
 
@@ -264,10 +292,11 @@ no player, and say so.
 `tools/preflight.ps1` checks a build's IL against what the code must do, and `tools/mutants.ps1` plants defects to
 prove that each check fails when it should. These are the known gaps.
 
-### SC-3 Two re-track variants the checks do not model
+### SC-3 A re-track variant the checks do not model
 
-A `NearestWatched.Update` that, with no player, returns early after cancelling something else; and ways of picking a
-creature other than the nearest that keep the instruction shape the checks look for.
+A `NearestWatched.Update` that, with no player, returns early after cancelling something else. (Ways of picking a
+creature other than the nearest that keep the shapes the checks look for - leaving the creature loop early, or
+skipping creatures once one is kept - are checked since 0.6.0.)
 
 ### SC-4 What a new check needs
 
@@ -299,7 +328,7 @@ states one, the item says so.
 | FW-3 | `GuideMode = GroundPath` holds the navigation tiles | See FW-3. |
 | FW-1, FW-2 | The window's place not kept; GUI scale | See FW-1 and FW-2. |
 | KL-11 | Find area's limits | Sub-biomes and the game's corner biome test: see FW-5 and FW-6. The rest is how Find area works: it tells the land from the world seed, not from the loaded ground, and the terrain it cannot check (slope, lava, player bases, water depth) is known only where the land is loaded. |
-| KL-12 | Always track nearest watched: its rules | Chosen when it was made (0.3.0), and each could change if players ask; the dungeon side (0.3.1) and the settled **Alerts:** stars (0.4.1) are fixes. Taking a creature that alerted during the wait and then left the `AlertRadius` would need the wait to remember that creature. |
+| KL-12 | Always track nearest watched: its rules | Chosen when it was made (0.3.0), and each could change if players ask; the dungeon side (0.3.1) and the settled **Alerts:** stars (0.4.1) are fixes. Since 0.6.0 it takes the nearest creature of any watched type, not only of the lost one's (asked for after play); every watch alert during its wait leaves the choice to it, and unwatching the lost type no longer ends the wait (unwatching every type does). A setting for the lost type only would be a new feature; watching only that type does much the same for the re-track, at the cost of the other types' alerts. Taking a creature that alerted during the wait and then left the `AlertRadius` would need the wait to remember that creature. |
 | KL-24 | Tracking usually ends at a death | The game removes the body about 10 seconds after a death, and with it the local player the tracker follows (a respawn at once may carry it on: LT-9); OI-4 asks whether tracking should carry on after the respawn. |
 
 ### KL-13 Touch screens
@@ -338,9 +367,13 @@ the list. A key-combination setting is possible future work.
 
 Alerts come from a once-a-second check: one centre message, naming the nearest new creature with "(+N more)" for the
 others found in the same check, and one ding. Auto-track takes only that nearest one. A watched creature that alerts
-while you are tracking a creature, or in the same check as a nearer one, has had its alert: Auto-track does not take it
-later, nor when you turn Auto-track on afterwards (Always track nearest watched can, after a loss). The ding and
-Auto-track also act while the HUD is hidden, when the message is not shown; skipping them then would be a behaviour
+while you are tracking a creature, while Always track nearest watched waits, or in the same check as a nearer one, has
+had its alert: Auto-track does not take it later, nor when you turn Auto-track on afterwards (Always track nearest
+watched can, at a look after a loss), until it alerts again - and every watched creature can alert again once a
+once-a-second alert check finds no local player: after a death (the body is removed about 10 seconds after it, and a bed
+respawn takes at least 8 seconds more) and when you leave the world. So if Stop tracking or turning the option off ends
+such a wait without a take, a creature that alerted during it is not auto-tracked later unless it alerts again. The ding
+and Auto-track also act while the HUD is hidden, when the message is not shown; skipping them then would be a behaviour
 change, not taken so far.
 
 ### KL-19 Watchlist and AlertRadius matching
@@ -351,7 +384,8 @@ The watchlist matches prefab names exactly, in any case: `Greydwarf` does not co
 ### KL-20 Always track nearest watched after a creature tracked by hand
 
 A wait starts even when the lost creature, tracked by hand, was outside the **Alerts:** stars; it then takes only
-creatures inside them. Whether it should start at all then is an open design question.
+creatures inside them. Whether it should start at all then is an open design question. A creature of a type you do not
+watch, tracked by hand, starts no wait, even with other types watched; the log's `no wait` line says so.
 
 ### KL-21 List details
 
@@ -379,6 +413,14 @@ the game without going back to the main menu, so `com.mobtracker.plugin.cfg` kee
 filters through the next start and the main menu, where nothing is listed, alerted or tracked, until you enter a world.
 The README says so in the `KeepBetweenSessions` row of its settings table, not under Known limits. What would change
 it: setting them back when the game quits as well. LT-14 checks it in the game.
+
+### KL-25 The log's reason for a wait that took nothing
+
+The `wait ended ... nothing taken - <reason>` line names the first that holds, when the wait ends, of: something else
+is tracked, the option is off, nothing is watched; otherwise it says the player died or left the world. At a logout
+with `KeepBetweenSessions` off and something watched, the session reset that empties the watchlist may run first in
+that frame (Unity does not order the two components), and the line then says `nothing is watched`. Inferred from the
+code; not seen in play.
 
 ## Watching the game
 
@@ -496,9 +538,17 @@ tracker, the window, the alerts) is internal, and it raises no events.
 - **Find area's pins are yours alone:** they are added with the game's save flag off and no owner, so they are never
   saved with your map or shared through a Cartography Table.
 - **Open items live in this file** rather than a GitHub wiki, so they are versioned with the code.
+- **Always track nearest watched takes the nearest creature of any watched type** (0.6.0), and every watch alert during
+  its wait leaves the choice to it; to hunt one kind only, watch only that kind. It chooses only after a loss: it does
+  not move on to a nearer creature while the one it took is tracked.
 
 ## Done
 
+- 0.6.0, asked for during 0.5.1's play session: Always track nearest watched takes the nearest creature of any
+  watched type, not only of the lost one's; during its wait every watch alert leaves the choice to it, also with Auto-track on; unwatching the lost type
+  no longer ends the wait (unwatching every type does); with the option on, each loss of a tracked creature, and what
+  each wait took or why it ended, is written to the log. SC-3 in part: preflight checks that the re-track's creature
+  loop runs to its end and keeps only the nearest, and every call NearestWatched.Update makes.
 - 0.5.1: OI-1 - the tracking arrow, the ground-path line and the "Tracking:" label hide while the HUD is hidden, in a
   cutscene (sleep included), while the player is dead, in the frame the body is removed for the respawn, and during a
   teleport; `ArrowSize` (0.1 to 3) and `ArrowHeight` (0 to 5) have allowed ranges. Its earlier wording - the arrow

@@ -14,7 +14,9 @@ namespace MobTracker
     ///
     /// Whatever order Unity runs this and the other components in, none of them acts on the state being reset: the
     /// local player is destroyed before the Game at a logout, and is spawned frames after a new Game's Awake, and
-    /// every component that uses the watchlist or a star filter waits for a player.
+    /// every component that uses the watchlist or a star filter waits for a player - except NearestWatched's line for
+    /// the end of a wait, which reads the watchlist once the player is gone, so at a logout its reason may say
+    /// "nothing is watched" (docs/open-items.md, KL-25).
     /// </summary>
     internal class GameSession : MonoBehaviour
     {

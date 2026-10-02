@@ -75,19 +75,25 @@ https://github.com/DoomMachine/Valheim-MobTracker
   enter a world or go back to the main menu, so logging out and in again, or restarting the game, starts
   afresh, whichever character you play; dying does not. Turn on `KeepBetweenSessions` to keep them from one
   session to the next.
-- **Always track nearest watched** (a checkbox in the window, off by default) is for hunting one kind of
-  creature for its drops. When the creature you are tracking is of a watched type and is lost - killed, or no
-  longer loaded on your client (out of range, despawned) - the tracker says "Lost track of" as always, waits 5
-  seconds, then points at the nearest creature of that type that passes the watch alert's filters: the
-  **Alerts:** stars, `AlertRadius`, never a tamed one, and only on your side of a dungeon entrance. If there
-  is none yet, it keeps looking once a second,
-  without a message, and points at the nearest one as soon as one turns up. A watch alert that names that type
-  during the wait still shows and dings, but leaves the choice to the wait; with an `AlertRadius` set, a creature
-  that alerted and has walked out of the radius by then is taken only once it is back inside. The wait ends when
-  you track something else (by hand, Find area, or Auto-track on an alert for another watched type), turn the
-  option off, unwatch the type or die. **Stop tracking** stays in the window (F7) while it waits, and calls it
-  off; nothing else shows that it is waiting. Losing a tamed creature, or stopping the tracking yourself, never
-  starts one.
+- **Always track nearest watched** (a checkbox in the window, off by default) keeps you on the creatures you watch, for
+  their drops. When the creature you are tracking is of a watched type and is lost - killed, or no longer loaded on your
+  client (out of range, despawned) - the tracker says "Lost track of" as always, waits 5 seconds, then points at the
+  nearest creature of any watched type that passes the watch alert's filters: the **Alerts:** stars, `AlertRadius`,
+  never a tamed one, and only on your side of a dungeon entrance. Watching Deer and Boar, it takes whichever Deer or
+  Boar is nearest, whatever kind you lost, and the "Tracking:" label names it. A creature you watch only to be warned of
+  it can be taken too, so to hunt one kind only, watch only that kind. If there is none yet, it keeps looking once a
+  second, without a message, and points at the nearest one as soon as one turns up. It chooses only after a loss: it
+  does not move on to a nearer watched creature that turns up later, and when the one it took is lost too, it waits and
+  chooses again. A watch alert during the wait still shows and dings, but leaves the choice to the wait, also with
+  Auto-track on; with an `AlertRadius` set, a creature that alerted and has walked out of the radius by then is taken
+  only once it is back inside, and a creature that alerted during a wait that Stop tracking or turning the option off
+  ends without a take is not auto-tracked later, unless it alerts again after a death or after leaving the world. A type
+  you watch or unwatch during the wait counts from its next look. The wait ends when you track something else (by hand
+  or Find area), turn the option off, unwatch every type, die or leave the world. **Stop tracking** stays in the window
+  (F7) while it waits, and calls it off; nothing else on screen shows that it is waiting. Losing a tamed creature or one
+  of a type you do not watch, or stopping the tracking yourself, never starts one. With the option on,
+  `BepInEx/LogOutput.log` gets a line at each loss of a tracked creature - whether it waits and, if not, why - and one
+  when a wait ends: what it took, or, as far as it can tell, why it took nothing.
 
 ## Installing
 
@@ -111,9 +117,9 @@ with their defaults. When the game starts, `BepInEx/LogOutput.log` says
 | `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Emptied at every session unless `KeepBetweenSessions` is on. With it on, edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows, Guide, the two tracking checkboxes) rewrites the file |
 | `Alerts.AlertRadius` | `0` | Only alert (or re-track, below) within this many metres; 0 = anywhere loaded |
 | `Alerts.AlertVolume` | `0.8` | Ding volume; the game's Volume and Effect volume settings apply on top of it |
-| `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor the choice Always track nearest watched is waiting to make for that type, nor takes a creature on the other side of a dungeon entrance |
+| `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor takes a creature on the other side of a dungeon entrance, nor acts while Always track nearest watched waits after a loss - that wait chooses instead |
 | `Alerts.AlertStarFilter` | `All` | The alerts' star filter (also the **Alerts:** row), written the same way: e.g. `OneStar, TwoStars` alerts only for one- and two-star creatures. A text setting since 0.4.0, like `ListStarFilter`, except that a change in the window or in ConfigurationManager takes effect only once the filter has stayed the same for 1.5 seconds (see Known limits). Back to `All` at every session unless `KeepBetweenSessions` is on; with it on, edit the file by hand with the game closed, as for `Watchlist` |
-| `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature of a watched type, not a tamed one, is lost, track the nearest one of that type that passes the watch alert's filters and is on your side of a dungeon entrance: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window) |
+| `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature of a watched type, not a tamed one, is lost, track the nearest creature of any watched type that passes the watch alert's filters and is on your side of a dungeon entrance: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window). With it on, the log says what each loss and each wait did |
 
 ## Known limits
 
@@ -193,6 +199,14 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **0.6.0** - Always track nearest watched takes the nearest creature of any watched type, not only of the type that
+  was lost: watching Deer and Boar, after a tracked Deer is lost it points at whichever Deer or Boar is nearest (asked
+  for during a 0.5.1 play session). While it waits, a watch alert still shows and dings but leaves the choice to it,
+  also with Auto-track on - before, an alert for another watched type was auto-tracked at once and ended the wait -
+  and unwatching the type you lost no longer ends the wait; unwatching every type does. To hunt one kind only, watch
+  only that kind. With the option on, `BepInEx/LogOutput.log` says what each loss of a tracked creature and each wait
+  did. The safety checks catch more planted defects, among them a re-track that keeps the first creature it finds
+  rather than the nearest. Not yet played in the game.
 - **0.5.1** - fixes. The tracking arrow, the ground-path line and the "Tracking:" label hide while you hide the HUD
   (Ctrl+F3), during a cutscene, while you are dead and during a teleport; before, the arrow and the line stayed up
   through all of these, and the label through all but the hidden HUD. `ArrowSize` (0.1 to 3) and `ArrowHeight` (0 to
@@ -200,7 +214,8 @@ The copyright holder is DoomMachine (see `LICENSE`).
   when the list closes is dropped; before, a Find area click could run the next time the list opened, even in
   another world. The safety checks catch more planted defects; `tools/mutants.ps1` and `tools/deploy.ps1` run
   preflight in the same PowerShell process, without starting a second one, and a build started from PowerShell 7 no
-  longer fails. Not yet played in the game.
+  longer fails. Ran through a long play session without errors, in which Always track nearest watched was seen
+  acting; whether its fixes work was not checked there.
 - **0.5.0** - the watched types and both star rows last one game session: whenever you enter a world or go
   back to the main menu, nothing is watched and both rows are at *All* again, so logging out and in, or
   restarting the game, starts afresh (dying does not). The new `KeepBetweenSessions` setting, off by default,
@@ -235,7 +250,7 @@ The copyright holder is DoomMachine (see `LICENSE`).
   changes ran in 0.4.1's play session; none was checked there.
 - **0.3.0** - Always track nearest watched (an option, off by default): when a tracked creature of a watched
   type is lost, the tracker moves on to the nearest one of that type. Ran through play sessions without errors;
-  the new option has not yet been seen acting in the game.
+  the option was first reported acting, in a 0.5.1 play session.
 - **0.2.0** - star filters for the list and for watch alerts. Find area follows boss progression and
   events, names the rule that placed the nearest pin, and its pins can be cleared; a right click on one
   used to delete the nearest pin of yours instead. Ran through two play sessions without errors; its new features

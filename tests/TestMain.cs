@@ -21,6 +21,8 @@ namespace MobTracker
             AlertGateTests();
             AlertStarFilterTests();
             RetrackTests();
+            RetrackLayoutTests();
+            RetrackLogTests();
             RefreshTests();
             GuideTests();
             PointerTests();
@@ -668,9 +670,7 @@ namespace MobTracker
             Check("retrack: losing a tamed Wolf starts no hunt for a wild one", !r.IsPending && !r.ShouldLook(200f), "");
 
             r.Lost("Troll", true, true, false, 100f);
-            Check("retrack: a lost watched Troll is pending, for Trolls", r.IsPending && r.Prefab == "Troll", r.Prefab ?? "null");
-            Check("retrack: a Troll's watch alert waits for it; a Serpent's, a lower-case troll's or no type's does not",
-                r.IsPendingFor("Troll") && !r.IsPendingFor("Serpent") && !r.IsPendingFor("troll") && !r.IsPendingFor(null), "");
+            Check("retrack: a lost watched Troll starts a wait", r.IsPending && r.Prefab == "Troll", r.Prefab ?? "null");
             Check("retrack: nothing is looked for during the first 5 seconds", !r.ShouldLook(100f) && !r.ShouldLook(104.99f), "");
             Check("retrack: at 5 seconds it is time to look", r.ShouldLook(105f), "");
             Check("retrack: then once a second, not every frame", !r.ShouldLook(105.5f) && !r.ShouldLook(105.99f) && r.ShouldLook(106f), "");
@@ -684,19 +684,20 @@ namespace MobTracker
             r.Lost("Serpent", true, true, false, 300f);
             r.Cancel();
             Check("retrack: Cancel ends the wait (Stop tracking, tracking something else, leaving the world)",
-                !r.IsPending && !r.ShouldLook(400f) && !r.IsPendingFor("Serpent"), "");
+                !r.IsPending && !r.ShouldLook(400f), "");
 
-            // EndsWait(playerDead, tracking, enabled, watched): alive, nothing tracked, option on, type watched = wait on.
-            Check("retrack: the wait goes on while nothing ends it", !Retrack.EndsWait(false, false, true, true), "");
-            Check("retrack: the player dying ends the wait", Retrack.EndsWait(true, false, true, true), "");
-            Check("retrack: anything being tracked ends the wait", Retrack.EndsWait(false, true, true, true), "");
-            Check("retrack: turning the option off ends the wait", Retrack.EndsWait(false, false, false, true), "");
-            Check("retrack: unwatching the type ends the wait", Retrack.EndsWait(false, false, true, false), "");
+            // EndsWait(playerDead, tracking, enabled, watchedTypes): alive, nothing tracked, option on, two types watched = wait on.
+            Check("retrack: the wait goes on while nothing ends it", !Retrack.EndsWait(false, false, true, 2), "");
+            Check("retrack: the player dying ends the wait", Retrack.EndsWait(true, false, true, 2), "");
+            Check("retrack: anything being tracked ends the wait", Retrack.EndsWait(false, true, true, 2), "");
+            Check("retrack: turning the option off ends the wait", Retrack.EndsWait(false, false, false, 2), "");
+            Check("retrack: unwatching the lost type while another stays watched does not end the wait", !Retrack.EndsWait(false, false, true, 1), "");
+            Check("retrack: unwatching every type ends the wait", Retrack.EndsWait(false, false, true, 0), "");
 
-            // IsCandidate(sameType, networked, tamed, starsAccepted, withinRadius, sameLayer).
-            Check("retrack: a wild creature of the type, on the network, accepted stars, in range, on the player's side is taken",
+            // IsCandidate(watched, networked, tamed, starsAccepted, withinRadius, sameLayer).
+            Check("retrack: a wild creature of a watched type, on the network, accepted stars, in range, on the player's side is taken",
                 Retrack.IsCandidate(true, true, false, true, true, true), "");
-            Check("retrack: another type is not", !Retrack.IsCandidate(false, true, false, true, true, true), "");
+            Check("retrack: a type not on the watchlist is not", !Retrack.IsCandidate(false, true, false, true, true, true), "");
             Check("retrack: one the game is removing this frame is not", !Retrack.IsCandidate(true, false, false, true, true, true), "");
             Check("retrack: a tamed one is not", !Retrack.IsCandidate(true, true, true, true, true, true), "");
             Check("retrack: one the Alerts star filter leaves out is not", !Retrack.IsCandidate(true, true, false, false, true, true), "");
@@ -715,6 +716,122 @@ namespace MobTracker
             Check("retrack: with the player inside, the one outside is never taken, the one inside is",
                 !Retrack.IsCandidate(true, true, false, true, true, Rules.SameLayer(false, true))
                 && Retrack.IsCandidate(true, true, false, true, true, Rules.SameLayer(true, true)), "");
+        }
+
+        // Since 0.6.0: watching Deer and Boar, a tracked Deer dies - the re-track takes the nearest creature of ANY watched
+        // type that the alerts would take, whichever kind was lost. Alerts: 'No star', AlertRadius 50 m, the player outside.
+        // NearestCandidate mirrors NearestWatched.Update's loop around Retrack.IsCandidate: these prove the rule, not that
+        // loop (preflight's IL checks and the planted defects do).
+        private static void RetrackLayoutTests()
+        {
+            // name, prefab, distance, level, tamed, networked, inside a dungeon
+            var layout = new[]
+            {
+                new object[] { "tamed Boar", "Boar", 5f, 1, true, true, false },
+                new object[] { "Boar in a dungeon", "Boar", 8f, 1, false, true, true },
+                new object[] { "Troll (not watched)", "Troll", 10f, 1, false, true, false },
+                new object[] { "Boar leaving the network", "Boar", 12f, 1, false, false, false },
+                new object[] { "one-star Deer", "Deer", 15f, 2, false, true, false },
+                new object[] { "Boar at 20 m", "Boar", 20f, 1, false, true, false },
+                new object[] { "Deer at 40 m", "Deer", 40f, 1, false, true, false },
+                new object[] { "Boar at 60 m", "Boar", 60f, 1, false, true, false },
+            };
+            string got = NearestCandidate(layout, "Deer,Boar");
+            Check("retrack layout: watching Deer and Boar, a lost Deer is followed by the Boar at 20 m, not the Deer at 40 m",
+                got == "Boar at 20 m", got ?? "none");
+
+            var deerNearer = new[]
+            {
+                new object[] { "Boar at 40 m", "Boar", 40f, 1, false, true, false },
+                new object[] { "Deer at 20 m", "Deer", 20f, 1, false, true, false },
+            };
+            got = NearestCandidate(deerNearer, "Deer,Boar");
+            Check("retrack layout: the lost kind is taken when it is the nearest", got == "Deer at 20 m", got ?? "none");
+
+            var nearTie = new[]
+            {
+                new object[] { "Deer at 21 m", "Deer", 21f, 1, false, true, false },
+                new object[] { "Boar at 20 m", "Boar", 20f, 1, false, true, false },
+            };
+            got = NearestCandidate(nearTie, "Deer,Boar");
+            Check("retrack layout: no preference for the lost kind - a Boar 1 m nearer beats a Deer listed first",
+                got == "Boar at 20 m", got ?? "none");
+        }
+
+        private static string NearestCandidate(object[][] layout, string watchlistText)
+        {
+            var watchlist = Rules.ParseWatchlist(watchlistText);
+            string nearest = null;
+            float nearestDistance = float.MaxValue;
+            foreach (object[] c in layout)
+            {
+                float distance = (float)c[2];
+                if (Retrack.IsCandidate(watchlist.Contains((string)c[1]), (bool)c[5], (bool)c[4],
+                        StarSets.Accepts(StarSet.NoStars, (int)c[3]), Rules.WithinRadius(distance, 50f), Rules.SameLayer((bool)c[6], false))
+                    && distance < nearestDistance)
+                {
+                    nearest = (string)c[0];
+                    nearestDistance = distance;
+                }
+            }
+            return nearest;
+        }
+
+        // The re-track's log lines (0.6.0): one at each loss with the option on, one at a take, one at an end without one.
+        private static void RetrackLogTests()
+        {
+            var r = new Retrack();
+            r.Lost("Deer", true, true, false, 100f);
+            string line = r.LostLine("Deer", false, true, "Boar,Deer");
+            Check("retrack log: a loss that starts a wait says so, with the watchlist",
+                line == "Always track nearest watched: waiting - lost Deer; watching Boar,Deer", line ?? "null");
+            line = r.TookLine("Boar *", 19.6f, 105.02f);
+            Check("retrack log: a take names the creature as the label does, whole metres, whole seconds and the lost type",
+                line == "Always track nearest watched: took Boar * at 20 m, 5 s after losing Deer", line);
+            // Looks pass between the loss and this take: the seconds still count from the loss.
+            r.ShouldLook(105f); r.ShouldLook(106f); r.ShouldLook(112f);
+            line = r.TookLine("Boar", 7.6f, 112.4f);
+            Check("retrack log: a take after empty looks counts the seconds from the loss",
+                line == "Always track nearest watched: took Boar at 8 m, 12 s after losing Deer", line);
+            // 19.4 m and 12.6 s: rounded to the nearest whole one, not up and not down.
+            line = r.TookLine("Boar", 19.4f, 112.6f);
+            Check("retrack log: metres and seconds are rounded to the nearest whole one",
+                line == "Always track nearest watched: took Boar at 19 m, 13 s after losing Deer", line);
+            r.Cancel();
+            line = r.EndedLine(112f, "Stop tracking");
+            Check("retrack log: an end line after Cancel still counts from the loss",
+                line == "Always track nearest watched: wait ended after 12 s, nothing taken - Stop tracking", line);
+
+            r.Lost("Wolf", true, true, true, 200f);
+            line = r.LostLine("Wolf", true, true, "Boar,Deer,Wolf");
+            Check("retrack log: losing a tamed creature starts no wait, and says so",
+                line == "Always track nearest watched: no wait - lost tamed Wolf", line ?? "null");
+            r.Lost("Boar_piggy", true, false, false, 300f);
+            line = r.LostLine("Boar_piggy", false, true, "Boar,Deer");
+            Check("retrack log: losing a type not on the watchlist starts no wait, and names the watchlist",
+                line == "Always track nearest watched: no wait - lost Boar_piggy, not on the watchlist (Boar,Deer)", line ?? "null");
+            line = r.LostLine("Boar", false, true, "");
+            Check("retrack log: with nothing watched the line says so",
+                line == "Always track nearest watched: no wait - lost Boar, not on the watchlist (empty)", line ?? "null");
+            r.Lost("Deer", false, true, false, 400f);
+            Check("retrack log: with the option off a loss writes nothing", r.LostLine("Deer", false, false, "Boar,Deer") == null, "");
+
+            // EndReason(enabled, tracking, watching): the first that holds, else a death or leaving the world.
+            Check("retrack log: a wait ended by tracking something else says so",
+                Retrack.EndReason(true, true, "Boar") == "something else is tracked", Retrack.EndReason(true, true, "Boar"));
+            Check("retrack log: a wait ended by turning the option off says so",
+                Retrack.EndReason(false, false, "Boar") == "the option was turned off", Retrack.EndReason(false, false, "Boar"));
+            Check("retrack log: a wait ended by emptying the watchlist says so",
+                Retrack.EndReason(true, false, "") == "nothing is watched", Retrack.EndReason(true, false, ""));
+            Check("retrack log: otherwise the player died or left the world",
+                Retrack.EndReason(true, false, "Boar") == "the player died or left the world", Retrack.EndReason(true, false, "Boar"));
+            // Two reasons at once: the order above decides which one the line names.
+            Check("retrack log: tracking something else is named before the option turned off",
+                Retrack.EndReason(false, true, "Boar") == "something else is tracked", Retrack.EndReason(false, true, "Boar"));
+            Check("retrack log: the option turned off is named before an empty watchlist",
+                Retrack.EndReason(false, false, "") == "the option was turned off", Retrack.EndReason(false, false, ""));
+            Check("retrack log: tracking something else is named before an empty watchlist",
+                Retrack.EndReason(true, true, "") == "something else is tracked", Retrack.EndReason(true, true, ""));
         }
 
         // The tracking guide's gate (0.5.1): hidden while any of its five reasons holds, shown only when none does.
