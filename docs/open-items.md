@@ -40,11 +40,12 @@ below was run in it as written. 0.3.0 and 0.2.0 each ran through play sessions w
 watched (0.3.0) was first reported acting in 0.5.1's session, not yet checked for taking the nearest, and 0.2.0's new
 features have not been confirmed in the game (LT-2, LT-4 to LT-6).
 
-Single player is enough except for LT-7 and LT-11's second check (a dedicated server). Where creatures of a given star
-level are needed, the console's `spawn` command (with `devcommands` on) makes them: level 1 is no star, 2 one star, 3
-two stars. Afterwards, `BepInEx/LogOutput.log` should have no exception naming MobTracker, and from 0.7.0
-`BepInEx/MobTracker.log` no `[Error  : Unity Log]` line. With `VerboseLog` on (0.7.0), most checks below can be read
-from its lines as well: what was tracked, lost and taken, each alert and what Auto-track did.
+Single player is enough except for LT-7 (another player, on a dedicated server or in a game one of you hosts), and for
+LT-11's second check and LT-21 (a dedicated server). Where creatures of a given star level are needed, the console's
+`spawn` command (with `devcommands` on) makes them: level 1 is no star, 2 one star, 3 two stars. Afterwards,
+`BepInEx/LogOutput.log` should have no exception naming MobTracker, and from 0.7.0 `BepInEx/MobTracker.log` no
+`[Error  : Unity Log]` line. With `VerboseLog` on (0.7.0), most checks below can be read from its lines as well: what
+was tracked, lost and taken, each alert and what Auto-track did.
 
 ### LT-14 0.5.0: one game session
 
@@ -340,6 +341,9 @@ The README's "roughly 130 to 290 m" comes from the game's code, not from measure
 - [ ] The same on a dedicated server. The game lets a server lower the range (you get the smaller of its value and
   yours); a dedicated server started without `-simulationdistance` uses the game's original range
   (`SimulationDistance.OriginalDistance`, level 2 in the code) - read from the code, not measured.
+- [ ] In a game you join, with the host's Draw distance at the default and yours one step up: the farthest creature the
+  list shows outside dungeons is under about 270 m. Read from the code, not measured; so is this: a host that raises its
+  Draw distance after you joined keeps capping you at its old value until you join again.
 
 ### LT-12 Layout and the window's mouse state
 
@@ -385,16 +389,44 @@ afterwards.
 ### LT-18 MobTracker.log on the game's runtime
 
 How `MobTracker.log` is taken, copied to `MobTracker-prev.log` and shared was proved by `tools/log-harness/` on .NET
-Framework on Windows, not on the game's own runtime. That an error of MobTracker's code nobody caught reaches the file
-is decompiled and unit-tested on sample text, never seen: no such error has happened in a log kept so far. Whether the
-plugin is told when the game quits - the file's closing line - is not known.
+Framework on Windows; on the game's own runtime its opening at each start, the copy to `MobTracker-prev.log` and its
+closing line at each normal quit were seen in 0.7.0's play sessions (LT-17), its sharing not yet. That an error of
+MobTracker's code nobody caught reaches the file is decompiled and unit-tested on sample text, never seen: no such error
+has happened in a log kept so far.
 
-- [ ] LT-17's first checks settle the first.
+- [ ] LT-17's Notepad check settles the sharing.
 - [ ] If an error naming MobTracker ever reaches `LogOutput.log` (only with BepInEx's `WriteUnityLog` on, which is off
   by default - with it off, `MobTracker.log` is the one BepInEx-side log that holds it) or `Player.log`,
   `MobTracker.log` has it as an `[Error  : Unity Log]` line.
-- [ ] After a normal quit, the last line of `MobTracker.log` is `MobTracker.log closed - the game is quitting`. If it
-  is not, nothing may lean on that line.
+- [x] After a normal quit, the last line of `MobTracker.log` is `MobTracker.log closed - the game is quitting`.
+
+### LT-21 On a dedicated server
+
+MobTracker goes only into each player's game. A dedicated server needs nothing and can be vanilla: the game checks no
+mods when a player joins, and MobTracker sends nothing over the network. A client of a dedicated server builds its world
+generator from the seed the server sends at the join, so Find area works there as in single player, and the server's
+range caps the client's (LT-11). All of this is read from the code: MobTracker has not been played on a dedicated
+server, which LT-11's second check needs as well; LT-7 needs another player, there or in a game one of you hosts.
+
+- [ ] Join a vanilla dedicated server (no BepInEx on it) with MobTracker installed: the join works, F7 lists
+  creatures, and the log has no exception naming MobTracker.
+- [ ] Find area there: up to five pins, the arrow at the nearest and the HUD message naming the rule, as in LT-5.
+- [ ] On a server started without `-simulationdistance`, with your Draw distance one step above the default: the
+  farthest creature the list shows outside dungeons is under about 270 m (LT-11's second check).
+- [ ] With `KeepBetweenSessions` off, a type watched and a star row set, lose the connection (stop the server, say):
+  the game goes back to the main menu, and the log has a `Game session changed and KeepBetweenSessions is off` line;
+  joined again, nothing is watched and both rows are on *All*.
+
+A copy in the server's own `BepInEx/plugins/` is not needed, and the README says to leave it out. Read from the Windows
+server's code (the Linux server's was not examined): BepInEx would load it there, since MobTracker names no process
+(OQ-14); the server never has a player of its own, so none of MobTracker's features that need a player starts; at each
+start it would write `MobTracker.log` and its cfg in the server's `BepInEx` folder, and, with TomTom or Wayfinder on the
+server, its line saying their keys work while the list is open. With a cfg copied from a player's game,
+`KeepBetweenSessions` off and a watchlist or star filter set, the server's world start would also set those back, with
+the `Game session changed` line, and save the cfg. Not known without a server start: whether the server's build of the
+game finds a shader for the arrow (if not, one `No usable shader found` error at each start), whether it can make the
+ding's sound (if not, expected: one error at the start, after which MobTracker does nothing more there), and whether
+`MobTracker.log` gets its closing line when the server is stopped with Ctrl+C.
 
 ### OI-3 Edge cases never seen
 
@@ -639,6 +671,8 @@ show which ran first.
   Log" source's `Stack trace:` text - and on its config's change events (BepInEx 5.4.23.3). A BepInEx update should be
   checked against them; `tools/preflight.ps1` checks that the members it uses still exist and that its level values
   are BepInEx's.
+- **Server mods:** a server that runs a mod checking joining players' mods may refuse a player with MobTracker; the game
+  itself does not check (LT-21), and no such mod has been tried.
 
 ## Open questions for future releases
 
@@ -727,6 +761,14 @@ cause. The other answers: verbose lines only, separate from the errors; a line p
 
 Now (0.7.1): only the logs say it; in the game the change takes effect as usual. The other answer: a message on the
 screen once per run of failed saves - a new behaviour, and one more message over the game.
+
+### OQ-14 Skipping a dedicated server
+
+Now: MobTracker names no process, so BepInEx loads it in any game process, a dedicated server's too, where it has
+nothing to do (LT-21). The other answer: `[BepInProcess("valheim.exe")]`, so that a server skips it with one BepInEx
+warning (`Skipping [...] because of process filters`). BepInEx compares the name without its extension, so a client
+whose program is named `valheim` on another system still loads it. The game's program names on Linux have not been
+checked.
 
 ## Ideas (not planned)
 

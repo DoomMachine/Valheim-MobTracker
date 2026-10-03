@@ -6,11 +6,12 @@ https://github.com/DoomMachine/Valheim-MobTracker
 
 - **F7** opens the list of every creature loaded around you - creatures further away do not exist on your
   client. How far that reaches follows the game's "Draw distance" graphics setting: roughly 130 to 290 m at
-  the default and one step up. Creatures inside a dungeon above or below you are loaded too, and show about
-  5 km away, because distances are measured in 3D. They alert like any other watched creature, but Auto-track
-  and Always track nearest watched only ever take a creature on your side of the dungeon's entrance; a row's
-  Track button still takes any. Type to search by name or prefab name. **Esc** or F7 closes it (the
-  gamepad's B too).
+  the default and one step up. In a game you join, the host's Draw distance, or a dedicated server's range, caps
+  yours: a dedicated server started without `-simulationdistance` allows no more than the default, roughly 130 to
+  270 m. Creatures inside a dungeon above or below you are loaded too, and show about 5 km away, because distances
+  are measured in 3D. They alert like any other watched creature, but Auto-track and Always track nearest watched
+  only ever take a creature on your side of the dungeon's entrance; a row's Track button still takes any. Type to
+  search by name or prefab name. **Esc** or F7 closes it (the gamepad's B too).
 - **While the list is open** your character and camera stand still: Tab does not open the inventory, the
   mouse wheel does not zoom, and the keys you type in the search do not reach a trader or the build
   controls (a few exceptions are under Known limits). A click, drag or scroll on the window never reaches
@@ -138,6 +139,14 @@ with their defaults. When the game starts, `BepInEx/LogOutput.log` says
 `MobTracker <version> - MobTracker.log opened at the game's start; ...` after its date, time, frame and
 `[File   :MobTracker]`. To remove it, delete `MobTracker.dll`, the .cfg too to forget the settings, and
 `BepInEx/MobTracker.log` and `MobTracker-prev.log` if you like.
+
+**Multiplayer and dedicated servers:** there is nothing to set up on a server. MobTracker goes only into each player's
+own game, as above. The server can be vanilla, without BepInEx: the game never checks a joining player's mods, and
+MobTracker sends nothing over the network. A copy in a dedicated server's own `BepInEx/plugins/` is not needed - a
+dedicated server has no player of its own for MobTracker to work for - so leave it out. A server's range caps how far
+the list reaches (see **F7**), and losing the connection to the server takes you back to the main menu, which sets back
+what you watch and both star rows unless `KeepBetweenSessions` is on (see **One game session**). Not yet played on a
+dedicated server.
 
 ## Configuration (`BepInEx/config/com.mobtracker.plugin.cfg`)
 
