@@ -21,7 +21,9 @@
      writes only on a click; the List: row is greyed out in the all-types view (enabled && !all-types), and the title
      names the list's categories exactly when one is marked; always-track-nearest-watched gives its tested decisions
      (Retrack)
-     the right values and branches on them the right way, and is started only from Tracker.LateUpdate; its log lines are
+     the right values and branches on them the right way, and is started only from Tracker.LateUpdate - at a loss, or
+     at the taming of a creature tracked wild (0.8.0), with the type and tameness written only where a tracking starts
+     and in that taming test; its log lines are
      built from what it decided, where the IL shapes say; neither it
      nor Auto-track takes a creature on the other side of a dungeon entrance; Find area honours the spawn rules' key
      and event conditions, takes the map's delete gesture for its own pins after other mods' prefixes, and adds them
@@ -77,7 +79,7 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Plugin = "",
-    [string]$ExpectedVersion = "0.7.1",
+    [string]$ExpectedVersion = "0.8.0",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string[]]$Waypointer = @()   # TomTom / Wayfinder DLLs to check the carve-out against; default: the installed ones
 )
@@ -261,14 +263,18 @@ function Get-Method($typeName, $methodName) {
 }
 function Get-Touches($m) {
     # Every field and method a method refers to; a field it writes is also recorded as "set <field>", so a check
-    # can tell storing the applied filter from merely reading it.
+    # can tell storing the applied filter from merely reading it. "set" also counts a field whose address is taken
+    # (ldflda, ldsflda): an out or ref argument writes through it, so a field a method must not write cannot be written
+    # past that test. "store <field>" is the store alone: what a method must write is asked as a store (Test-Wiring, the
+    # filters' handlers), since a struct field's member is read through its address too.
     $out = @{}
     foreach ($i in $m.Body.Instructions) {
         $op = $i.Operand
         if ($op -is [Mono.Cecil.FieldReference]) {
             $key = $op.DeclaringType.Name + "::" + $op.Name
             $out[$key] = $true
-            if ($i.OpCode.Name -eq "stfld" -or $i.OpCode.Name -eq "stsfld") { $out["set " + $key] = $true }
+            if ($i.OpCode.Name -eq "stfld" -or $i.OpCode.Name -eq "stsfld") { $out["set " + $key] = $true; $out["store " + $key] = $true }
+            elseif ($i.OpCode.Name -eq "ldflda" -or $i.OpCode.Name -eq "ldsflda") { $out["set " + $key] = $true }
         }
         if ($op -is [Mono.Cecil.MethodReference]) {
             $key = $op.DeclaringType.Name + "::" + $op.Name
@@ -306,7 +312,8 @@ function Test-Wiring($table) {
         $m = Get-Method $w[0] $w[1]
         if (-not $m) { Fail ("{0}.{1} not found" -f $w[0], $w[1]); continue }
         $touches = Get-Touches $m
-        $missing = @($w[2] | Where-Object { -not $touches.ContainsKey($_) })
+        # What it must write ("set <field>" in the first list) is asked as a store; what it must not, as any write.
+        $missing = @($w[2] | Where-Object { -not $touches.ContainsKey(($_ -creplace '^set ', 'store ')) })
         $wrong = @($w[3] | Where-Object { $touches.ContainsKey($_) })
         if ($missing.Count -eq 0 -and $wrong.Count -eq 0) {
             $what = if ($w[2].Count) { "uses " + ($w[2] -join ", ") } else { "does not use " + ($w[3] -join ", ") }
@@ -603,10 +610,12 @@ function Test-Calls($table) {
 }
 $brfalse = @("brfalse", "brfalse.s"); $brtrue = @("brtrue", "brtrue.s")
 Test-Calls @(
-    # A loss starts a wait only with the option on, for a watched type, not for a tamed creature, from now.
+    # A loss starts a wait only with the option on and something watched, from now, whatever the lost creature's type or
+    # tameness (0.8.0): Retrack.Lost is handed the watchlist's count - not whether it holds the lost type (0.3.0 to
+    # 0.7.1), and nothing of the tameness, which reaches only the loss line (below).
     @("MobTracker.NearestWatched", "Lost", "Retrack::Lost",
-        @("NearestWatched::Pending", "arg prefab", "ModConfig::AlwaysTrackNearest.Value", 'HashSet`1::Contains', "arg tamed", "Time::get_time"), $null),
-    @("MobTracker.NearestWatched", "Lost", 'HashSet`1::Contains', @("ModConfig::get_Watchlist", "arg prefab"), $null),
+        @("NearestWatched::Pending", "arg prefab", "ModConfig::AlwaysTrackNearest.Value", 'HashSet`1::get_Count', "Time::get_time"), $null),
+    @("MobTracker.NearestWatched", "Lost", 'HashSet`1::get_Count', @("ModConfig::get_Watchlist"), $null),
     @("MobTracker.Tracker", "LateUpdate", "NearestWatched::Lost", @("Tracker::_targetPrefab", "Tracker::_targetTamed"), $null),
     # The wait ends (a true answer skips no code: the cancel follows) on death, any tracking, the option off, an empty
     # watchlist (its count; Retrack decides that 0 ends it, as a > 0 here would be a cgt the tracing cannot follow).
@@ -665,8 +674,9 @@ Test-Calls @(
     @("MobTracker.NearestWatched", "Lost", "Rules::FormatWatchlist", @("ModConfig::get_Watchlist"), $null),
     @("MobTracker.NearestWatched", "Cancel", "Retrack::get_IsPending", @("NearestWatched::Pending"), $brfalse),
     @("MobTracker.NearestWatched", "Cancel", "Retrack::EndedLine", @("NearestWatched::Pending", "Time::get_time", "ldstr"), $null),
-    @("MobTracker.Tracker", "LateUpdate", "Character::IsTamed", @("Tracker::get_Target"), @("stsfld")),
-    @("MobTracker.Tracker", "LateUpdate", "Character::GetZDOID", @("Tracker::get_Target"), $null),
+    @("MobTracker.Tracker", "TamedNow", "Character::IsTamed", @("Tracker::get_Target"), @("stsfld")),
+    @("MobTracker.Tracker", "TamedNow", "Character::GetZDOID", @("Tracker::get_Target"), $null),
+    @("MobTracker.Tracker", "TamedNow", "ZDOID::op_Equality", @("Character::GetZDOID", "ZDOID::None"), $brfalse),
     @("MobTracker.Tracker", "Track", "Character::IsTamed", @("arg character"), @("stsfld")),
     @("MobTracker.Tracker", "Track", "Creature::PrefabName", @("arg character"), @("stsfld"))
 )
@@ -674,8 +684,13 @@ Test-Wiring @(
     @("MobTracker.NearestWatched", "Update", @("Player::m_localPlayer", "Retrack::Cancel", "Tracker::Track"),
         @("ModConfig::ListStars", "ModConfig::ListStarsText", "EntityListWindow::_appliedListStars", "ModConfig::AlertStars", "ModConfig::AlertStarsText")),
     @("MobTracker.Tracker", "Track", @("set Tracker::_targetPrefab", "set Tracker::_targetTamed", "Character::IsTamed"), @()),
-    # Tamed is refreshed while tracking, but only while the creature is on the network (IsTamed says false after).
-    @("MobTracker.Tracker", "LateUpdate", @("set Tracker::_targetTamed", "Character::GetZDOID", "ZDOID::op_Inequality"), @()),
+    # Tamed is read while tracking, but only while the creature is on the network (IsTamed says false after), and since
+    # 0.8.0 only in Tracker.TamedNow - the lost test's last question, once a frame, of a creature tracked wild: its
+    # taming ends the tracking (the exact shapes below). LateUpdate reads no tameness itself. The tameness decides
+    # nothing about the wait: it names a tamed creature in the loss lines (Retrack.LostLine, TrackLost).
+    @("MobTracker.Tracker", "TamedNow", @("set Tracker::_targetTamed", "Character::GetZDOID", "ZDOID::op_Equality", "Character::IsTamed", "Events::Tamed"), @()),
+    @("MobTracker.Tracker", "LateUpdate", @("Tracker::TamedNow", "Rules::LostTrackMessage"),
+        @("set Tracker::_targetTamed", "set Tracker::_targetPrefab", "Character::IsTamed", "Character::GetZDOID")),
     @("MobTracker.Tracker", "Stop", @(), @("NearestWatched::Lost")),
     @("MobTracker.EntityListWindow", "DrawWindow", @("NearestWatched::Cancel", "ModConfig::AlwaysTrackNearest"), @("NearestWatched::Lost")),
     # Every watch alert waits while a re-track waits: asking about the alerting creature's type only (as 0.3.0 to 0.5.1
@@ -904,8 +919,10 @@ if (-not $nwl) { $why += "NearestWatched.Lost not found" } else {
         if (($lGot -join "`n") -cne ($lWant -join "`n")) { $why += ("the end of Lost is not: {0} - it is: {1}" -f ($lWant -join "; "), ($lGot -join "; ")) }
         elseif ($s0 + $lWant.Count -ne $lSh.Count) { $why += "Lost goes on after its line" }
         # And nothing before the Retrack.Lost call but the null-to-empty prologue and the call's values: no early return
-        # (a tamed loss would lose its line) and no line of its own (written with the option off too).
-        elseif ($s0 -ne 13 -or (@($lSh[0..12]) -join "`n") -cne (@("ldarg.0", "brtrue ->4", "ldstr ", "starg prefab", "ldsfld NearestWatched::Pending", "ldarg.0", "ldsfld ModConfig::AlwaysTrackNearest", 'callvirt ConfigEntry`1::get_Value', "call ModConfig::get_Watchlist", "ldarg.0", 'callvirt HashSet`1::Contains', "ldarg.1", "call Time::get_time") -join "`n")) { $why += ("Lost does more before Retrack.Lost than the null-to-empty prologue and its values: {0}" -f (@($lSh[0..([Math]::Max(0, $s0 - 1))]) -join "; ")) }
+        # (a loss would lose its line - and one taken for a tamed creature or a type not watched would bring back the
+        # gates 0.8.0 dropped) and no line of its own (written with the option off too). 0.8.0: the watchlist is asked
+        # only for its count, and the tameness (ldarg.1) is not read before the call.
+        elseif ($s0 -ne 11 -or (@($lSh[0..10]) -join "`n") -cne (@("ldarg.0", "brtrue ->4", "ldstr ", "starg prefab", "ldsfld NearestWatched::Pending", "ldarg.0", "ldsfld ModConfig::AlwaysTrackNearest", 'callvirt ConfigEntry`1::get_Value', "call ModConfig::get_Watchlist", 'callvirt HashSet`1::get_Count', "call Time::get_time") -join "`n")) { $why += ("Lost does more before Retrack.Lost than the null-to-empty prologue and its values: {0}" -f (@($lSh[0..([Math]::Max(0, $s0 - 1))]) -join "; ")) }
     }
 }
 if ($why.Count -eq 0) { Ok "NearestWatched.Lost: the loss line is built after Retrack.Lost, from its outcome, and written only when it is not null" } else { Fail ("NearestWatched.Lost: " + ($why -join "; ")) }
@@ -996,10 +1013,67 @@ foreach ($t in $plug.GetTypes()) {
 }
 if ($lostCalls.Count -eq 1 -and $lostCalls[0] -eq "Tracker.LateUpdate") { Ok "NearestWatched.Lost is called once, from Tracker.LateUpdate" }
 else { Fail ("NearestWatched.Lost must be called exactly once, from Tracker.LateUpdate; found: {0}" -f $(if ($lostCalls.Count) { $lostCalls -join ", " } else { "none" })) }
+# A wait a loss started ends as NearestWatched.Update decides, or by Stop tracking in the window: the plugin's one use
+# of NearestWatched.Cancel (a call, or a delegate made of it - any instruction naming it, in any type) is there. A
+# cancel anywhere else - just after the lost block, in the alert poll - would end the wait after the loss of a tamed
+# creature or of a type not watched, the gates 0.8.0 dropped, or after a taming.
+$checks++
+$cancelCalls = @()
+foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }
+    foreach ($i in $m.Body.Instructions) { $op = $i.Operand
+        if ($op -is [Mono.Cecil.MethodReference] -and $op.Name -ceq "Cancel" -and $op.DeclaringType.FullName -eq "MobTracker.NearestWatched") { $cancelCalls += ("{0}.{1}" -f $t.Name, $m.Name) } } } }
+if ((@($cancelCalls) -join ",") -ceq "EntityListWindow.DrawWindow") { Ok "NearestWatched.Cancel is called once, from EntityListWindow.DrawWindow (Stop tracking)" }
+else { Fail ("NearestWatched.Cancel must be called exactly once, from EntityListWindow.DrawWindow (Stop tracking); found: {0}" -f $(if ($cancelCalls.Count) { $cancelCalls -join ", " } else { "none" })) }
+# What a loss hands NearestWatched.Lost - the recorded type and tameness - is written only where a tracking starts and
+# in the taming test (0.8.0): _targetPrefab once in Track (straight from Creature.PrefabName) and once in TrackPoint
+# (null), _targetTamed once each in Track, TrackPoint and Tracker.TamedNow, which only LateUpdate calls, once; and
+# Track's whole shape. A write is a store or the field's address taken (an out or ref argument writes through it). The
+# call and its arguments are pinned above, but a second write - a type cleared for a creature not watched or a tamed
+# one, in Track, in Stop or every frame in LateUpdate - would bring back the gates 0.8.0 dropped.
+$checks++
+$why = @()
+$prefabSets = @(); $tamedSets = @(); $tamedNowCalls = @()
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($i in $m.Body.Instructions) {
+            $op = $i.Operand
+            if (@("stsfld", "ldsflda", "stfld", "ldflda") -ccontains $i.OpCode.Name -and $op -is [Mono.Cecil.FieldReference] -and $op.DeclaringType.FullName -eq "MobTracker.Tracker") {
+                if ($op.Name -ceq "_targetPrefab") { $prefabSets += ("{0}.{1}" -f $t.Name, $m.Name) }
+                if ($op.Name -ceq "_targetTamed") { $tamedSets += ("{0}.{1}" -f $t.Name, $m.Name) }
+            }
+            if ($op -is [Mono.Cecil.MethodReference] -and $op.Name -ceq "TamedNow" -and $op.DeclaringType.FullName -eq "MobTracker.Tracker") { $tamedNowCalls += ("{0}.{1}" -f $t.Name, $m.Name) }
+        }
+    }
+}
+if ((@($prefabSets | Sort-Object -CaseSensitive) -join ",") -cne "Tracker.Track,Tracker.TrackPoint") { $why += ("_targetPrefab is set in: {0}" -f ($prefabSets -join ", ")) }
+if ((@($tamedSets | Sort-Object -CaseSensitive) -join ",") -cne "Tracker.TamedNow,Tracker.Track,Tracker.TrackPoint") { $why += ("_targetTamed is set in: {0}" -f ($tamedSets -join ", ")) }
+if ((@($tamedNowCalls) -join ",") -cne "Tracker.LateUpdate") { $why += ("Tracker.TamedNow is called from: {0}" -f $(if ($tamedNowCalls.Count) { $tamedNowCalls -join ", " } else { "nowhere" })) }
+$trk = Get-Method "MobTracker.Tracker" "Track"
+$trkWant = @("ldarg.0", "call Events::TrackStarting", "ldarg.0", "call Tracker::set_Target", "ldc.i4.1", "call Tracker::set_IsTracking",
+    "ldc.i4.0", "stsfld Tracker::_isPoint", "ldarg.0", "call Creature::DisplayName", "stsfld Tracker::_targetName", "ldarg.0",
+    "call Creature::PrefabName", "stsfld Tracker::_targetPrefab", "ldarg.0", "callvirt Character::IsTamed", "stsfld Tracker::_targetTamed",
+    "ldc.r4 0", "stsfld Tracker::_nextPath", "call Time::get_time", "stsfld Tracker::_since", "call Tracker::get_Generation", "ldc.i4.1",
+    "add", "call Tracker::set_Generation", "ret")
+$trkGot = if ($trk) { @(Get-Shape $trk) } else { @() }
+if (($trkGot -join "`n") -cne ($trkWant -join "`n")) { $why += ("Tracker.Track is not: {0} - it is: {1}" -f ($trkWant -join "; "), ($trkGot -join "; ")) }
+if ($why.Count -eq 0) { Ok "Tracker: the type and tameness a loss hands on are written only where a tracking starts and in TamedNow (LateUpdate's only), Track's straight from the creature, with no gate" }
+else { Fail ("Tracker: " + ($why -join "; ")) }
+# And their address is never taken, anywhere: no out or ref argument writes them, not even where a tracking starts.
+$checks++
+$addr = @()
+foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }
+    foreach ($i in $m.Body.Instructions) { $op = $i.Operand
+        if (($i.OpCode.Name -eq "ldsflda" -or $i.OpCode.Name -eq "ldflda") -and $op -is [Mono.Cecil.FieldReference] -and $op.DeclaringType.FullName -eq "MobTracker.Tracker" -and @("_targetPrefab", "_targetTamed") -ccontains $op.Name) { $addr += ("{0}.{1} ({2})" -f $t.Name, $m.Name, $op.Name) } } } }
+if ($addr.Count -eq 0) { Ok "Tracker: the address of the recorded type and tameness (_targetPrefab, _targetTamed) is never taken - no out or ref argument writes them" }
+else { Fail ("Tracker: the address of the recorded type or tameness is taken - an out or ref argument can write it past the write sites: {0}" -f ($addr -join ", ")) }
 # Which branch starts the re-track (SC-2): the NearestWatched.Lost call ends the lost-creature branch of LateUpdate -
-# IsTracking, not a point, and Target == null or Target.IsDead() - after the "Lost track of" message and Stop, and
-# nothing else leads to it (moved into the logged-out branch, Always track nearest watched would never start). An exact
-# IL shape of that block, branch targets relative to its start; a legitimate rewrite must be re-read against the IL.
+# IsTracking, not a point, and Target == null or Target.IsDead() or, asked last (0.8.0), Tracker.TamedNow: one tracked
+# wild and tamed now - after the "Lost track of" message (Rules.LostTrackMessage, told TamedNow's answer through the
+# local set false just before) and Stop, and nothing else leads to it (moved into the logged-out branch, Always track
+# nearest watched would never start). An exact IL shape of that block, branch targets relative to its start; a
+# legitimate rewrite must be re-read against the IL. And TamedNow's own exact shape: no answer for one tamed when its
+# tracking began (_targetTamed first), nor off the network; else the tameness stored, its verbose line, the answer.
 $checks++
 $why = @()
 $tlu = Get-Method "MobTracker.Tracker" "LateUpdate"
@@ -1007,10 +1081,11 @@ if (-not $tlu) { $why += "Tracker.LateUpdate not found" }
 else {
     $tShape = Get-Shape $tlu
     $lost = [array]::IndexOf($tShape, "call NearestWatched::Lost")
-    $tWant = @("call Tracker::get_IsTracking", "brfalse ->29", "ldsfld Tracker::_isPoint", "brtrue ->29", "call Tracker::get_Target", "ldnull",
-        "call Object::op_Equality", "brtrue ->11", "call Tracker::get_Target", "callvirt Character::IsDead", "brfalse ->29",
-        "call MessageHud::get_instance", "ldnull", "call Object::op_Inequality", "brfalse ->25", "call MessageHud::get_instance", "ldc.i4.1",
-        "ldstr Lost track of ", "ldsfld Tracker::_targetName", "call String::Concat", "ldc.i4.0", "ldnull", "ldc.i4.0", "ldc.i4.1",
+    $tWant = @("ldc.i4.0", "stloc V1", "call Tracker::get_IsTracking", "brfalse ->35", "ldsfld Tracker::_isPoint", "brtrue ->35", "call Tracker::get_Target",
+        "ldnull", "call Object::op_Equality", "brtrue ->17", "call Tracker::get_Target", "callvirt Character::IsDead", "brtrue ->17",
+        "call Tracker::TamedNow", "dup", "stloc V1", "brfalse ->35",
+        "call MessageHud::get_instance", "ldnull", "call Object::op_Inequality", "brfalse ->31", "call MessageHud::get_instance", "ldc.i4.1",
+        "ldsfld Tracker::_targetName", "ldloc V1", "call Rules::LostTrackMessage", "ldc.i4.0", "ldnull", "ldc.i4.0", "ldc.i4.1",
         "callvirt MessageHud::ShowMessage", "call Tracker::Stop", "ldsfld Tracker::_targetPrefab", "ldsfld Tracker::_targetTamed",
         "call NearestWatched::Lost")
     $start = $lost - ($tWant.Count - 1)
@@ -1024,8 +1099,40 @@ else {
         if (@($tShape | Where-Object { $_ -ceq "call NearestWatched::Lost" }).Count -ne 1) { $why += "NearestWatched.Lost is called more than once in LateUpdate" }
     }
 }
-if ($why.Count -eq 0) { Ok "Tracker.LateUpdate: NearestWatched.Lost ends the lost-creature branch (tracking, not a point, Target null or dead), after 'Lost track of' and Stop" }
+$tn = Get-Method "MobTracker.Tracker" "TamedNow"
+$tnWant = @("ldsfld Tracker::_targetTamed", "brtrue ->7", "call Tracker::get_Target", "callvirt Character::GetZDOID", "ldsfld ZDOID::None",
+    "call ZDOID::op_Equality", "brfalse ->9", "ldc.i4.0", "ret", "call Tracker::get_Target", "callvirt Character::IsTamed", "stsfld Tracker::_targetTamed",
+    "ldsfld Tracker::_targetTamed", "brfalse ->15", "call Events::Tamed", "ldsfld Tracker::_targetTamed", "ret")
+$tnGot = if ($tn) { @(Get-Shape $tn) } else { @() }
+if (($tnGot -join "`n") -cne ($tnWant -join "`n")) { $why += ("TamedNow is not: {0} - it is: {1}" -f ($tnWant -join "; "), ($tnGot -join "; ")) }
+if ($why.Count -eq 0) { Ok "Tracker.LateUpdate: NearestWatched.Lost ends the lost-creature branch (tracking, not a point, Target null or dead, or - TamedNow - tracked wild and tamed now), after 'Lost track of' (saying a taming) and Stop" }
 else { Fail ("Tracker.LateUpdate: " + ($why -join "; ")) }
+# And LateUpdate up to the !IsTracking block, exactly (0.8.0): the logged-out test first - it stops with no wait, so
+# leaving the world never starts one - then the lost block, then the reached block, and nothing between or after them.
+# The lost block's shape above ends at its NearestWatched.Lost call; this one holds what follows it too: a cancel, a
+# Stop or a write just after the block would decide the wait, or drop a creature tamed when its tracking began, past
+# that shape. Branch targets from LateUpdate's first instruction. It overlaps the lost block's shape above and the
+# guide's gate below: a legitimate rewrite of LateUpdate re-reads all three against its IL.
+$checks++
+$luWant = @("ldsfld Player::m_localPlayer", "stloc V0", "ldloc V0", "call Events::TrackEnding", "call Tracker::get_IsTracking", "brfalse ->11", "ldloc V0", "ldnull",
+        "call Object::op_Equality", "brfalse ->11", "call Tracker::Stop",
+        "ldc.i4.0", "stloc V1", "call Tracker::get_IsTracking", "brfalse ->46", "ldsfld Tracker::_isPoint", "brtrue ->46", "call Tracker::get_Target",
+        "ldnull", "call Object::op_Equality", "brtrue ->28", "call Tracker::get_Target", "callvirt Character::IsDead", "brtrue ->28",
+        "call Tracker::TamedNow", "dup", "stloc V1", "brfalse ->46",
+        "call MessageHud::get_instance", "ldnull", "call Object::op_Inequality", "brfalse ->42", "call MessageHud::get_instance", "ldc.i4.1",
+        "ldsfld Tracker::_targetName", "ldloc V1", "call Rules::LostTrackMessage", "ldc.i4.0", "ldnull", "ldc.i4.0", "ldc.i4.1",
+        "callvirt MessageHud::ShowMessage", "call Tracker::Stop", "ldsfld Tracker::_targetPrefab", "ldsfld Tracker::_targetTamed",
+        "call NearestWatched::Lost",
+        "call Tracker::get_IsTracking", "brfalse ->73", "ldsfld Tracker::_isPoint", "brfalse ->73", "ldloc V0", "callvirt Component::get_transform",
+        "callvirt Transform::get_position", "ldsfld Tracker::_point", "call Utils::DistanceXZ", "ldc.r4 30", "bge.un ->73",
+        "call MessageHud::get_instance", "ldnull", "call Object::op_Inequality", "brfalse ->71", "call MessageHud::get_instance", "ldc.i4.1",
+        "ldstr Reached ", "ldsfld Tracker::_targetName", "call String::Concat", "ldc.i4.0", "ldnull", "ldc.i4.0", "ldc.i4.1",
+        "callvirt MessageHud::ShowMessage", "call Events::TrackReached", "call Tracker::Stop",
+        "call Tracker::get_IsTracking", "brtrue ->84")
+$lu = Get-Method "MobTracker.Tracker" "LateUpdate"
+$luGot = if ($lu) { @(Get-Shape $lu | Select-Object -First $luWant.Count) } else { @() }
+if (($luGot -join "`n") -ceq ($luWant -join "`n")) { Ok "Tracker.LateUpdate: the logged-out test, the lost block and the reached block, in that order and nothing else, up to the !IsTracking block" }
+else { Fail ("Tracker.LateUpdate does not start with: {0} - it starts with: {1}" -f ($luWant -join "; "), ($luGot -join "; ")) }
 # Auto-track's "not while a creature is tracked" (SC-1): WatchAlerts.Update asks Tracker.IsTrackingCreature once and
 # skips the auto-track on true (brtrue), and never asks IsTracking - which would also refuse to take over a Find area arrow.
 Test-Calls @(,
@@ -1074,19 +1181,17 @@ if (-not $tl) { $why += "Tracker.LateUpdate not found" } else {
     $sh = Get-Shape $tl
     if ($sh.Count -lt 2 -or $sh[0] -cne "ldsfld Player::m_localPlayer" -or $sh[1] -cne "stloc V0") { $why += "it does not start by storing Player.m_localPlayer in V0" }
     $calls = @(for ($k = 0; $k -lt $sh.Count; $k++) { if ($sh[$k] -ceq "call Rules::GuideHidden") { $k } })
-    # Where it sits: right after the !IsTracking block and the tamed refresh - after the lost and reached tests, which
-    # must go on while the guide is hidden, and before anything that shows the guide.
+    # Where it sits: right after the !IsTracking block - after the lost (with the taming test, 0.8.0) and reached tests,
+    # which must go on while the guide is hidden, and before anything that shows the guide.
     $gWant = @("call Tracker::get_IsTracking", "brtrue ->11", "ldarg.0", "ldfld Tracker::_arrow", "ldc.i4.0", "callvirt GameObject::SetActive", "ldarg.0",
         "ldfld Tracker::_line", "ldc.i4.0", "callvirt Renderer::set_enabled", "ret",
-        "ldsfld Tracker::_isPoint", "brtrue ->21", "call Tracker::get_Target", "callvirt Character::GetZDOID", "ldsfld ZDOID::None", "call ZDOID::op_Inequality",
-        "brfalse ->21", "call Tracker::get_Target", "callvirt Character::IsTamed", "stsfld Tracker::_targetTamed",
         "call Hud::IsUserHidden", "ldloc V0", "call Tracker::InCutscene", "ldloc V0", "callvirt Character::IsDead", "call Tracker::WaitingForRespawn",
         "ldloc V0", "callvirt Character::IsTeleporting", "call Rules::GuideHidden", "stsfld Tracker::_guideHidden", "ldsfld Tracker::_guideHidden",
-        "brfalse ->42", "ldarg.0", "ldfld Tracker::_arrow", "ldc.i4.0", "callvirt GameObject::SetActive", "ldarg.0", "ldfld Tracker::_line", "ldc.i4.0",
+        "brfalse ->32", "ldarg.0", "ldfld Tracker::_arrow", "ldc.i4.0", "callvirt GameObject::SetActive", "ldarg.0", "ldfld Tracker::_line", "ldc.i4.0",
         "callvirt Renderer::set_enabled", "ret")
     if ($calls.Count -ne 1) { $why += ("Rules.GuideHidden is called {0} time(s), expected once" -f $calls.Count) }
     else {
-        $start = $calls[0] - 29
+        $start = $calls[0] - 19
         $gGot = @(for ($k = [Math]::Max(0, $start); $k -lt [Math]::Min($sh.Count, $start + $gWant.Count); $k++) {
             if ($sh[$k] -match '^(\S+) ->(\d+)$') { "{0} ->{1}" -f $Matches[1], ([int]$Matches[2] - $start) } else { $sh[$k] }
         })
@@ -1550,7 +1655,7 @@ foreach ($q in @(Get-CallAt $bi 'ConfigEntry`1::add_SettingChanged')) {
     $entry = $bi[$en].Operand.Name
     $hd = $null; try { $hd = $bi[$fn].Operand.Resolve() } catch { }
     $ht = if ($hd -and $hd.HasBody) { Get-Touches $hd } else { @{} }
-    $sets = @(@("ListStars", "AlertStars") | Where-Object { $ht.ContainsKey("set ModConfig::$_") })
+    $sets = @(@("ListStars", "AlertStars") | Where-Object { $ht.ContainsKey("store ModConfig::$_") })
     if ($reparsed.ContainsKey($entry)) {
         $want = $entry -replace 'Text$', ''
         if (($sets -join ",") -ne $want) { $why += ("{0}'s SettingChanged handler stores {1}, not {2} alone" -f $entry, $(if ($sets.Count) { $sets -join ", " } else { "neither filter" }), $want) }
@@ -2441,14 +2546,18 @@ $Shape_LogObserver_Update = @('call LogFile::ReportNotice', 'ldsfld ModLog::Verb
     'ldc.i4.1', 'stfld LogObserver::_known', 'call Tracker::get_IsTracking', 'brtrue ->50', 'ldarg.0', 'ldc.i4.m1',
     'stfld LogObserver::_generation', 'ret', 'call Tracker::get_Generation', 'ldarg.0', 'ldfld LogObserver::_generation', 'beq ->61', 'ldarg.0',
     'call Tracker::get_Generation', 'stfld LogObserver::_generation', 'ldarg.0', 'ldc.i4.2', 'stfld LogObserver::_wait', 'ret', 'ldarg.0',
-    'ldfld LogObserver::_wait', 'ldc.i4.0', 'ble ->81', 'ldarg.0', 'ldarg.0', 'ldfld LogObserver::_wait', 'ldc.i4.1', 'sub',
-    'stfld LogObserver::_wait', 'ldarg.0', 'ldfld LogObserver::_wait', 'brtrue ->80', 'ldarg.0', 'call Tracker::get_GuideHiddenNow',
-    'stfld LogObserver::_guideHidden', 'ldarg.0', 'call Tracker::get_TargetTamed', 'stfld LogObserver::_tamed', 'ret',
-    'call Tracker::get_GuideHiddenNow', 'ldarg.0', 'ldfld LogObserver::_guideHidden', 'beq ->91', 'ldarg.0', 'call Tracker::get_GuideHiddenNow',
-    'stfld LogObserver::_guideHidden', 'ldarg.0', 'ldfld LogObserver::_guideHidden', 'call Events::Guide', 'call Tracker::get_IsTrackingCreature',
-    'brfalse ->104', 'call Tracker::get_TargetTamed', 'ldarg.0', 'ldfld LogObserver::_tamed', 'beq ->104', 'ldarg.0',
-    'call Tracker::get_TargetTamed', 'stfld LogObserver::_tamed', 'ldarg.0', 'ldfld LogObserver::_tamed', 'brfalse ->104', 'call Events::Tamed',
+    'ldfld LogObserver::_wait', 'ldc.i4.0', 'ble ->78', 'ldarg.0', 'ldarg.0', 'ldfld LogObserver::_wait', 'ldc.i4.1', 'sub',
+    'stfld LogObserver::_wait', 'ldarg.0', 'ldfld LogObserver::_wait', 'brtrue ->77', 'ldarg.0', 'call Tracker::get_GuideHiddenNow',
+    'stfld LogObserver::_guideHidden', 'ret',
+    'call Tracker::get_GuideHiddenNow', 'ldarg.0', 'ldfld LogObserver::_guideHidden', 'beq ->88', 'ldarg.0', 'call Tracker::get_GuideHiddenNow',
+    'stfld LogObserver::_guideHidden', 'ldarg.0', 'ldfld LogObserver::_guideHidden', 'call Events::Guide',
     'ret')
+# Tracker.TamedNow's line (0.8.0): what is tracked and whether Always track nearest watched is on, as the lost line has
+# it, and the empty-look memory cleared for the wait that may follow - inside the catch every verbose site has.
+$Shape_Events_Tamed = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'ldnull', 'stsfld Events::_lastEmptyLook', 'call Tracker::get_Tracked',
+    'ldsfld ModConfig::AlwaysTrackNearest', 'callvirt ConfigEntry`1::get_Value', 'call EventLines::TrackTamed', 'call ModLog::Event', 'leave ->17',
+    'stloc V0', 'ldstr Tamed', 'ldloc V0', 'call Events::Failed', 'leave ->17', 'ret')
+$Handlers_Events_Tamed = @('Catch System.Exception 4..12 12..17')
 $Shape_Events_TrackEnding = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'call Tracker::get_IsTracking', 'brtrue ->7', 'leave ->44', 'ldarg.0', 'ldnull',
     'call Object::op_Equality', 'brfalse ->15', 'call Tracker::get_Tracked', 'call EventLines::TrackNoPlayer', 'call ModLog::Event', 'leave ->44',
     'call Tracker::get_IsTrackingCreature', 'brtrue ->18', 'leave ->44', 'call Tracker::get_Target', 'stloc V0', 'ldloc V0', 'ldnull',
@@ -2700,11 +2809,12 @@ $siteWant = @("<Search>d__N.MoveNext -> Events::FindDone x1", "Ding.FindGuiGroup
     "Ding.Play -> Events::DingPlayed x1", "EntityListWindow.Close -> Events::ListClosed x1", "EntityListWindow.DrawWindow -> Events::Clicked x2",
     "EntityListWindow.DrawWindow -> Events::RowClicked x3", "EntityListWindow.DrawWindow -> Events::ViewSwitched x1", "EntityListWindow.HandleKeys -> Events::ListKeyCheck x1",
     "EntityListWindow.Open -> Events::ListOpened x1", "LogObserver.Update -> Events::AlertStars x1", "LogObserver.Update -> Events::FlushSettings x1",
-    "LogObserver.Update -> Events::Guide x1", "LogObserver.Update -> Events::PlayerPresence x1", "LogObserver.Update -> Events::Tamed x1",
+    "LogObserver.Update -> Events::Guide x1", "LogObserver.Update -> Events::PlayerPresence x1",
     "MobTrackerPlugin.Patch -> Events::Patched x1", "ModConfig.Bind -> Events::Watch x1", "NearestWatched.Update -> Events::EmptyLook x1",
     "SpawnFinder.RemovePinNear -> Events::MapDeleteTookAreaPin x1", "SpawnFinder.RemovePins -> Events::PinsRemoved x1", "SpawnFinder.Say -> Events::FindSays x1",
     "SpawnFinder.StartFind -> Events::FindNotStarted x1", "SpawnFinder.StartFind -> Events::FindReplaced x1", "Tracker.LateUpdate -> Events::TrackEnding x1",
     "Tracker.LateUpdate -> Events::TrackReached x1", "Tracker.LogPath -> Events::GroundPath x1", "Tracker.Stop -> Events::TrackStopping x1",
+    "Tracker.TamedNow -> Events::Tamed x1",
     "Tracker.Track -> Events::TrackStarting x1", "Tracker.TrackPoint -> Events::TrackStartingArea x1", "WatchAlerts.ResetSession -> Events::Session x1",
     "WatchAlerts.Update -> Events::Alert x1", "WatchAlerts.Update -> Events::AlertMemoryClearing x1", "WatchAlerts.Update -> Events::AutoTrack x1",
     "WatchAlerts.Update -> Events::NotAlerting x1", "WaypointerCompat.Apply -> Events::CompatSkipped x1")
@@ -2828,9 +2938,14 @@ else { Fail ("verbose changes something: " + ($why -join "; ")) }
 # The loss line asks the lost block's own question - tracking a creature, its Target destroyed or dead - after the
 # no-player one, and clears the empty-look memory for the wait that may follow.
 Test-ExactShape "MobTracker.Events" "TrackEnding" $Shape_Events_TrackEnding "no local player, or the tracked creature lost (Target null or dead, as Tracker's lost block asks), each said; nothing else" $Handlers_Events_TrackEnding
+# The tameness that line names - Events.TrackEnding reads Tracker.TargetTamed - is the recorded one, as it is.
+Test-ExactShape "MobTracker.Tracker" "get_TargetTamed" @("ldsfld Tracker::_targetTamed", "ret") "returns the recorded tameness (_targetTamed) as it is, for the loss line"
+# The taming line (0.8.0) comes from Tracker.TamedNow, the lost block's own test, before Stop's line.
+Test-ExactShape "MobTracker.Events" "Tamed" $Shape_Events_Tamed "what is tracked and whether Always track nearest watched is on, and the empty-look memory cleared, inside its catch" $Handlers_Events_Tamed
 # LogObserver: says why the file stopped whatever VerboseLog says, then, with it on, writes each watched state on its
-# change only (the guide and tamed state taken as a baseline two frames after each tracking change, not written).
-Test-ExactShape "MobTracker.LogObserver" "Update" $Shape_LogObserver_Update "says a stopped file first, whatever VerboseLog says; with it on, the player, the Alerts: stars, the guide and tamed on change only"
+# change only (the guide state taken as a baseline two frames after each tracking change, not written). A taming is
+# not watched for: since 0.8.0 it ends the tracking, and Tracker says so itself (Events.Tamed).
+Test-ExactShape "MobTracker.LogObserver" "Update" $Shape_LogObserver_Update "says a stopped file first, whatever VerboseLog says; with it on, the player, the Alerts: stars and the guide on change only"
 # The ding's lines: not played (no source, or no GUI mixer group) right before that return, played right after
 # PlayOneShot; the mixer search's caught failure goes to its verbose line and nowhere else.
 Test-ExactShape "MobTracker.Ding" "Play" $Shape_Ding_Play "the not-played line before the not-routed return, the played line after PlayOneShot"

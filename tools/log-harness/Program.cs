@@ -43,7 +43,7 @@ namespace MobTracker
     internal static class MobTrackerPlugin
     {
         internal static ManualLogSource Log;
-        public const string Version = "0.7.0";
+        public const string Version = "0.8.0";
     }
 
     internal static class LogHost
@@ -271,7 +271,7 @@ namespace MobTracker
         private static void FirstStart()
         {
             StartGame(null, () => MobTrackerPlugin.Log.LogWarning("General.ListStarFilter is 'x': x ignored: not a star category."));
-            MobTrackerPlugin.Log.LogInfo("MobTracker 0.7.0 loaded");
+            MobTrackerPlugin.Log.LogInfo("MobTracker 0.8.0 loaded");
             MobTrackerPlugin.Log.LogError("an error");
             ModLog.Event("Track: not written - VerboseLog is off");
             string[] raw = Read(LogPath);
@@ -282,14 +282,14 @@ namespace MobTracker
             Check("the header, the switches, the warning ModConfig.Bind gave before the file had its settings line, the settings, the error - no Info line",
                 lines != null && lines.SequenceEqual(new[]
                 {
-                    "[File   :MobTracker] MobTracker 0.7.0 - MobTracker.log opened at the game's start; Valheim test; BepInEx 5.4.23.3",
+                    "[File   :MobTracker] MobTracker 0.8.0 - MobTracker.log opened at the game's start; Valheim test; BepInEx 5.4.23.3",
                     "[File   :MobTracker] Logging: ErrorLog on, VerboseLog off - MobTracker.log gets MobTracker's warnings and errors; LogOutput.log gets every MobTracker line as before",
                     "[Warning:MobTracker] General.ListStarFilter is 'x': x ignored: not a star category.",
                     "[File   :MobTracker] Settings: Logging.ErrorLog = 'true', Logging.VerboseLog = 'false', General.ListKey = 'F7'",
                     "[Error  :MobTracker] an error"
                 }), Show(lines));
             Check("LogOutput.log's side gets every MobTracker line, the Info one too, and no verbose line",
-                _capture.Lines.SequenceEqual(new[] { "Warning: General.ListStarFilter is 'x': x ignored: not a star category.", "Info: MobTracker 0.7.0 loaded", "Error: an error" }),
+                _capture.Lines.SequenceEqual(new[] { "Warning: General.ListStarFilter is 'x': x ignored: not a star category.", "Info: MobTracker 0.8.0 loaded", "Error: an error" }),
                 string.Join(" | ", _capture.Lines));
             var head = new byte[3];
             using (var fs = new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))

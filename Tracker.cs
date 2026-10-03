@@ -58,7 +58,9 @@ namespace MobTracker
         private static bool _guideHidden;
 
         private static string _targetName;
-        // Kept for NearestWatched: a lost creature's own name and tameness may be gone with it.
+        // Kept for NearestWatched (the type the wait names) and the loss lines (the tameness, which only names the
+        // creature there since 0.8.0): a lost creature's own name and tameness may be gone with it. _targetTamed is the
+        // tameness when the tracking began, until TamedNow sees a creature tracked wild turn tamed - that ends the tracking.
         private static string _targetPrefab;
         private static bool _targetTamed;
         private static float _nextPath;
@@ -175,10 +177,14 @@ namespace MobTracker
             if (IsTracking && player == null)
                 Stop(); // logged out; nobody to tell
 
-            if (IsTracking && !_isPoint && (Target == null || Target.IsDead()))
+            // Lost: gone from this client (a destroyed Unity object compares equal to null) or dead - or, since 0.8.0, tamed
+            // while tracked (TamedNow, asked last, of a creature still there and alive), which ends the tracking as a loss
+            // does. The local keeps TamedNow's answer for the message (Rules.LostTrackMessage).
+            bool tamedNow = false;
+            if (IsTracking && !_isPoint && (Target == null || Target.IsDead() || (tamedNow = TamedNow())))
             {
                 if (MessageHud.instance != null)
-                    MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, "Lost track of " + _targetName);
+                    MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, Rules.LostTrackMessage(_targetName, tamedNow));
                 Stop();
                 NearestWatched.Lost(_targetPrefab, _targetTamed); // lost, not stopped: the only place a re-track is scheduled
             }
@@ -197,11 +203,6 @@ namespace MobTracker
                 _line.enabled = false;
                 return;
             }
-
-            // Tamed can happen while tracked. Read only while the creature is still on the network: in the frame the game
-            // removes it, IsTamed already says false.
-            if (!_isPoint && Target.GetZDOID() != ZDOID.None)
-                _targetTamed = Target.IsTamed();
 
             // The guide hides whenever the game hides its own HUD or the player cannot be guided (Rules.GuideHidden);
             // the tracking goes on, and the guide comes back with the player (after a death the tracking usually ends first, when
@@ -377,6 +378,25 @@ namespace MobTracker
 
             point.y += PathLift;
             return point;
+        }
+
+        /// <summary>
+        /// The lost test's last question, asked once a frame of a tracked creature still there and alive: was it tracked
+        /// wild and is it tamed now - by this player or another? That ends its tracking as a loss does (0.8.0). One that
+        /// was tamed when its tracking began is not asked again: like any other, it stays tracked until it is killed,
+        /// no longer loaded, or the tracking is stopped or replaced.
+        /// Read only while the creature is still on the network: in the frame the game removes it, IsTamed already says
+        /// false. A game that does not run the creature reads its tameness at most once a second, so another player's
+        /// taming can end the tracking up to about a second late.
+        /// </summary>
+        private static bool TamedNow()
+        {
+            if (_targetTamed || Target.GetZDOID() == ZDOID.None)
+                return false;
+            _targetTamed = Target.IsTamed();
+            if (_targetTamed)
+                Events.Tamed(); // its line before Stop's, as a loss's comes first (Events.TrackEnding)
+            return _targetTamed;
         }
 
         /// <summary>

@@ -79,6 +79,15 @@ namespace MobTracker
             return hudHidden || inCutscene || dead || waitingForRespawn || teleporting;
         }
 
+        /// <summary>
+        /// The top-left message when the tracker loses its creature (Tracker.LateUpdate): "Lost track of Boar", and for one
+        /// tracked wild and tamed now, which ends the tracking as a loss does (0.8.0), "Lost track of Boar - it was tamed".
+        /// </summary>
+        public static string LostTrackMessage(string name, bool tamed)
+        {
+            return "Lost track of " + name + (tamed ? " - it was tamed" : "");
+        }
+
         /// <summary>"Troll, serpent,," -> {Troll, serpent}, compared case-insensitively.</summary>
         public static HashSet<string> ParseWatchlist(string text)
         {
@@ -167,11 +176,12 @@ namespace MobTracker
 
     /// <summary>
     /// The decisions of "always track nearest watched", free of game types so the tests can drive them: after a
-    /// tracked creature of a watched type is lost, nothing happens for <see cref="Delay"/> seconds, then it is time to
-    /// look once every <see cref="LookInterval"/> seconds until <see cref="Cancel"/>; <see cref="EndsWait"/> says
-    /// when the wait is over and <see cref="IsCandidate"/> which creature it may take - one of any watched type, not
-    /// only the lost one's. <see cref="LostLine"/>, <see cref="TookLine"/> and <see cref="EndedLine"/> are the log's
-    /// line for a loss, a take and the end of a wait without one.
+    /// tracked creature of any type is lost - tamed or not - while something is watched, nothing happens for
+    /// <see cref="Delay"/> seconds, then it is time to look once every <see cref="LookInterval"/> seconds until
+    /// <see cref="Cancel"/>; <see cref="EndsWait"/> says when the wait is over and <see cref="IsCandidate"/> which
+    /// creature it may take - one of any watched type, whatever was lost. <see cref="LostLine"/>,
+    /// <see cref="TookLine"/> and <see cref="EndedLine"/> are the log's line for a loss, a take and the end of a wait
+    /// without one.
     /// </summary>
     public class Retrack
     {
@@ -195,12 +205,18 @@ namespace MobTracker
             get { return Prefab != null; }
         }
 
+        /// <summary>
+        /// A tracked creature is lost - killed, no longer loaded, or, since 0.8.0, tracked wild and tamed now. Since 0.8.0
+        /// any creature's loss starts the wait while something is watched - of a type not on the watchlist, outside the
+        /// Alerts stars or tamed too: neither its type, beyond having one, nor its tameness is asked here. What the wait
+        /// may take is <see cref="IsCandidate"/>'s, never a tamed one.
+        /// </summary>
         /// <param name="enabled">The option is on.</param>
-        /// <param name="watched">The lost creature's type is on the watchlist.</param>
-        /// <param name="tamed">The lost creature was tamed: losing a pet starts no hunt for a wild one.</param>
-        public void Lost(string prefab, bool enabled, bool watched, bool tamed, float now)
+        /// <param name="watchedTypes">The watchlist's count: with nothing watched there is nothing to take, so no wait
+        /// (a count, not a "count > 0": preflight traces each argument, and a comparison is where its tracing stops).</param>
+        public void Lost(string prefab, bool enabled, int watchedTypes, float now)
         {
-            if (!enabled || !watched || tamed || string.IsNullOrEmpty(prefab))
+            if (!enabled || watchedTypes <= 0 || string.IsNullOrEmpty(prefab))
             {
                 Prefab = null;
                 return;
@@ -238,7 +254,7 @@ namespace MobTracker
         }
 
         /// <summary>
-        /// A creature the re-track may take: of a watched type - any of them, not only the lost one's - still on the
+        /// A creature the re-track may take: of a watched type - any of them, whatever was lost - still on the
         /// network (the game drops a creature's network data first and the creature itself at the end of that frame),
         /// what a watch alert takes - not tamed, stars the Alerts filter accepts, within AlertRadius - and on the
         /// player's side of a dungeon entrance (<see cref="Rules.SameLayer"/>): seen from outside, the nearest one
@@ -251,17 +267,21 @@ namespace MobTracker
 
         /// <summary>
         /// The log line after <see cref="Lost"/>: null with the option off; otherwise whether a wait started - read from
-        /// <see cref="IsPending"/>, the outcome - and, if not, why. watching: the watchlist as the cfg spells it.
+        /// <see cref="IsPending"/>, the outcome - and, if not, why: with the option on, a loss starts none only when
+        /// nothing is watched, or for a creature of no known type (Lost's own guard, for an empty type Tracker would
+        /// hand over). A tamed creature is named as such, as its loss starts a wait too. watching: the watchlist as the
+        /// cfg spells it.
         /// </summary>
         public string LostLine(string prefab, bool tamed, bool enabled, string watching)
         {
+            string lost = (tamed ? "tamed " : "") + prefab;
             if (IsPending)
-                return LogPrefix + "waiting - lost " + prefab + "; watching " + watching;
+                return LogPrefix + "waiting - lost " + lost + "; watching " + watching;
             if (!enabled)
                 return null;
-            if (tamed)
-                return LogPrefix + "no wait - lost tamed " + prefab;
-            return LogPrefix + "no wait - lost " + prefab + ", not on the watchlist (" + (watching.Length > 0 ? watching : "empty") + ")";
+            if (string.IsNullOrEmpty(prefab))
+                return LogPrefix + "no wait - lost a creature whose type is not known";
+            return LogPrefix + "no wait - lost " + lost + ", nothing is watched";
         }
 
         /// <summary>

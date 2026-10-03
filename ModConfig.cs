@@ -95,14 +95,16 @@ namespace MobTracker
                 "nor takes a creature on the other side of a dungeon entrance, nor acts while AlwaysTrackNearestWatched " +
                 "waits after a loss - that wait chooses instead. The alert itself still shows.");
             AlwaysTrackNearest = config.Bind("Alerts", "AlwaysTrackNearestWatched", false,
-                "When a tracked creature of a watched type is lost - killed, or no longer loaded on your client - wait 5 " +
-                "seconds, then track the nearest creature of any watched type, not only the lost one's, that AlertStarFilter " +
-                "accepts (as the alerts use it), within AlertRadius, on your side of a dungeon entrance and never a tamed one, " +
-                "looking again once a second until there is one. To hunt one kind only, watch only that kind. A watch alert " +
+                "When a tracked creature is lost - killed, no longer loaded on your client, or tamed while tracked (taming a " +
+                "creature tracked wild ends its tracking) - while something is watched, " +
+                "wait 5 seconds, then track the nearest creature of any watched type that AlertStarFilter accepts (as the " +
+                "alerts use it), within AlertRadius, on your side of a dungeon entrance and never a tamed one, looking again " +
+                "once a second until there is one. Any tracked creature's loss starts the wait: one of a type not on the " +
+                "watchlist, or a tamed one, too. To hunt one kind only, watch only that kind. A watch alert " +
                 "during the wait leaves the choice to this, also with AutoTrack on. Tracking something else (by hand or Find " +
                 "area), Stop tracking, turning this off, emptying the watchlist, dying or leaving the world ends the wait. " +
-                "Losing a tamed creature, or one of a type not on the watchlist, or stopping the tracking yourself, never " +
-                "starts one. While on, the log has a line at each loss of a tracked creature and at the end of each wait. " +
+                "Stop tracking, or tracking something else yourself, never starts one. While on, the log has a line at each " +
+                "loss of a tracked creature and at the end of each wait. " +
                 "The window's 'Always track nearest watched' checkbox sets it.");
 
             // Two independent filters: browse every star level while being alerted only for, say, two-star creatures.

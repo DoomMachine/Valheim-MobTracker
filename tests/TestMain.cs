@@ -25,6 +25,7 @@ namespace MobTracker
             RetrackLogTests();
             RefreshTests();
             GuideTests();
+            LostMessageTests();
             PointerTests();
             ListKeyTests();
             LogTests.Run(Check);
@@ -660,29 +661,43 @@ namespace MobTracker
         // "Always track nearest watched": the waiting and cancelling that NearestWatched does around the game's objects.
         private static void RetrackTests()
         {
+            // Lost(prefab, enabled, watchedTypes, now): since 0.8.0 neither the lost creature's type nor its tameness is
+            // an input - any loss starts the wait while something is watched (a player's Greyling, tracked by hand while
+            // Boar and Troll_Summoned were watched, is the second case below).
             var r = new Retrack();
-            r.Lost("Troll", false, true, false, 100f);
+            r.Lost("Troll", false, 2, 100f);
             Check("retrack: with the option off, a lost Troll schedules nothing", !r.IsPending && !r.ShouldLook(200f), "");
-            r.Lost("Deer", true, false, false, 100f);
-            Check("retrack: a lost creature whose type is not watched schedules nothing", !r.IsPending, "");
-            r.Lost("", true, true, false, 100f);
+            r.Lost("Greyling", true, 2, 100f);
+            Check("retrack: a lost creature of a type not watched starts a wait while other types are watched",
+                r.IsPending && r.Prefab == "Greyling", r.Prefab ?? "null");
+            r.Cancel();
+            r.Lost("Deer", true, 0, 100f);
+            Check("retrack: with nothing watched a loss schedules nothing", !r.IsPending && !r.ShouldLook(200f), "");
+            r.Lost("Deer", true, 1, 100f);
+            Check("retrack: one watched type is enough for a wait", r.IsPending && r.Prefab == "Deer", r.Prefab ?? "null");
+            r.Lost("Deer", true, -1, 100f);
+            Check("retrack: a count below zero schedules nothing either", !r.IsPending, "");
+            r.Lost("", true, 2, 100f);
             Check("retrack: no type (a spawn area was tracked) schedules nothing", !r.IsPending, "");
-            r.Lost("Wolf", true, true, true, 100f);
-            Check("retrack: losing a tamed Wolf starts no hunt for a wild one", !r.IsPending && !r.ShouldLook(200f), "");
+            r.Lost(null, true, 2, 100f);
+            Check("retrack: a null type schedules nothing", !r.IsPending, "");
 
-            r.Lost("Troll", true, true, false, 100f);
+            r.Lost("Troll", true, 1, 100f);
             Check("retrack: a lost watched Troll starts a wait", r.IsPending && r.Prefab == "Troll", r.Prefab ?? "null");
             Check("retrack: nothing is looked for during the first 5 seconds", !r.ShouldLook(100f) && !r.ShouldLook(104.99f), "");
             Check("retrack: at 5 seconds it is time to look", r.ShouldLook(105f), "");
             Check("retrack: then once a second, not every frame", !r.ShouldLook(105.5f) && !r.ShouldLook(105.99f) && r.ShouldLook(106f), "");
             Check("retrack: it keeps looking while nothing is found", r.ShouldLook(107f) && r.ShouldLook(108.2f) && r.IsPending, "");
 
-            r.Lost("Troll", true, true, false, 200f);
+            r.Lost("Troll", true, 1, 200f);
             Check("retrack: another loss starts the 5 seconds again", !r.ShouldLook(204f) && r.ShouldLook(205f), "");
-            r.Lost("Troll", false, true, false, 210f);
+            r.Lost("Troll", false, 1, 210f);
             Check("retrack: a loss with the option turned off clears what was pending", !r.IsPending && !r.ShouldLook(300f), "");
+            r.Lost("Troll", true, 1, 220f);
+            r.Lost("Troll", true, 0, 230f);
+            Check("retrack: a loss with nothing watched clears what was pending", !r.IsPending && !r.ShouldLook(300f), "");
 
-            r.Lost("Serpent", true, true, false, 300f);
+            r.Lost("Serpent", true, 1, 300f);
             r.Cancel();
             Check("retrack: Cancel ends the wait (Stop tracking, tracking something else, leaving the world)",
                 !r.IsPending && !r.ShouldLook(400f), "");
@@ -782,7 +797,7 @@ namespace MobTracker
         private static void RetrackLogTests()
         {
             var r = new Retrack();
-            r.Lost("Deer", true, true, false, 100f);
+            r.Lost("Deer", true, 2, 100f);
             string line = r.LostLine("Deer", false, true, "Boar,Deer");
             Check("retrack log: a loss that starts a wait says so, with the watchlist",
                 line == "Always track nearest watched: waiting - lost Deer; watching Boar,Deer", line ?? "null");
@@ -803,19 +818,30 @@ namespace MobTracker
             Check("retrack log: an end line after Cancel still counts from the loss",
                 line == "Always track nearest watched: wait ended after 12 s, nothing taken - Stop tracking", line);
 
-            r.Lost("Wolf", true, true, true, 200f);
-            line = r.LostLine("Wolf", true, true, "Boar,Deer,Wolf");
-            Check("retrack log: losing a tamed creature starts no wait, and says so",
-                line == "Always track nearest watched: no wait - lost tamed Wolf", line ?? "null");
-            r.Lost("Boar_piggy", true, false, false, 300f);
-            line = r.LostLine("Boar_piggy", false, true, "Boar,Deer");
-            Check("retrack log: losing a type not on the watchlist starts no wait, and names the watchlist",
-                line == "Always track nearest watched: no wait - lost Boar_piggy, not on the watchlist (Boar,Deer)", line ?? "null");
+            // Since 0.8.0 a tamed creature's loss and an unwatched type's start a wait too; the line names a tamed one so.
+            r.Lost("Wolf", true, 2, 200f);
+            line = r.LostLine("Wolf", true, true, "Boar,Deer");
+            Check("retrack log: losing a tamed creature starts a wait, and the line names it tamed",
+                line == "Always track nearest watched: waiting - lost tamed Wolf; watching Boar,Deer", line ?? "null");
+            r.Lost("Greyling", true, 2, 300f);
+            line = r.LostLine("Greyling", false, true, "Boar,Troll_Summoned");
+            Check("retrack log: losing a type not on the watchlist starts a wait, and names the watchlist",
+                line == "Always track nearest watched: waiting - lost Greyling; watching Boar,Troll_Summoned", line ?? "null");
+            r.Lost("Boar", true, 0, 350f);
             line = r.LostLine("Boar", false, true, "");
-            Check("retrack log: with nothing watched the line says so",
-                line == "Always track nearest watched: no wait - lost Boar, not on the watchlist (empty)", line ?? "null");
-            r.Lost("Deer", false, true, false, 400f);
+            Check("retrack log: with nothing watched no wait starts, and the line says why",
+                line == "Always track nearest watched: no wait - lost Boar, nothing is watched", line ?? "null");
+            line = r.LostLine("Wolf", true, true, "");
+            Check("retrack log: with nothing watched a tamed loss is named tamed too",
+                line == "Always track nearest watched: no wait - lost tamed Wolf, nothing is watched", line ?? "null");
+            r.Lost("", true, 2, 360f);
+            line = r.LostLine("", false, true, "Boar,Deer");
+            Check("retrack log: a loss of no known type starts no wait, and the line does not blame the watchlist",
+                line == "Always track nearest watched: no wait - lost a creature whose type is not known", line ?? "null");
+            r.Lost("Deer", false, 2, 400f);
             Check("retrack log: with the option off a loss writes nothing", r.LostLine("Deer", false, false, "Boar,Deer") == null, "");
+            Check("retrack log: with the option off a tamed loss writes nothing either", r.LostLine("Wolf", true, false, "Boar,Deer") == null, "");
+            Check("retrack log: with the option off a loss of no known type writes nothing either", r.LostLine("", false, false, "Boar,Deer") == null, "");
 
             // EndReason(enabled, tracking, watching): the first that holds, else a death or leaving the world.
             Check("retrack log: a wait ended by tracking something else says so",
@@ -849,6 +875,17 @@ namespace MobTracker
                 && Rules.GuideHidden(false, false, true, false, false) && Rules.GuideHidden(false, false, false, true, false)
                 && Rules.GuideHidden(false, false, false, false, true), "");
             Check("guide: shown with none of them", !Rules.GuideHidden(false, false, false, false, false), "");
+        }
+
+        // The top-left message at a loss (0.8.0): a creature tracked wild and tamed now ends its tracking as a loss does,
+        // and the message says that it was tamed; a creature killed or gone keeps the message it always had.
+        private static void LostMessageTests()
+        {
+            string line = Rules.LostTrackMessage("Boar *", false);
+            Check("lost message: a creature killed or gone", line == "Lost track of Boar *", line ?? "null");
+            line = Rules.LostTrackMessage("Wolf", true);
+            Check("lost message: a creature tracked wild and tamed now says it was tamed", line == "Lost track of Wolf - it was tamed",
+                line ?? "null");
         }
 
         // The creature list's rows: ShouldRefresh(playerChanged, due, pointerOverWindow, mouseHeld). The case it is for:

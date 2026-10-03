@@ -13,7 +13,7 @@ namespace MobTracker
         public const string PluginId = "com.mobtracker.plugin";
 
         /// <summary>Also MobTracker.csproj's Version; tools/preflight.ps1 checks that the two agree.</summary>
-        public const string Version = "0.7.1";
+        public const string Version = "0.8.0";
 
         internal static ManualLogSource Log;
 

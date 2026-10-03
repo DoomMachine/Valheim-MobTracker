@@ -210,12 +210,15 @@ namespace MobTracker
             Eq("log: a creature seen dead, the option on", EventLines.TrackLost("Boar (Boar)", true, false, true),
                 "Track: lost Boar (Boar) - seen dead on this client");
             Eq("log: a creature gone, tamed, the option off", EventLines.TrackLost("Wolf (Wolf)", false, true, false),
-                "Track: lost Wolf (Wolf) - gone from this client (out of range, despawned, or killed while another player's game ran it); it was tamed; Always track nearest watched is off");
+                "Track: lost Wolf (Wolf) - gone from this client (killed, despawned, or out of range); it was tamed; Always track nearest watched is off");
             Eq("log: no local player ends a tracking", EventLines.TrackNoPlayer("Boar (Boar)"),
                 "Track: no local player (dead and removed, or left the world) - ends the tracking of Boar (Boar)");
             Eq("log: an area reached", EventLines.TrackReached("Troll spawn area"), "Track: reached Troll spawn area (within 30 m on the flat)");
-            Eq("log: a tracked creature tamed", EventLines.TrackTamed("Wolf (Wolf)"),
-                "Track: Wolf (Wolf) is tamed now - losing it starts no Always track nearest watched wait");
+            Eq("log: a creature tracked wild and tamed now - the tracking ends, as at a loss (0.8.0), the option on",
+                EventLines.TrackTamed("Boar (Boar)", true), "Track: Boar (Boar) is tamed now - the tracking ends, as at a loss");
+            Eq("log: a creature tracked wild and tamed now, the option off - said as the lost line says it",
+                EventLines.TrackTamed("Wolf (Wolf)", false),
+                "Track: Wolf (Wolf) is tamed now - the tracking ends, as at a loss; Always track nearest watched is off");
             Eq("log: the guide line names every reason that holds", EventLines.Guide(true, true, false, false, false, true),
                 "Guide: hidden - HUD hidden (Ctrl+F3), teleporting");
             Eq("log: every guide reason", EventLines.Guide(true, true, true, true, true, true),

@@ -4,12 +4,12 @@ namespace MobTracker
 {
     /// <summary>
     /// The verbose events no one calls about - states other code works out every frame - written when they change, never
-    /// per frame: the local player there or not, the Alerts: star filter in effect, the guide hidden or shown, the tracked
-    /// creature tamed. Read once a frame in Update, so a change is written up to a frame after it happened. After a
-    /// tracking starts or ends (Tracker.Generation), the guide and tamed state are taken as they are two frames later,
-    /// not reported: Tracker works the guide out in its LateUpdate; the state found when VerboseLog is turned on is taken
-    /// the same way, unreported. Also says, with VerboseLog off too, that
-    /// MobTracker.log stopped and why (LogFile.ReportNotice).
+    /// per frame: the local player there or not, the Alerts: star filter in effect, the guide hidden or shown. Read once a
+    /// frame in Update, so a change is written up to a frame after it happened. After a tracking starts or ends
+    /// (Tracker.Generation), the guide state is taken as it is two frames later, not reported: Tracker works the guide
+    /// out in its LateUpdate; the state found when VerboseLog is turned on is taken the same way, unreported. A tracked
+    /// creature tamed is not watched for here: since 0.8.0 that ends the tracking, and Tracker says so itself
+    /// (Events.Tamed). Also says, with VerboseLog off too, that MobTracker.log stopped and why (LogFile.ReportNotice).
     /// </summary>
     internal class LogObserver : MonoBehaviour
     {
@@ -19,7 +19,6 @@ namespace MobTracker
         private int _generation = -1;
         private int _wait;
         private bool _guideHidden;
-        private bool _tamed;
 
         private void Update()
         {
@@ -58,10 +57,7 @@ namespace MobTracker
             {
                 _wait--;
                 if (_wait == 0)
-                {
                     _guideHidden = Tracker.GuideHiddenNow;
-                    _tamed = Tracker.TargetTamed;
-                }
                 return;
             }
 
@@ -69,12 +65,6 @@ namespace MobTracker
             {
                 _guideHidden = Tracker.GuideHiddenNow;
                 Events.Guide(_guideHidden);
-            }
-            if (Tracker.IsTrackingCreature && Tracker.TargetTamed != _tamed)
-            {
-                _tamed = Tracker.TargetTamed;
-                if (_tamed)
-                    Events.Tamed();
             }
         }
     }

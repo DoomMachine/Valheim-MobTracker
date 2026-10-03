@@ -38,7 +38,10 @@ https://github.com/DoomMachine/Valheim-MobTracker
   is missing or incomplete (flying/swimming targets, cliffs) the arrow shows as well. Beyond 250 m
   only the arrow shows. The arrow, the line and the "Tracking:" label hide while you hide the HUD (Ctrl+F3),
   during a cutscene (sleeping in a bed is one), while you are dead and during a teleport, and come back after it (after a
-  death, see Known limits; a creature a portal leaves far behind is lost on the way).
+  death, see Known limits; a creature a portal leaves far behind is lost on the way). Taming the creature you track - by
+  you or another player - ends its tracking as a loss does, and "Lost track of" says that it was tamed. One already
+  tamed when you began tracking it is not lost by that: like any other, it stays tracked until it is killed, no longer
+  loaded, or you stop or replace the tracking.
 - **View: nearby / all types** switches the list to every creature type the game has (including
   other mods' creatures), so you can Watch something that is not around. Search works there too.
 - **Find area** (in the all-types view) works out where that creature's world-spawn rule can be met -
@@ -76,22 +79,24 @@ https://github.com/DoomMachine/Valheim-MobTracker
   afresh, whichever character you play; dying does not. Turn on `KeepBetweenSessions` to keep them from one
   session to the next.
 - **Always track nearest watched** (a checkbox in the window, off by default) keeps you on the creatures you watch, for
-  their drops. When the creature you are tracking is of a watched type and is lost - killed, or no longer loaded on your
-  client (out of range, despawned) - the tracker says "Lost track of" as always, waits 5 seconds, then points at the
-  nearest creature of any watched type that passes the watch alert's filters: the **Alerts:** stars, `AlertRadius`,
-  never a tamed one, and only on your side of a dungeon entrance. Watching Deer and Boar, it takes whichever Deer or
-  Boar is nearest, whatever kind you lost, and the "Tracking:" label names it. A creature you watch only to be warned of
-  it can be taken too, so to hunt one kind only, watch only that kind. If there is none yet, it keeps looking once a
-  second, without a message, and points at the nearest one as soon as one turns up. It chooses only after a loss: it
-  does not move on to a nearer watched creature that turns up later, and when the one it took is lost too, it waits and
-  chooses again. A watch alert during the wait still shows and dings, but leaves the choice to the wait, also with
-  Auto-track on; with an `AlertRadius` set, a creature that alerted and has walked out of the radius by then is taken
-  only once it is back inside, and a creature that alerted during a wait that Stop tracking or turning the option off
-  ends without a take is not auto-tracked later, unless it alerts again after a death or after leaving the world. A type
-  you watch or unwatch during the wait counts from its next look. The wait ends when you track something else (by hand
-  or Find area), turn the option off, unwatch every type, die or leave the world. **Stop tracking** stays in the window
-  (F7) while it waits, and calls it off; nothing else on screen shows that it is waiting. Losing a tamed creature or one
-  of a type you do not watch, or stopping the tracking yourself, never starts one. With the option on,
+  their drops. When the creature you are tracking is lost - killed, no longer loaded on your client (out of range,
+  despawned), or tamed while you track it (see **Track**) - while you watch at least one type, the tracker says "Lost
+  track of" as always, waits 5 seconds, then points at the nearest creature of any watched type that passes the watch
+  alert's filters: the **Alerts:** stars, `AlertRadius`, never a tamed one, and only on your side of a dungeon entrance.
+  Any tracked creature's loss starts the wait, whatever its type, stars or tameness: one of a kind you do not watch,
+  tracked by hand for a while, or a tamed one - also a pet you track and then leave behind until it is no longer loaded.
+  Watching Deer and Boar, it takes whichever Deer or Boar is nearest, whatever kind you lost, and the "Tracking:" label
+  names it. A creature you watch only to be warned of it can be taken too, so to hunt one kind only, watch only that
+  kind. If there is none yet, it keeps looking once a second, without a message, and points at the nearest one as soon
+  as one turns up. It chooses only after a loss: it does not move on to a nearer watched creature that turns up later,
+  and when the one it took is lost too, it waits and chooses again. A watch alert during the wait still shows and dings,
+  but leaves the choice to the wait, also with Auto-track on; with an `AlertRadius` set, a creature that alerted and has
+  walked out of the radius by then is taken only once it is back inside, and a creature that alerted during a wait that
+  Stop tracking or turning the option off ends without a take is not auto-tracked later, unless it alerts again after a
+  death or after leaving the world. A type you watch or unwatch during the wait counts from its next look. The wait ends
+  when you track something else (by hand or Find area), turn the option off, unwatch every type, die or leave the world.
+  **Stop tracking** stays in the window (F7) while it waits, and calls it off; nothing else on screen shows that it is
+  waiting. Stopping the tracking yourself, or tracking something else, never starts one. With the option on,
   `BepInEx/LogOutput.log` gets a line at each loss of a tracked creature - whether it waits and, if not, why - and one
   when a wait ends: what it took, or, as far as it can tell, why it took nothing; with `VerboseLog` on, also what its
   looks found while they took nothing (see **Logs**).
@@ -151,7 +156,7 @@ file lists its sections by name.
 | `Alerts.AlertVolume` | `0.8` | Ding volume; the game's Volume and Effect volume settings apply on top of it |
 | `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor takes a creature on the other side of a dungeon entrance, nor acts while Always track nearest watched waits after a loss - that wait chooses instead |
 | `Alerts.AlertStarFilter` | `All` | The alerts' star filter (also the **Alerts:** row), written the same way: e.g. `OneStar, TwoStars` alerts only for one- and two-star creatures. A text setting since 0.4.0, like `ListStarFilter`, except that a change in the window or in ConfigurationManager takes effect only once the filter has stayed the same for 1.5 seconds (see Known limits). Back to `All` at every session unless `KeepBetweenSessions` is on; with it on, edit the file by hand with the game closed, as for `Watchlist` |
-| `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature of a watched type, not a tamed one, is lost, track the nearest creature of any watched type that passes the watch alert's filters and is on your side of a dungeon entrance: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window). With it on, the log says what each loss and each wait did |
+| `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature is lost while something is watched - any creature, also one of a type you do not watch or a tamed one, or one tamed while you track it - track the nearest creature of any watched type that passes the watch alert's filters (never a tamed one) and is on your side of a dungeon entrance: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window). Stop tracking, or tracking something else, never starts it. With it on, the log says what each loss and each wait did |
 | `Logging.ErrorLog` | `true` | Copy MobTracker's warnings and errors, an error of its code that the game or BepInEx reports and a value in this file BepInEx could not read, to `BepInEx/MobTracker.log`, with the date, time and frame of each; the game start before is kept as `MobTracker-prev.log` (see **Logs**). `LogOutput.log` gets MobTracker's lines either way. With this and `VerboseLog` off from the start of the game, neither file is touched |
 | `Logging.VerboseLog` | `false` | Also write a line for each event listed under **Logs** to `MobTracker.log` and `LogOutput.log`; on, `MobTracker.log` gets every MobTracker line, whatever `ErrorLog` says. Changed in ConfigurationManager, it takes effect at once, also while the game runs. Edited in this file by hand, it is read only at the next start of the game - edit with the game closed: while it runs, any setting the game saves writes its own values back over the file. A setting dragged or typed in ConfigurationManager writes one line at once and one more when it holds still |
 
@@ -159,10 +164,11 @@ file lists its sections by name.
 
 - The list, alerts and tracking see only what your client has loaded (see **F7**); a creature near the edge of
   that range can be out of sight.
-- In multiplayer, for a creature another player's game runs: it stays listed through its death animation, and
-  "Lost track of" comes only when it is removed; and its tamed state reaches your game up to about a second late,
-  so with an `AlertRadius` set one tamed just before it comes within the radius can alert, and losing one just
-  tamed can start Always track nearest watched.
+- In multiplayer, for a creature another player's game runs: it stays listed through its death animation, and "Lost
+  track of" comes only when it is removed; and its tamed state reaches your game up to about a second late, so with an
+  `AlertRadius` set one tamed just before it comes within the radius can alert, Always track nearest watched can take
+  one tamed just before its look, and one tamed just before you start tracking it can read as wild then, so its tracking
+  ends, as at a taming, up to about a second later.
 - A watched creature inside a dungeon still alerts while you are outside it, and the other way round, but is not
   auto-tracked; with `AlertRadius` at 0 it has then had its alert, so going in does not alert it again.
 - Tracking usually ends when the game removes your body, about 10 seconds after you die: track the creature again after
@@ -205,16 +211,15 @@ file lists its sections by name.
   the same time writes none, and says so in its own `LogOutput.log`. A folder written in another spelling - shortened,
   or with `/` in place of `\` - is not replaced by `<game>` or `<user>`: look before you share the file.
 - `VerboseLog` does not say why a Watch or Find area click was dropped when the list closed in the same frame, nor why
-  the guide stayed up when the game's cutscene test fails, nor which of Escape and the gamepad's B closed the list,
-  nor why a watched creature did not alert for a reason other than the four its line names (not on the network yet,
-  tamed, its stars, outside `AlertRadius`). It writes nothing when the search changes the list's rows (the search text
-  is never written), when the once-a-second alert check finds nothing watched, when another mod (TomTom, say) takes
-  the map's delete before MobTracker does, or when that delete finds no area pin in reach. What it learns by
-  watching - the guide hidden or shown, a tracked creature tamed, the local player there or not, the **Alerts:**
-  stars in effect - it writes up to a frame after it happened, except the state it finds when `VerboseLog` is turned
-  on and the guide and tamed state in a tracking's first two frames, which it takes as they are without a line: a
-  guide already hidden when you start tracking (the HUD hidden with Ctrl+F3, say) gets no `Guide: hidden` line. The
-  ground path's lines come only within 250 m, where the line is built.
+  the guide stayed up when the game's cutscene test fails, nor which of Escape and the gamepad's B closed the list, nor
+  why a watched creature did not alert for a reason other than the four its line names (not on the network yet, tamed,
+  its stars, outside `AlertRadius`). It writes nothing when the search changes the list's rows (the search text is never
+  written), when the once-a-second alert check finds nothing watched, when another mod (TomTom, say) takes the map's
+  delete before MobTracker does, or when that delete finds no area pin in reach. What it learns by watching - the guide
+  hidden or shown, the local player there or not, the **Alerts:** stars in effect - it writes up to a frame after it
+  happened, except the state it finds when `VerboseLog` is turned on and the guide's state in a tracking's first two
+  frames, which it takes as it is without a line: a guide already hidden when you start tracking (the HUD hidden with
+  Ctrl+F3, say) gets no `Guide: hidden` line. The ground path's lines come only within 250 m, where the line is built.
 - While `com.mobtracker.plugin.cfg` cannot be written (read-only, or held by another program), a setting changed in the
   window or in ConfigurationManager takes effect but is not in the file: the log says so once, as a warning, and says
   when a later change saves it again - the reset of **One game session** counts as a change. The next save that works -
@@ -262,6 +267,19 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **0.8.0** - Always track nearest watched starts its wait after the loss of any tracked creature while something is
+  watched: one of a kind you do not watch, tracked by hand for a while, or a tamed one, too. And taming the creature you
+  track - by you or another player, when it was wild as you began tracking it - now ends its tracking as a loss does
+  ("Lost track of" says that it was tamed), so the wait starts then as well. Both were asked for after a 0.7.0 play
+  session, in which a creature of another kind, tracked by hand, was lost and the tracker then pointed at nothing.
+  Before, only a creature of a watched type, not a tamed one, started the wait, and a creature tamed while tracked
+  stayed tracked. The wait still takes only a creature the watch alert's filters pass, never a tamed one, and Stop
+  tracking or tracking something else still never starts it. With the option on, the log's loss line says `waiting` for
+  each such loss, naming a tamed creature as tamed, and `no wait` when nothing is watched; with `VerboseLog` on, the
+  line for a creature tamed while tracked says that its tracking ends, no longer that losing it starts no wait, and the
+  line for a tracked creature gone from your client reads `gone from this client (killed, despawned, or out of range)`,
+  no longer blaming another player's game for a kill of your own. The unit tests and the safety checks hold the new
+  rules, with planted defects that put each old gate back or keep a tamed creature tracked. Not yet played in the game.
 - **0.7.1** - fixes. While `com.mobtracker.plugin.cfg` cannot be written (read-only, or held by another program), a
   setting changed in the window or in ConfigurationManager now takes effect in full, and without an error. Before, a
   click in the window threw an error, ConfigurationManager logged one, the watchlist or star filter changed could stay
@@ -271,8 +289,9 @@ The copyright holder is DoomMachine (see `LICENSE`).
   that works - a later change, or quitting the game - writes every change made meanwhile. With `VerboseLog` on, Find
   area's line counts the frame its search starts in (it said one frame fewer), and the Auto-track line names a dungeon
   entrance between you and the creature before Always track nearest watched's wait, as Auto-track itself tests them. The
-  safety checks also hold where the Auto-track and tracking lines are written, and catch more planted defects. Not yet
-  played in the game.
+  safety checks also hold where the Auto-track and tracking lines are written, and catch more planted defects. Ran
+  through short play sessions without errors, in which `VerboseLog` was turned on in ConfigurationManager while the game
+  ran; the cfg could be written throughout, so whether its fixes work was not checked there.
 - **0.7.0** - logs, asked for after 0.6.0's release. Every MobTracker warning and error, and an error of MobTracker's
   own code that the game or BepInEx reports (see Known limits), also goes to `BepInEx/MobTracker.log`, each entry with
   its date, time and frame (`ErrorLog`, on by default); the game start before is kept as `MobTracker-prev.log`.

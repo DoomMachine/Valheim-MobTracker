@@ -75,7 +75,8 @@ namespace MobTracker
 
         /// <summary>
         /// Tracker.LateUpdate, every frame, before its own tests: says why the tracking is about to end - no player, or the
-        /// creature lost (the same test as the lost block's, which preflight holds to its exact shape).
+        /// creature lost (the same test as the lost block's, which preflight holds to its exact shape). A creature tracked
+        /// wild and tamed now is said by Tamed, from the lost block's own test (Tracker.TamedNow).
         /// </summary>
         public static void TrackEnding(Player player)
         {
@@ -141,11 +142,19 @@ namespace MobTracker
             catch (Exception e) { Failed("Guide", e); }
         }
 
+        /// <summary>
+        /// Tracker.TamedNow, in the frame it sees a creature tracked wild turn tamed (0.8.0): that ends the tracking as a
+        /// loss does, so this line comes before Stop's, as TrackEnding's lost line does, and a wait may begin.
+        /// </summary>
         public static void Tamed()
         {
             if (!ModLog.Verbose)
                 return;
-            try { ModLog.Event(EventLines.TrackTamed(Tracker.Tracked)); }
+            try
+            {
+                _lastEmptyLook = null; // a wait may begin: its first empty look is written
+                ModLog.Event(EventLines.TrackTamed(Tracker.Tracked, ModConfig.AlwaysTrackNearest.Value));
+            }
             catch (Exception e) { Failed("Tamed", e); }
         }
 

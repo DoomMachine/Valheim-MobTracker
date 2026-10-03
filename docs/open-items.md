@@ -4,7 +4,7 @@ The one list of what is untested, unverified, open or only an idea for MobTracke
 again. It lives with the code, so each release can check it. What a player meets is in the README's "Known limits";
 what each release changed is in its "History".
 
-As of **0.7.1**.
+As of **0.8.0**.
 
 ## Keeping it up to date
 
@@ -24,19 +24,21 @@ work, **OQ** open questions - behaviour choices discussed and not taken (yet).
 
 ## Not yet tried in play
 
-0.7.1 has not been played yet (LT-19). 0.7.0 ran through short play sessions without errors, in which `MobTracker.log`
-was opened at each start, closed at each quit and kept as `MobTracker-prev.log` at the next start; its logging settings
-were not changed in them (LT-17). In one, Always track nearest watched took a creature of another watched type than the
-one lost, and each of its waits ended in one `took` line (LT-16). 0.6.0 ran through a play session without errors, but
-its new rule did not act in it: the log has no `Always track nearest watched:` line. 0.5.1 ran through a long play
-session without errors, in which Always track nearest watched was seen acting (LT-4); none of LT-15's checks was
-confirmed in it. 0.5.0 ran through a long play session, with several logouts, without errors: at its first world entry
-it set back the **Alerts:** filter 0.4.1 had saved (LT-14), but nothing was watched in it, so a reset at a logout was
-not seen. 0.4.1 - and with it the changes of 0.4.0 and 0.3.1 - ran through a long play session without errors, in which
-a watch alert came, the `AlertStarFilter` held several categories at once, types were watched and unwatched and the
-guide mode was switched; none of the checks below was run in it as written. 0.3.0 and 0.2.0 each ran through play
-sessions without errors; Always track nearest watched (0.3.0) was first reported acting in 0.5.1's session, not yet
-checked for taking the nearest, and 0.2.0's new features have not been confirmed in the game (LT-2, LT-4 to LT-6).
+0.8.0 has not been played yet (LT-20). 0.7.1 ran through short play sessions without errors, in which `VerboseLog` was
+turned on while the game ran; the cfg could be written throughout, so none of LT-19's checks was run in them. 0.7.0 ran
+through short play sessions without errors, in which `MobTracker.log` was opened at each start, closed at each quit and
+kept as `MobTracker-prev.log` at the next start; its logging settings were not changed in them (LT-17). In one, Always
+track nearest watched took a creature of another watched type than the one lost, and each of its waits ended in one
+`took` line (LT-16). 0.6.0 ran through a play session without errors, but its new rule did not act in it: the log has no
+`Always track nearest watched:` line. 0.5.1 ran through a long play session without errors, in which Always track
+nearest watched was seen acting (LT-4); none of LT-15's checks was confirmed in it. 0.5.0 ran through a long play
+session, with several logouts, without errors: at its first world entry it set back the **Alerts:** filter 0.4.1 had
+saved (LT-14), but nothing was watched in it, so a reset at a logout was not seen. 0.4.1 - and with it the changes of
+0.4.0 and 0.3.1 - ran through a long play session without errors, in which a watch alert came, the `AlertStarFilter`
+held several categories at once, types were watched and unwatched and the guide mode was switched; none of the checks
+below was run in it as written. 0.3.0 and 0.2.0 each ran through play sessions without errors; Always track nearest
+watched (0.3.0) was first reported acting in 0.5.1's session, not yet checked for taking the nearest, and 0.2.0's new
+features have not been confirmed in the game (LT-2, LT-4 to LT-6).
 
 Single player is enough except for LT-7 and LT-11's second check (a dedicated server). Where creatures of a given star
 level are needed, the console's `spawn` command (with `devcommands` on) makes them: level 1 is no star, 2 one star, 3
@@ -84,6 +86,10 @@ from its lines as well: what was tracked, lost and taken, each alert and what Au
 `spawn` (with `devcommands` on) makes the creatures. Copy `BepInEx/LogOutput.log` before the game starts again (each
 start rewrites it), and read its `Always track nearest watched:` lines.
 
+Since 0.8.0 the loss of any tracked creature starts the wait while something is watched, also one of a type not watched
+or a tamed one: the two checks of the older rule (`no wait - lost Neck, not on the watchlist (Boar)` and `no wait - lost
+tamed <type>`) are gone from here, and LT-20 checks the new one.
+
 - [ ] The log says `MobTracker 0.6.0 loaded`.
 - [ ] Watch `Deer` and `Boar`, tick **Always track nearest watched**, and track a Deer that has a Boar nearer than any
   other Deer; kill it. "Lost track of" shows, and about 5 seconds later the arrow and the "Tracking:" label are on that
@@ -97,10 +103,6 @@ start rewrites it), and read its `Always track nearest watched:` lines.
 - [ ] Unwatch Deer during the wait with Boar still watched: it still takes a Boar. Unwatch both: nothing is taken, and
   the log says `wait ended after <s> s, nothing taken - nothing is watched`.
 - [ ] Click **Stop tracking** during the wait: nothing is taken, and the log says `... nothing taken - Stop tracking`.
-- [ ] With only `Boar` watched, track a wild `Neck` by hand and kill it: no wait, and the log says `no wait - lost Neck,
-  not on the watchlist (Boar)`.
-- [ ] Lose a tamed creature of a watched type (kill it, or walk out of its range): no wait, and the log says `no wait -
-  lost tamed <type>`.
 - [ ] With the option off, a tracked creature's loss writes no `Always track nearest watched:` line.
 - [x] In the whole log, each `waiting` line is followed by one `took` or `wait ended` line before the next `waiting`
   line (the last one may stand alone if the game was closed during a wait), and no exception names MobTracker.
@@ -125,8 +127,10 @@ Copy `BepInEx/MobTracker.log`, `MobTracker-prev.log` and `LogOutput.log` before 
 - [ ] Turn `VerboseLog` on in ConfigurationManager: both logs get `Logging: VerboseLog turned on - ...` and a
   `Settings:` line. Then open the list, track a creature, let a watched one alert, click Find area: each has its
   `List:`, `Track:`, `Alert:`, `Auto-track:`, `Ding:` and `Find area:` lines in both logs, in the order they happened.
-- [ ] With `VerboseLog` on, kill a tracked creature: `Track: lost <name> (<prefab>) - seen dead on this client`. Track
-  another and walk away until it unloads: `... - gone from this client (...)`.
+- [ ] With `VerboseLog` on, kill a tracked creature:
+  `Track: lost <name> (<prefab>) - gone from this client (killed, despawned, or out of range)`, or
+  `seen dead on this client` for a creature with a death animation. Track another and walk away until it unloads: the
+  same `gone from this client` line.
 - [ ] With `VerboseLog` on, drag `ArrowSize` in ConfigurationManager: one `Setting: Tracking.ArrowSize` line at once
   and one more about a second after you let go, not one per step.
 - [ ] With `VerboseLog` on, press F7 while typing in chat: `List: F7 pressed - the list stays shut: you are typing ...`.
@@ -143,6 +147,47 @@ Copy `BepInEx/MobTracker.log`, `MobTracker-prev.log` and `LogOutput.log` before 
 - [x] Quit the game normally: the last line of `MobTracker.log` is `MobTracker.log closed - the game is quitting`
   (LT-18).
 - [ ] Nothing in `MobTracker.log` names your Windows user folder in full, a player, a character or a world.
+
+### LT-20 0.8.0: the loss of any tracked creature, and a taming
+
+`spawn` (with `devcommands` on) makes the creatures. `tame` (also with `devcommands`) tames, in single player, every
+tameable creature loaded, however far - its 20 m is not used - and the world keeps them tamed: use a test world, and
+spawn the wild creatures after it. A tamed creature can attack a wild one nearby: spawn the wild Boar out of its sight,
+or after the loss, so that it is alive when the wait looks. Copy `BepInEx/LogOutput.log` before the game starts again,
+and read its `Always track nearest watched:` lines.
+
+- [ ] The log says `MobTracker 0.8.0 loaded`.
+- [ ] With only `Boar` watched and **Always track nearest watched** ticked, track a wild `Neck` by hand, with a Boar
+  around, and kill it: "Lost track of" shows, about 5 seconds later the arrow and the "Tracking:" label are on the
+  nearest Boar, and the log has `waiting - lost Neck; watching Boar`, then `took Boar at <m> m, 5 s after losing Neck`.
+- [ ] The same, but walk away until the Neck is no longer loaded: the same `waiting` line, and a `took` line once a Boar
+  is loaded where you are.
+- [ ] With no Boar around after the Neck's loss: after "Lost track of", nothing on screen shows the wait,
+  **Stop tracking** is still in the window, and when a Boar is spawned the arrow goes to it; the `took` line's seconds
+  say how long that took.
+- [ ] Tame a Wolf (`tame`), then spawn a Boar; track the Wolf by hand: it stays tracked while it is loaded and alive,
+  tamed before its tracking began. Walk away until it is no longer loaded (or, with PvP on, kill it): the log has
+  `waiting - lost tamed Wolf; watching Boar`, and a wild Boar is taken once one is loaded where you are.
+- [ ] Tame a Boar (`tame`), then spawn a wild one farther off; after a loss the wait takes the wild one, never the tamed
+  one.
+- [ ] Track a wild Boar by hand and tame it while it is tracked (`tame`, or by feeding it), then spawn a wild Boar:
+  "Lost track of Boar - it was tamed" shows at the taming, the log has `waiting - lost tamed Boar; watching Boar`, and
+  the arrow goes to the wild Boar once it is there, never to the one just tamed; with `VerboseLog` on,
+  `Track: Boar (Boar) is tamed now - the tracking ends, as at a loss` comes before the `waiting` line.
+- [ ] With the option off, track a wild Boar and tame it: "Lost track of Boar - it was tamed" shows, the tracking ends,
+  and the log has no `Always track nearest watched:` line.
+- [ ] Track a watched creature outside the **Alerts:** stars by hand and kill it: a wait starts, and it takes only a
+  creature inside the stars.
+- [ ] With nothing watched and the option ticked, kill a tracked creature: `no wait - lost <type>, nothing is watched`.
+- [ ] While a creature of a type not watched is tracked: **Stop tracking**, a row's Track on another creature and Find
+  area each write no `waiting` line.
+- [ ] With Auto-track on, kill a Neck tracked by hand and let a watched creature alert within the 5 seconds: the alert
+  shows and dings but does not take the arrow (with `VerboseLog` on: `Auto-track: not taken - Always track nearest
+  watched is waiting ...`), and the `took` line names the nearest.
+- [ ] Through a portal that leaves a creature of a type not watched, tracked by hand, behind: after the arrival the
+  arrow goes to the nearest watched creature there, and the `took` line names it.
+- [ ] In the whole log, each `waiting` line is followed by one `took` or `wait ended` line before the next `waiting`
+  line (the last one may stand alone if the game was closed during a wait), and no exception names MobTracker.
 
 ### LT-1 0.4.1's fixes
 
@@ -376,10 +421,10 @@ no player, and say so.
 
 ### OI-6 A log listener that throws at quit
 
-Since 0.7.1, `OnDestroy` first retries a save of the cfg that failed, and that retry's line goes through BepInEx's log
-before `MobTracker.log` is closed. A log listener of another plugin that threw on that line would end `OnDestroy` there,
-leaving `MobTracker.log` without its closing line. No such listener is known; guarding the retry is a hardening for a
-later release.
+Since 0.7.1, `OnDestroy` first retries a save of the cfg that failed; when that retry works, its line goes through
+BepInEx's log before `MobTracker.log` is closed. A log listener of another plugin that threw on that line would end
+`OnDestroy` there, leaving `MobTracker.log` without its closing line. No such listener is known; guarding the retry is a
+hardening for a later release.
 
 **Safety checks**
 
@@ -464,9 +509,9 @@ states one, the item says so.
 | FW-3 | `GuideMode = GroundPath` holds the navigation tiles | See FW-3. |
 | FW-1, FW-2 | The window's place not kept; GUI scale | See FW-1 and FW-2. |
 | KL-11 | Find area's limits | Sub-biomes and the game's corner biome test: see FW-5 and FW-6. The rest is how Find area works: it tells the land from the world seed, not from the loaded ground, and the terrain it cannot check (slope, lava, player bases, water depth) is known only where the land is loaded. |
-| KL-12 | Always track nearest watched: its rules | Chosen when it was made (0.3.0), and each could change if players ask; the dungeon side (0.3.1) and the settled **Alerts:** stars (0.4.1) are fixes. Since 0.6.0 it takes the nearest creature of any watched type, not only of the lost one's (asked for after play); every watch alert during its wait leaves the choice to it, and unwatching the lost type no longer ends the wait (unwatching every type does). A setting for the lost type only would be a new feature; watching only that type does much the same for the re-track, at the cost of the other types' alerts. Taking a creature that alerted during the wait and then left the `AlertRadius` would need the wait to remember that creature. |
+| KL-12 | Always track nearest watched: its rules | Chosen when it was made (0.3.0), and each could change if players ask; the dungeon side (0.3.1) and the settled **Alerts:** stars (0.4.1) are fixes. Since 0.6.0 it takes the nearest creature of any watched type, not only of the lost one's (asked for after play); every watch alert during its wait leaves the choice to it, and unwatching the lost type no longer ends the wait (unwatching every type does). A setting for the lost type only would be a new feature; watching only that type does much the same for the re-track, at the cost of the other types' alerts. Taking a creature that alerted during the wait and then left the `AlertRadius` would need the wait to remember that creature. Since 0.8.0 the loss of any tracked creature starts the wait while something is watched - one of a type not watched, or a tamed one, too - and taming the tracked creature ends its tracking as a loss does (asked for after play; OQ-3 for the first). |
 | KL-26 | `MobTracker.log`'s reach | An error nobody caught comes through BepInEx's "Unity Log" source, so `UnityLogListening` must be on and only main-thread messages arrive; a Unity log callback of MobTracker's own would remove the setting's part, as a second capture route (FW-9). The 5 MB cap keeps the next start's copy to -prev small (OQ-9). A second copy of the game fails at the open and touches nothing (OQ-11). The folder scrub replaces full spellings only. |
-| KL-28 | A cfg that cannot be written | MobTracker saves it itself since 0.7.1, after each change; while it cannot be written, changes take effect but wait for the next save that works (a later change, or quitting the game), and are lost if none does. BepInEx writes the file in place, emptying it as it opens it, so a save that fails part-way (a full disk, the game killed mid-save) can leave it cut short: while the game runs, the next save that works rewrites it from the settings in use; after the game was killed mid-save, the settings cut off are back at their defaults at the next start. Since 0.7.1 the game's start writes it once, not at each setting read. Writing elsewhere (a second file, the registry) would leave two places a setting lives. |
+| KL-28 | A cfg that cannot be written | MobTracker saves it itself since 0.7.1, after each change; while it cannot be written, changes take effect but wait for the next save that works (a later change, or quitting the game), and are lost if none does. BepInEx writes the file in place, emptying it as it opens it, so a save that fails part-way (a full disk, the game killed mid-save) can leave it cut short: while the game runs, the next save that works rewrites it from the settings in use; after the game was killed mid-save, the settings cut off are back at their defaults at the next start, and one cut part-way through its value keeps the part written when that still reads as a value. Since 0.7.1 the game's start writes it once, not at each setting read. Writing elsewhere (a second file, the registry) would leave two places a setting lives. |
 | KL-27 | What `VerboseLog` does not say yet | See FW-9; the README names each of its items but the last, which KL-26's limit covers. States it learns by watching are read once a frame, after the code that changes them (Tracker works the guide out in its `LateUpdate`), and taken as they are, without a line, when `VerboseLog` is turned on and in each tracking's first two frames. |
 | KL-24 | Tracking usually ends at a death | The game removes the body about 10 seconds after a death, and with it the local player the tracker follows (a respawn at once may carry it on: LT-9); OI-4 asks whether tracking should carry on after the respawn. |
 
@@ -523,9 +568,11 @@ The watchlist matches prefab names exactly, in any case: `Greydwarf` does not co
 
 ### KL-20 Always track nearest watched after a creature tracked by hand
 
-A wait starts even when the lost creature, tracked by hand, was outside the **Alerts:** stars; it then takes only
-creatures inside them. Whether it should start at all then is an open design question. A creature of a type you do not
-watch, tracked by hand, starts no wait, even with other types watched; the log's `no wait` line says so.
+A wait starts whatever the lost creature, tracked by hand, was: outside the **Alerts:** stars, of a type you do not
+watch, or tamed (the last two since 0.8.0) - and, since 0.8.0, taming it while you track it is a loss too. It then takes
+only a creature a watch alert would take - of a watched type, inside the stars, never a tamed one - so after such a loss
+the arrow can go to a creature of quite another kind than the one you followed, or wait until one turns up. The README
+says so where it describes Always track nearest watched.
 
 ### KL-21 List details
 
@@ -616,18 +663,12 @@ jump in the middle of a chase.
 The other answer: while it tracks a creature it took itself, it moves to any nearer watched creature, at once or after
 a margin or a delay that stops the arrow flicking between two creatures at about the same distance.
 
-### OQ-3 A creature of an unwatched type tracked by hand
-
-Now: a wait starts only when the lost creature's type is watched. Track a Neck by hand while watching Deer and Boar,
-and its death points you at nothing (the log's `no wait` line says why).
-The other answer: any tracked creature's loss starts a wait while something is watched. Related: a lost creature of
-a watched type tracked by hand outside the **Alerts:** stars does start a wait (KL-20).
-
 ### OQ-4 Keeping the choice to the lost creature's type
 
 Now: since 0.6.0 Always track nearest watched takes the nearest creature of any watched type; before, it looked only
 for the lost creature's type. Watching only that type does much the same, at the cost of the other types' alerts.
-The other answer: a setting that keeps the choice to the lost creature's type, as before 0.6.0.
+The other answer: a setting that keeps the choice to the lost creature's type when that type is watched, as before
+0.6.0.
 
 ### OQ-5 Choices 0.6.0 made with the change
 
@@ -825,8 +866,35 @@ it at most once a minute, with a count).
 - **Always track nearest watched takes the nearest creature of any watched type** (0.6.0), and every watch alert during
   its wait leaves the choice to it; to hunt one kind only, watch only that kind. It chooses only after a loss: it does
   not move on to a nearer creature while the one it took is tracked.
+- **The loss of any tracked creature starts Always track nearest watched's wait while something is watched** (0.8.0,
+  OQ-3's other answer, asked for after play): one of a type not watched, or a tamed one, too - as one outside the
+  **Alerts:** stars already did. Taming the tracked creature ends the tracking and starts the wait, as a loss does: one
+  tracked wild and tamed now, by anyone. One already tamed when its tracking began is not lost by that: like any other,
+  it stays tracked until it is killed, no longer loaded, or you stop or replace the tracking. Stopping the tracking, or
+  tracking something else, never starts the wait, and the wait still takes only a creature a watch alert would take,
+  never a tamed one.
 
 ## Done
+
+- 0.8.0: OQ-3 - the loss of any tracked creature starts Always track nearest watched's wait while something is watched,
+  whatever its type, stars or tameness, and taming the tracked creature - one tracked wild, tamed by anyone - ends its
+  tracking as a loss does, "Lost track of" saying that it was tamed, and starts the wait too (both asked for after a
+  0.7.0 play session, in which a creature of another kind, tracked by hand, was lost and the log said
+  `no wait - lost <type>, not on the watchlist (...)`); what the wait may take is as before - any watched type, the
+  watch alert's filters, never a tamed one - and KL-20 says what that means after a creature tracked by hand.
+  `Retrack.Lost` is handed the watchlist's count, neither whether it holds the lost type nor the tameness; the loss line
+  names a tamed creature as tamed, and its `no wait` names only an empty watchlist (or a creature of no known type,
+  `Retrack.Lost`'s own guard). The taming is the lost test's last question (`Tracker.TamedNow`), asked once a frame only
+  of a creature tracked wild, still there and alive - its tameness read as often as before, and no longer each frame for
+  one tracked tamed; with `VerboseLog` on, `Tracker` says the taming itself
+  (`is tamed now - the tracking ends, as at a loss`) before the stop, and nothing watches for the tamed state any more.
+  Preflight holds the values `Retrack.Lost` is handed, the exact start of `NearestWatched.Lost`, where the recorded type
+  and tameness are written (only where a tracking starts, and in the taming test), and the exact shapes of
+  `Tracker.Track`, the taming test and the lost block; planted defects put each old gate back - as a value, as an early
+  return and through `Tracker`, also by a second write of the recorded type in `Track` or on every frame - hand it a
+  count that is not the watchlist's, start a wait from Stop tracking, a row's Track or Find area, keep a tamed creature
+  tracked, end its tracking without the wait or without its message, or end the tracking of one tamed before it began;
+  the unit tests pin the rule and the words of the lines and the message, and planted defects prove each of them.
 
 - 0.7.1: OI-5 - MobTracker saves its cfg itself: BepInEx's saving is off from before the first setting is bound, and
   the file is saved once when every setting is bound, then after each change - the window's, ConfigurationManager's or

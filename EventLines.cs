@@ -65,8 +65,12 @@ namespace MobTracker
         /// <param name="retrackOn">Always track nearest watched is on: its own line follows.</param>
         public static string TrackLost(string what, bool killed, bool tamed, bool retrackOn)
         {
+            // "seen dead on this client" is reached, for a creature this client runs, only when it has a death
+            // animation: for the others the owner's Character.CheckDeath sets m_isDead and destroys the object in one
+            // call inside MonoUpdaters.FixedUpdate, and a Destroy issued there is null by that frame's Update and
+            // LateUpdate (Unity 6000.0.75f1, the game's engine) - so a kill on this client reads as gone.
             return "Track: lost " + what + " - "
-                   + (killed ? "seen dead on this client" : "gone from this client (out of range, despawned, or killed while another player's game ran it)")
+                   + (killed ? "seen dead on this client" : "gone from this client (killed, despawned, or out of range)")
                    + (tamed ? "; it was tamed" : "")
                    + (retrackOn ? "" : "; Always track nearest watched is off");
         }
@@ -81,9 +85,12 @@ namespace MobTracker
             return "Track: reached " + areaName + " (within 30 m on the flat)";
         }
 
-        public static string TrackTamed(string what)
+        /// <summary>A creature tracked wild is tamed now, which ends its tracking as a loss does (0.8.0, Tracker.TamedNow).</summary>
+        /// <param name="retrackOn">Always track nearest watched is on: its own line follows.</param>
+        public static string TrackTamed(string what, bool retrackOn)
         {
-            return "Track: " + what + " is tamed now - losing it starts no Always track nearest watched wait";
+            return "Track: " + what + " is tamed now - the tracking ends, as at a loss"
+                   + (retrackOn ? "" : "; Always track nearest watched is off");
         }
 
         // ---- Guide and ground path ----

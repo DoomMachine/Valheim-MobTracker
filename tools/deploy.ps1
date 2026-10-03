@@ -18,7 +18,7 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Dll = "",       # default: build\MobTracker.dll in this repository (set below)
-    [string]$ExpectedVersion = "0.7.1",
+    [string]$ExpectedVersion = "0.8.0",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string]$KeepDir = ""    # default: retired\ in this repository (set below)
 )
