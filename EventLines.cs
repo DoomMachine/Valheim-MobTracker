@@ -132,14 +132,15 @@ namespace MobTracker
         /// <summary>
         /// What Auto-track did with the creature an alert named, worked out after its test from what it leaves behind:
         /// taken when the tracking changed since the alert (Tracker.Generation then and now) and is now that creature;
-        /// else not taken because the setting is off, a creature is tracked, Always track nearest watched waits, or -
-        /// none of those - the creature is on the other side of a dungeon entrance, the four tests of Auto-track's own
-        /// condition in its order.
+        /// else not taken because the setting is off, a creature is tracked, the creature is on the other side of a
+        /// dungeon entrance, or - none of those - Always track nearest watched waits: the four tests of Auto-track's own
+        /// condition in its order (WatchAlerts.Update).
         /// </summary>
         /// <param name="trackingCreature">Tracker.IsTrackingCreature now.</param>
         /// <param name="targetIsAlerted">Tracker.Target is the creature the alert named.</param>
+        /// <param name="sameSide">The dungeon-side answer Auto-track's test read, handed over - not worked out again.</param>
         public static int AutoTrackOutcome(int generationNow, int generationAtAlert, bool trackingCreature, bool targetIsAlerted, bool autoTrackOn,
-            bool retrackWaiting)
+            bool sameSide)
         {
             if (generationNow != generationAtAlert && trackingCreature && targetIsAlerted)
                 return AutoTook;
@@ -147,9 +148,9 @@ namespace MobTracker
                 return AutoOff;
             if (trackingCreature)
                 return AutoTracking;
-            if (retrackWaiting)
-                return AutoWaiting;
-            return AutoOtherSide;
+            if (!sameSide)
+                return AutoOtherSide;
+            return AutoWaiting;
         }
 
         /// <param name="tracked">The creature already tracked, for <see cref="AutoTracking"/>.</param>
@@ -475,6 +476,23 @@ namespace MobTracker
         {
             return "MobTracker.log could not be opened (" + exceptionType + "; another running copy of the game may hold it, or it is"
                    + " read-only), so none is written for now; LogOutput.log still gets every MobTracker line.";
+        }
+
+        // ---- The cfg (0.7.1, ConfigSaver) ----
+
+        /// <param name="when">"at the game's start", "after a change", "after the session reset".</param>
+        public static string CfgNotSaved(string when, string exceptionType)
+        {
+            return "Settings could not be saved to com.mobtracker.plugin.cfg " + when + " (" + exceptionType + "; it may be read-only, or held"
+                   + " by another program). Changes still take effect in the game; the next save that works - at a later change, or when"
+                   + " the game quits - writes them all, and if none does they last only until the game closes. Said once until a save"
+                   + " works again.";
+        }
+
+        /// <param name="when">"after a change", "after the session reset", "as the game quits".</param>
+        public static string CfgSavedAgain(string when)
+        {
+            return "Settings saved to com.mobtracker.plugin.cfg again " + when + ", with every change made while it could not be written.";
         }
 
         public static string WriteFailed(string exceptionType)

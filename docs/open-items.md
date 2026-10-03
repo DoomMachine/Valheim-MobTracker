@@ -4,7 +4,7 @@ The one list of what is untested, unverified, open or only an idea for MobTracke
 again. It lives with the code, so each release can check it. What a player meets is in the README's "Known limits";
 what each release changed is in its "History".
 
-As of **0.7.0**.
+As of **0.7.1**.
 
 ## Keeping it up to date
 
@@ -24,16 +24,19 @@ work, **OQ** open questions - behaviour choices discussed and not taken (yet).
 
 ## Not yet tried in play
 
-0.7.0 has not been played yet (LT-17). 0.6.0 ran through a play session without errors, but its new rule did not act in
-it: the log has no `Always track nearest watched:` line (LT-16). 0.5.1 ran through a long play session without errors,
-in which Always track nearest watched was seen acting (LT-4); none of LT-15's checks was confirmed in it. 0.5.0 ran
-through a long play session, with several logouts, without errors: at its first world entry it set back the **Alerts:**
-filter 0.4.1 had saved (LT-14), but nothing was watched in it, so a reset at a logout was not seen. 0.4.1 - and with it
-the changes of 0.4.0 and 0.3.1 - ran through a long play session without errors, in which a watch alert came, the
-`AlertStarFilter` held several categories at once, types were watched and unwatched and the guide mode was switched;
-none of the checks below was run in it as written. 0.3.0 and 0.2.0 each ran through play sessions without errors; Always
-track nearest watched (0.3.0) was first reported acting in 0.5.1's session, not yet checked for taking the nearest, and
-0.2.0's new features have not been confirmed in the game (LT-2, LT-4 to LT-6).
+0.7.1 has not been played yet (LT-19). 0.7.0 ran through short play sessions without errors, in which `MobTracker.log`
+was opened at each start, closed at each quit and kept as `MobTracker-prev.log` at the next start; its logging settings
+were not changed in them (LT-17). In one, Always track nearest watched took a creature of another watched type than the
+one lost, and each of its waits ended in one `took` line (LT-16). 0.6.0 ran through a play session without errors, but
+its new rule did not act in it: the log has no `Always track nearest watched:` line. 0.5.1 ran through a long play
+session without errors, in which Always track nearest watched was seen acting (LT-4); none of LT-15's checks was
+confirmed in it. 0.5.0 ran through a long play session, with several logouts, without errors: at its first world entry
+it set back the **Alerts:** filter 0.4.1 had saved (LT-14), but nothing was watched in it, so a reset at a logout was
+not seen. 0.4.1 - and with it the changes of 0.4.0 and 0.3.1 - ran through a long play session without errors, in which
+a watch alert came, the `AlertStarFilter` held several categories at once, types were watched and unwatched and the
+guide mode was switched; none of the checks below was run in it as written. 0.3.0 and 0.2.0 each ran through play
+sessions without errors; Always track nearest watched (0.3.0) was first reported acting in 0.5.1's session, not yet
+checked for taking the nearest, and 0.2.0's new features have not been confirmed in the game (LT-2, LT-4 to LT-6).
 
 Single player is enough except for LT-7 and LT-11's second check (a dedicated server). Where creatures of a given star
 level are needed, the console's `spawn` command (with `devcommands` on) makes them: level 1 is no star, 2 one star, 3
@@ -99,19 +102,21 @@ start rewrites it), and read its `Always track nearest watched:` lines.
 - [ ] Lose a tamed creature of a watched type (kill it, or walk out of its range): no wait, and the log says `no wait -
   lost tamed <type>`.
 - [ ] With the option off, a tracked creature's loss writes no `Always track nearest watched:` line.
-- [ ] In the whole log, each `waiting` line is followed by one `took` or `wait ended` line before the next `waiting`
+- [x] In the whole log, each `waiting` line is followed by one `took` or `wait ended` line before the next `waiting`
   line (the last one may stand alone if the game was closed during a wait), and no exception names MobTracker.
 
 ### LT-17 0.7.0: the logs
 
 Copy `BepInEx/MobTracker.log`, `MobTracker-prev.log` and `LogOutput.log` before the game starts again.
 
-- [ ] The log says `MobTracker 0.7.0 loaded`. The cfg has `[Logging]` with `ErrorLog = true` and `VerboseLog = false`,
-  and ConfigurationManager shows both as Enabled/Disabled toggles, in a **Logging** section listed first.
-- [ ] `BepInEx/MobTracker.log` begins with `MobTracker 0.7.0 - MobTracker.log opened at the game's start; Valheim ...;
-  BepInEx ...`, a `Logging: ErrorLog on, VerboseLog off` line and a `Settings:` line, and every entry starts with the
-  date, the time and `f` and the frame.
-- [ ] Start the game again: the last start's file is now `MobTracker-prev.log`, and `MobTracker.log` starts afresh.
+- [ ] The log says `MobTracker <version> loaded`. The cfg has `[Logging]` with `ErrorLog = true` and
+  `VerboseLog = false`, and ConfigurationManager shows both as Enabled/Disabled toggles, in a **Logging** section listed
+  first.
+- [x] `BepInEx/MobTracker.log` begins with
+  `MobTracker <version> - MobTracker.log opened at the game's start; Valheim ...; BepInEx ...`, a
+  `Logging: ErrorLog on, VerboseLog off` line and a `Settings:` line, and every entry starts with the date, the time and
+  `f` and the frame.
+- [x] Start the game again: the last start's file is now `MobTracker-prev.log`, and `MobTracker.log` starts afresh.
 - [ ] With the game closed, set `ListStarFilter = Foo` and `GuideMode = Foo` in the cfg. At the next start
   `MobTracker.log` has MobTracker's `General.ListStarFilter is 'Foo'` warning and BepInEx's `Config value of setting
   "Tracking.GuideMode" could not be parsed` warning, as `LogOutput.log` does (set both back afterwards).
@@ -135,7 +140,7 @@ Copy `BepInEx/MobTracker.log`, `MobTracker-prev.log` and `LogOutput.log` before 
   off: `MobTracker.log` and `MobTracker-prev.log` keep their times and contents; turning `ErrorLog` on then opens the
   file (`opened when ErrorLog was turned on`) and keeps the last one as `MobTracker-prev.log`.
 - [ ] Open `MobTracker.log` in Notepad while the game runs: it opens, and the game goes on writing to it.
-- [ ] Quit the game normally: the last line of `MobTracker.log` is `MobTracker.log closed - the game is quitting`
+- [x] Quit the game normally: the last line of `MobTracker.log` is `MobTracker.log closed - the game is quitting`
   (LT-18).
 - [ ] Nothing in `MobTracker.log` names your Windows user folder in full, a player, a character or a world.
 
@@ -308,6 +313,30 @@ let go of it: the game reads that button there with no test the list can hold sh
 - [ ] If you can hang from a grappling line: open the list and hold the right mouse button on the window. If the
   character lets go, add it to the README's Known limits.
 
+### LT-19 0.7.1: a cfg that cannot be written
+
+Copy `com.mobtracker.plugin.cfg` before these checks, and make it writable again (Properties, untick Read-only)
+afterwards.
+
+- [ ] With the game closed, make the cfg read-only and start the game: `LogOutput.log` says
+  `Settings could not be saved to com.mobtracker.plugin.cfg at the game's start (UnauthorizedAccessException; ...` and
+  then `MobTracker 0.7.1 loaded`, and `MobTracker.log` has the same warning; the cfg's contents and time do not change.
+- [ ] Still read-only, in a world: Watch a creature type, click a star on each row, untick Auto-track: each takes effect
+  (the Watching row, the rows' marks, a watched creature's alert) and no error appears in either log.
+- [ ] Turn `VerboseLog` on in ConfigurationManager: `Logging: VerboseLog turned on - ...` in both logs, then the verbose
+  lines; ConfigurationManager shows no `Failed to draw setting MobTracker - ...` error and no
+  `Failed to draw this field` text.
+- [ ] Make the cfg writable while the game runs and change any setting: the log says
+  `Settings saved to com.mobtracker.plugin.cfg again after a change, ...`, and the cfg holds every change made while it
+  was read-only.
+- [ ] Make it read-only again, change a setting, make it writable, and quit from inside the world (from the game's
+  menu), not by logging out first, with `VerboseLog` still on, which the line needs to reach `MobTracker.log`:
+  `MobTracker.log` ends with `Settings saved to com.mobtracker.plugin.cfg again as the game quits, ...` before its
+  closing line, and the cfg holds that change.
+- [ ] With `KeepBetweenSessions` off, a type watched and the cfg read-only, go back to the main menu: the log says
+  `Game session changed and KeepBetweenSessions is off, ...`, with no error, and entering a world again nothing is
+  watched.
+
 ### LT-18 MobTracker.log on the game's runtime
 
 How `MobTracker.log` is taken, copied to `MobTracker-prev.log` and shared was proved by `tools/log-harness/` on .NET
@@ -332,7 +361,7 @@ These would matter only if they happen:
 
 ## Small fixes still open
 
-None is serious. The OI item was found by reading the code, not seen in the game; the SC items are for contributors.
+None is serious. The OI items were found by reading the code, not seen in the game; the SC items are for contributors.
 
 **In the game**
 
@@ -345,19 +374,12 @@ nearest watched ends its wait at a death by design.)
 Whether tracking should carry on after the respawn is open: the tracker would have to keep its target while there is
 no player, and say so.
 
-### OI-5 A cfg that cannot be written
+### OI-6 A log listener that throws at quit
 
-BepInEx saves the cfg before it tells a setting's own handlers about a change. While `com.mobtracker.plugin.cfg` cannot
-be written (read-only, or locked by another program), a click that changes a setting - the Guide button, both
-checkboxes, the star rows, Watch - throws out of the window, and the parsed watchlist or star filter stays behind its
-setting, the window showing the old state: the same click made again writes the text the setting already holds, which
-BepInEx does not count as a change, so nothing happens; a change of that setting that can be saved (another creature's
-Watch, another star in that row, ConfigurationManager) or a session reset that writes that setting back to its default
-brings the two together again, and the failed click's change is dropped then unless ConfigurationManager's text kept it;
-`VerboseLog` turned on or off in ConfigurationManager then does not take effect, and a change of either logging setting
-neither opens `MobTracker.log` nor is noted in it. Already so in 0.6.0, and rare; found while designing 0.7.0, whose
-`MobTracker.log` now records the error. The session reset does not have this problem: it saves once, after its writes. A
-fix - writing with saving off and saving once, caught, as the session reset does - is its own patch release.
+Since 0.7.1, `OnDestroy` first retries a save of the cfg that failed, and that retry's line goes through BepInEx's log
+before `MobTracker.log` is closed. A log listener of another plugin that threw on that line would end `OnDestroy` there,
+leaving `MobTracker.log` without its closing line. No such listener is known; guarding the retry is a hardening for a
+later release.
 
 **Safety checks**
 
@@ -372,12 +394,12 @@ skipping creatures once one is kept - are checked since 0.6.0.)
 
 ### SC-4 What a new check needs
 
-Many checks match exact IL shapes, so a legitimate rewrite of the code they cover (the re-track, Auto-track's line,
-the star rows, the window clamp, the game session) fails them: re-read the IL and rewrite the check rather than loosen
-it. The unit tests link only `StarFilter.cs` and `Rules.cs`, and since 0.7.0 `LogRules.cs` and `EventLines.cs`; the
-rest is proved by preflight and planted defects (and `MobTracker.log`'s file handling by `tools/log-harness/`). So
-prove each new check with defects planted in how its answer is used, its true path, how two tested facts combine, its
-loop bounds and its operands - not only in its wiring.
+Many checks match exact IL shapes, so a legitimate rewrite of the code they cover (the re-track, Auto-track's line, the
+star rows, the window clamp, the game session) fails them: re-read the IL and rewrite the check rather than loosen it.
+The unit tests link only `StarFilter.cs` and `Rules.cs`, and since 0.7.0 `LogRules.cs` and `EventLines.cs`; the rest is
+proved by preflight and planted defects (and `MobTracker.log`'s file handling, and since 0.7.1 the cfg's saving, by
+`tools/log-harness/`). So prove each new check with defects planted in how its answer is used, its true path, how two
+tested facts combine, its loop bounds and its operands - not only in its wiring.
 
 ### SC-6 What the logging checks cannot see
 
@@ -398,10 +420,11 @@ values (a button's name, a setting's key, a creature's label, the HUD's answer, 
 
 What they still do not see:
 - Where a site sits in its caller, beyond the places checked - the alert poll's lines after its once-a-second return,
-  the loss line before the lost block, the window's clicks inside their buttons, the ground path's and the empty look's
-  lines, the list's close, the reached line and the alert poll's no-player block and nothing-alerted return: elsewhere
-  the site table holds only which methods call a site, and how many times. Find area's done line moved into its search
-  loop would repeat once per zone searched; it passes every check today.
+  the Auto-track line right after Auto-track's test (0.7.1), the tracking lines first in `Tracker.Track`, `TrackPoint`
+  and `Stop` (0.7.1), the loss line before the lost block, the window's clicks inside their buttons, the ground path's
+  and the empty look's lines, the list's close, the reached line and the alert poll's no-player block and
+  nothing-alerted return: elsewhere the site table holds only which methods call a site, and how many times. Find area's
+  done line moved into its search loop would repeat once per zone searched; it passes every check today.
 - What the walk that finds no throw and no log call does not reach: it starts at the listener (`LogEvent`) and reads
   only explicit throws. The file's other paths - `Start`, `Bound`, `Open`, `Switched`, `Stop` and the failure paths
   above - are held by their exact shapes and catches instead, so a new method on one of them needs a shape of its own.
@@ -443,6 +466,7 @@ states one, the item says so.
 | KL-11 | Find area's limits | Sub-biomes and the game's corner biome test: see FW-5 and FW-6. The rest is how Find area works: it tells the land from the world seed, not from the loaded ground, and the terrain it cannot check (slope, lava, player bases, water depth) is known only where the land is loaded. |
 | KL-12 | Always track nearest watched: its rules | Chosen when it was made (0.3.0), and each could change if players ask; the dungeon side (0.3.1) and the settled **Alerts:** stars (0.4.1) are fixes. Since 0.6.0 it takes the nearest creature of any watched type, not only of the lost one's (asked for after play); every watch alert during its wait leaves the choice to it, and unwatching the lost type no longer ends the wait (unwatching every type does). A setting for the lost type only would be a new feature; watching only that type does much the same for the re-track, at the cost of the other types' alerts. Taking a creature that alerted during the wait and then left the `AlertRadius` would need the wait to remember that creature. |
 | KL-26 | `MobTracker.log`'s reach | An error nobody caught comes through BepInEx's "Unity Log" source, so `UnityLogListening` must be on and only main-thread messages arrive; a Unity log callback of MobTracker's own would remove the setting's part, as a second capture route (FW-9). The 5 MB cap keeps the next start's copy to -prev small (OQ-9). A second copy of the game fails at the open and touches nothing (OQ-11). The folder scrub replaces full spellings only. |
+| KL-28 | A cfg that cannot be written | MobTracker saves it itself since 0.7.1, after each change; while it cannot be written, changes take effect but wait for the next save that works (a later change, or quitting the game), and are lost if none does. BepInEx writes the file in place, emptying it as it opens it, so a save that fails part-way (a full disk, the game killed mid-save) can leave it cut short: while the game runs, the next save that works rewrites it from the settings in use; after the game was killed mid-save, the settings cut off are back at their defaults at the next start. Since 0.7.1 the game's start writes it once, not at each setting read. Writing elsewhere (a second file, the registry) would leave two places a setting lives. |
 | KL-27 | What `VerboseLog` does not say yet | See FW-9; the README names each of its items but the last, which KL-26's limit covers. States it learns by watching are read once a frame, after the code that changes them (Tracker works the guide out in its `LateUpdate`), and taken as they are, without a line, when `VerboseLog` is turned on and in each tracking's first two frames. |
 | KL-24 | Tracking usually ends at a death | The game removes the body about 10 seconds after a death, and with it the local player the tracker follows (a respawn at once may carry it on: LT-9); OI-4 asks whether tracking should carry on after the respawn. |
 
@@ -517,9 +541,19 @@ the next world you enter empties the watchlist).
 A setting edited in `com.mobtracker.plugin.cfg` while the game runs takes effect at the next start, and is lost if the
 file is written before then: any setting changed in the window or in ConfigurationManager writes the whole file back
 from the values in use, and so, with `KeepBetweenSessions` off, does entering a world or going back to the main menu
-while the watchlist or a star filter is away from its default. The README says so for `Watchlist` and
-`AlertStarFilter`; it holds for every setting. With `KeepBetweenSessions` off, a hand edit of `Watchlist`,
-`ListStarFilter` or `AlertStarFilter` lasts only until the next world is entered, even one made with the game closed.
+while the watchlist or a star filter is away from its default, and so does quitting the game after a save that failed
+(0.7.1). The README says so for `Watchlist` and `AlertStarFilter`; it holds for every setting. With
+`KeepBetweenSessions` off, a hand edit of `Watchlist`, `ListStarFilter` or `AlertStarFilter` lasts only until the next
+world is entered, even one made with the game closed.
+
+### KL-29 A cfg BepInEx cannot read when the game starts
+
+BepInEx reads `com.mobtracker.plugin.cfg` while it creates the plugin, before any MobTracker code runs. A file another
+program holds open for writing then, or without sharing, or one whose section name was edited by hand to start or end
+with a space or to hold `=`, or whose section or setting name holds a tab, `\`, `"`, `'`, `[` or `]`, makes that read
+throw, and MobTracker cannot catch it (decompiled; BepInEx 5.4.23.3). Unverified: whether Unity then drops the plugin,
+as BepInEx expects, or keeps it without its settings; either way MobTracker does not start. The README's Known limits
+say so.
 
 ### KL-23 Closing the game keeps the last session's choices until the next world
 
@@ -626,8 +660,8 @@ and the game's `Player.log` would still have them, and `LogOutput.log` would sta
 Now: at most 5 MB per game start, then one last line and nothing more until the next start; one earlier start kept
 (`MobTracker-prev.log`); an error of MobTracker's code that repeats written at most once a minute, with a count of
 those left out. The other answers: a larger cap, starting a fresh file at the cap, keeping more than one earlier start,
-or another pace for repeats. MobTracker's own warnings are not thinned: one per ConfigurationManager keystroke in a
-star filter, as in `LogOutput.log`.
+or another pace for repeats. MobTracker's own warnings are not thinned - one per ConfigurationManager keystroke in a
+star filter, as in `LogOutput.log` - except a failed save of the cfg (0.7.1), said once until a save works again.
 
 ### OQ-10 Where the Logging settings show
 
@@ -647,6 +681,11 @@ Now: with `VerboseLog` on, `MobTracker.log` gets every MobTracker line, the warn
 says; `ErrorLog` alone does not write `MobTracker <version> loaded` (an Info line) - the file's own line at its opening
 names the version instead; the window's Watch, Unwatch, Guide and checkbox clicks show as the `Setting:` lines they
 cause. The other answers: verbose lines only, separate from the errors; a line per click as well.
+
+### OQ-13 Telling the player in the game that the cfg cannot be saved
+
+Now (0.7.1): only the logs say it; in the game the change takes effect as usual. The other answer: a message on the
+screen once per run of failed saves - a new behaviour, and one more message over the game.
 
 ## Ideas (not planned)
 
@@ -788,6 +827,17 @@ it at most once a minute, with a count).
   not move on to a nearer creature while the one it took is tracked.
 
 ## Done
+
+- 0.7.1: OI-5 - MobTracker saves its cfg itself: BepInEx's saving is off from before the first setting is bound, and
+  the file is saved once when every setting is bound, then after each change - the window's, ConfigurationManager's or
+  any other plugin's - by MobTracker's last handler on the cfg; a failed save is caught and said once until a save works
+  again, and tried once more as the game quits. So a cfg that cannot be written no longer throws out of a click, leaves
+  a parsed watchlist or star filter behind its setting, or keeps `VerboseLog` from taking effect, and a read-only cfg at
+  the start no longer stops MobTracker loading. Preflight holds who binds, saves and listens to the cfg, the order in
+  Awake, and the saver's shapes; planted defects prove each, and `tools/log-harness/` runs the real settings on a
+  read-only cfg. Also: Find area's done line counts the frame its search starts in; the Auto-track line is handed the
+  dungeon-side answer Auto-track's test read and names it before the wait; preflight holds the Auto-track line right
+  after Auto-track's test, and each tracking line first in `Tracker.Track`, `TrackPoint` and `Stop`.
 
 - 0.7.0, asked for on 2026-10-02: `BepInEx/MobTracker.log` with every MobTracker warning and error, an error of its code
   the game or BepInEx reports (KL-26 says which) and BepInEx's warnings about its cfg (`ErrorLog`, on by default; the

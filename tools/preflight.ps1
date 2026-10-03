@@ -41,7 +41,7 @@
   7. the game session: GameSession, a component of the plugin's own object, starts a session whenever Game.instance
      is another object (by reference) and resets through ModConfig.ResetSession and WatchAlerts.ResetSession, called
      from nowhere else; unless KeepBetweenSessions (General, default false) is on, the reset writes each of the
-     watchlist and the two star filters back to its own default, saving the cfg once afterwards; the watchlist
+     watchlist and the two star filters back to its own default, the cfg saved once afterwards; the watchlist
      entry's own change handler re-parses it; closing the list (also on every frame with no player) drops a Watch or
      Find area click still waiting
   8. every assembly the plugin references is in the game folder
@@ -60,6 +60,12 @@
      the catch round the settings line LogFile.Bound writes in Awake, the list's close line past Close's IsOpen test and
      the reached line inside the reached block; and nothing reads a player's, character's or
      world's name, an ID or a save path
+ 10. the cfg (0.7.1): BepInEx never saves it - Awake turns its SaveOnConfigSet off (ConfigSaver.Take) before the first
+     setting is bound, nothing turns it on again, and every Bind is in LogFile.Start or ModConfig.Bind; ConfigSaver
+     saves it once after the last Bind and after every change, from a handler on the whole cfg added last (after
+     Events.Watch), except while the session reset writes (ConfigSaver.Each), which saves once after; ConfigSaver.Save
+     is the only ConfigFile.Save, catches every failure, says the first by type only and then nothing until a save
+     works again, which it says; OnDestroy tries once more, first, if the last save failed
   Run it after every Valheim update. Exits 1 on any failure. The number of checks depends on how many TomTom or
   Wayfinder DLLs it reads (one check each).
 
@@ -71,7 +77,7 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Plugin = "",
-    [string]$ExpectedVersion = "0.7.0",
+    [string]$ExpectedVersion = "0.7.1",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string[]]$Waypointer = @()   # TomTom / Wayfinder DLLs to check the carve-out against; default: the installed ones
 )
@@ -618,9 +624,10 @@ Test-Calls @(
     @("MobTracker.NearestWatched", "Update", "Rules::SameLayer", @("Character::InInterior", "loc <- Character::InInterior"), $null),
     @("MobTracker.NearestWatched", "Update", "Character::InInterior()", @("loc <- Enumerator::get_Current"), $null),
     @("MobTracker.NearestWatched", "Update", "Character::InInterior(UnityEngine.Vector3)", @("loc <- Transform::get_position"), $null),
-    # Auto-track never crosses a dungeon entrance either (a false answer skips the Track): the alerting creature kept as
-    # the nearest, against the player's position read before the loop. Which local the creature is: the deferral check.
-    @("MobTracker.WatchAlerts", "Update", "Rules::SameLayer", @("Character::InInterior", "Character::InInterior"), $brfalse),
+    # Auto-track never crosses a dungeon entrance either: the alerting creature kept as the nearest, against the player's
+    # position read before the loop, into a local (0.7.1) that Auto-track's test branches on and the Auto-track line is
+    # handed - the exact shape below. Which local the creature is: the deferral check.
+    @("MobTracker.WatchAlerts", "Update", "Rules::SameLayer", @("Character::InInterior", "Character::InInterior"), @("stloc", "stloc.s")),
     @("MobTracker.WatchAlerts", "Update", "Character::InInterior()", @("loc <- loc <- Enumerator::get_Current"), $null),
     @("MobTracker.WatchAlerts", "Update", "Character::InInterior(UnityEngine.Vector3)", @("loc <- Transform::get_position"), $null),
     # Every creature loop asks IsListable first (it skips a creature with no ZNetView, below), a false answer skipping
@@ -927,6 +934,51 @@ $ia = if ($ii.Count -eq 1) { Get-ArgumentSources $wi $ii[0] $wau.Body.ExceptionH
 if ($tr.Count -ne 1 -or $ii.Count -ne 1) { $why += ("Track / InInterior() calls: {0} / {1}" -f $tr.Count, $ii.Count) }
 elseif (-not $ia -or -not $ta -or $wi[$ia[0]].OpCode.Name -notmatch '^ldloc' -or (Get-VarIndex $wi[$ia[0]]) -ne (Get-VarIndex $wi[$ta[0]])) { $why += "the dungeon-entrance test asks about another creature than the one Tracker.Track is given" }
 if ($why.Count -eq 0) { Ok "WatchAlerts.Update: the dungeon-entrance test asks about the creature Tracker.Track would take" } else { Fail ("WatchAlerts.Update: " + ($why -join "; ")) }
+# The line of a tracking started or stopped (0.7.1): first in Tracker.Track, TrackPoint and Stop, before the fields it
+# reads ("replaces" names what was tracked; the stop line asks IsTracking) change.
+$checks++
+$why = @()
+foreach ($row in @(@("Track", @("ldarg.0", "call Events::TrackStarting")), @("TrackPoint", @("ldarg.0", "ldarg.1", "call Events::TrackStartingArea")),
+        @("Stop", @("call Events::TrackStopping")))) {
+    $tm = Get-Method "MobTracker.Tracker" $row[0]
+    $tg = if ($tm) { @(Get-Shape $tm | Select-Object -First $row[1].Count) } else { @() }
+    if (($tg -join "`n") -cne ($row[1] -join "`n")) { $why += ("Tracker.{0} does not start with {1} - it starts with {2}" -f $row[0], ($row[1] -join "; "), ($tg -join "; ")) }
+}
+if ($why.Count -eq 0) { Ok "Tracker.Track, TrackPoint and Stop write their line first, before the fields it reads change" } else { Fail ($why -join "; ") }
+# Find area's done line (0.7.1) counts the frames the search ran in: the count starts at 1, the frame it begins in - its
+# first store, and its only one of a constant - and goes up by 1 right before each pause (within three instructions of
+# the store of the iterator's <>2__current), once per pause; nothing else stores it.
+$checks++
+$why = @()
+$fsm = $null
+foreach ($t in $plug.GetTypes()) { if ($t.FullName -clike "MobTracker.SpawnFinder/<Search>d__*") { $fsm = $t.Methods | Where-Object { $_.Name -ceq "MoveNext" } | Select-Object -First 1 } }
+if (-not $fsm) { $why += "SpawnFinder.Search's MoveNext not found" }
+else {
+    $fi = @($fsm.Body.Instructions)
+    $fst = @(for ($k = 2; $k -lt $fi.Count; $k++) { $o = $fi[$k].Operand; if ($fi[$k].OpCode.Name -eq "stfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.Name -clike "<frames>*") { $k } })
+    $yld = @(for ($k = 0; $k -lt $fi.Count; $k++) { $o = $fi[$k].Operand; if ($fi[$k].OpCode.Name -eq "stfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.Name -clike "<>2__current*") { $k } })
+    $starts = @($fst | Where-Object { $fi[$_ - 1].OpCode.Name -eq "ldc.i4.1" -and $fi[$_ - 2].OpCode.Name -eq "ldarg.0" })
+    $ups = @($fst | Where-Object { $fi[$_ - 1].OpCode.Name -eq "add" -and $fi[$_ - 2].OpCode.Name -eq "ldc.i4.1" })
+    $other = $fst.Count - $starts.Count - $ups.Count
+    if ($starts.Count -ne 1 -or $other -ne 0) { $why += ("its frame count is set to 1 {0} time(s) and stored otherwise {1} time(s) - expected once and never" -f $starts.Count, $other) }
+    elseif ($fst[0] -ne $starts[0]) { $why += "its first store is not the start at 1" }
+    if ($ups.Count -ne $yld.Count) { $why += ("it is counted up {0} time(s) for {1} pause(s)" -f $ups.Count, $yld.Count) }
+    foreach ($u in $ups) { if (@($yld | Where-Object { $_ -gt $u -and $_ -le $u + 3 }).Count -ne 1) { $why += "the count up at IL $u is not right before a pause" } }
+    # 0.7.1: the done line is handed the count itself - Events.FindDone's third argument is the field (ldarg.0; ldfld
+    # <frames>), not an expression of it, a constant or another count.
+    $fd = @(for ($k = 0; $k -lt $fi.Count; $k++) { $o = $fi[$k].Operand; if ($fi[$k].OpCode.Name -eq "call" -and $o -is [Mono.Cecil.MethodReference] -and $o.DeclaringType.Name -ceq "Events" -and $o.Name -ceq "FindDone") { $k } })
+    if ($fd.Count -ne 1) { $why += ("Events.FindDone is called {0} time(s) in the search, not once" -f $fd.Count) }
+    else {
+        # The replay starts at the statement's first instruction (after the last store, pop or branch before the call): a
+        # cached lambda's dup/brtrue/pop earlier in the method (IsSpaced's) would leave it too few values.
+        $st = $fd[0] - 1
+        while ($st -ge 0 -and $fi[$st].OpCode.Name -notmatch '^(stfld|stsfld|stloc|pop)' -and "$($fi[$st].OpCode.FlowControl)" -notmatch 'Branch|Return|Throw') { $st-- }
+        $fa = Get-ArgumentSources $fi $fd[0] $fsm.Body.ExceptionHandlers ($st + 1)
+        $fs = if ($fa) { $fa[2] } else { -1 }
+        if ($fs -lt 1 -or $fi[$fs].OpCode.Name -ne "ldfld" -or $fi[$fs].Operand.Name -cnotlike "<frames>*" -or $fi[$fs - 1].OpCode.Name -ne "ldarg.0") { $why += "the done line is not handed the frame count itself (Events.FindDone's third argument)" }
+    }
+}
+if ($why.Count -eq 0) { Ok "SpawnFinder.Search: Find area's frame count starts at 1 (the frame it begins in) and goes up by 1 right before each pause, once per pause; its done line is handed that count itself" } else { Fail ("Find area: " + ($why -join "; ")) }
 # Only Tracker.LateUpdate starts a wait: one call of NearestWatched.Lost in the plugin, there, and one of Retrack.Lost,
 # in NearestWatched.Lost. Which branch of LateUpdate the call sits in is not checked.
 $checks++
@@ -985,8 +1037,9 @@ $waTracking = if ($waU) { @(Get-Shape $waU | Where-Object { $_ -ceq "call Tracke
 if ($waTracking -eq 0) { Ok "WatchAlerts.Update never asks Tracker.IsTracking (a Find area arrow gives way to an alert)" }
 else { Fail ("WatchAlerts.Update asks Tracker.IsTracking {0} time(s); Auto-track must ask IsTrackingCreature only" -f $waTracking) }
 # What it asks, and the whole condition: IsTrackingCreature is 'IsTracking && !_isPoint', and every test of Auto-track's
-# condition - AutoTrack on, no creature tracked, the same side of a dungeon entrance, no re-track waiting -
-# skips to the instruction after Tracker.Track. Exact IL shapes, as above.
+# condition - AutoTrack on, no creature tracked, the same side of a dungeon entrance (asked first, into a local), no
+# re-track waiting - skips to the instruction after Tracker.Track; and right there, after the decision (0.7.1), the
+# Auto-track line, handed the creature and the very local the test branched on. Exact IL shapes, as above.
 $checks++
 $why = @()
 $itc = Get-Method "MobTracker.Tracker" "get_IsTrackingCreature"
@@ -996,17 +1049,19 @@ if (($itcGot -join "`n") -cne ($itcWant -join "`n")) { $why += ("IsTrackingCreat
 if ($waU) {
     $waSh = Get-Shape $waU
     $tk = @(for ($k = 0; $k -lt $waSh.Count; $k++) { if ($waSh[$k] -ceq "call Tracker::Track") { $k } })
-    $atWant = @("ldsfld ModConfig::AutoTrack", 'callvirt ConfigEntry`1::get_Value', "brfalse ->15", "call Tracker::get_IsTrackingCreature", "brtrue ->15",
-        "ldloc V2", "callvirt Character::InInterior", "ldloc V1", "call Character::InInterior", "call Rules::SameLayer", "brfalse ->15",
-        "call NearestWatched::get_IsPending", "brtrue ->15", "ldloc V2", "call Tracker::Track")
-    if ($tk.Count -ne 1 -or $tk[0] -lt 14) { $why += "WatchAlerts.Update does not call Tracker.Track once" }
+    $atWant = @("ldloc V2", "callvirt Character::InInterior", "ldloc V1", "call Character::InInterior", "call Rules::SameLayer", "stloc V6",
+        "ldsfld ModConfig::AutoTrack", 'callvirt ConfigEntry`1::get_Value', "brfalse ->17", "call Tracker::get_IsTrackingCreature", "brtrue ->17",
+        "ldloc V6", "brfalse ->17", "call NearestWatched::get_IsPending", "brtrue ->17", "ldloc V2", "call Tracker::Track",
+        "ldloc V2", "ldloc V6", "call Events::AutoTrack")
+    if ($tk.Count -ne 1 -or $tk[0] -lt 16) { $why += "WatchAlerts.Update does not call Tracker.Track once" }
+    elseif ($tk[0] + 3 -ge $waSh.Count) { $why += "the Auto-track line does not follow Tracker.Track - it must come right after the decision it reports" }
     else {
-        $s0 = $tk[0] - 14
-        $atGot = @(for ($k = $s0; $k -le $tk[0]; $k++) { if ($waSh[$k] -match '^(\S+) ->(\d+)$') { "{0} ->{1}" -f $Matches[1], ([int]$Matches[2] - $s0) } else { $waSh[$k] } })
+        $s0 = $tk[0] - 16
+        $atGot = @(for ($k = $s0; $k -le $tk[0] + 3; $k++) { if ($waSh[$k] -match '^(\S+) ->(\d+)$') { "{0} ->{1}" -f $Matches[1], ([int]$Matches[2] - $s0) } else { $waSh[$k] } })
         if (($atGot -join "`n") -cne ($atWant -join "`n")) { $why += ("Auto-track is not: {0} - it is: {1}" -f ($atWant -join "; "), ($atGot -join "; ")) }
     }
 } else { $why += "WatchAlerts.Update not found" }
-if ($why.Count -eq 0) { Ok "Tracker.IsTrackingCreature is IsTracking && !_isPoint, and WatchAlerts.Update auto-tracks only with AutoTrack on, no creature tracked, the same side and no re-track waiting" }
+if ($why.Count -eq 0) { Ok "Tracker.IsTrackingCreature is IsTracking && !_isPoint, and WatchAlerts.Update auto-tracks only with AutoTrack on, no creature tracked, the same side and no re-track waiting, then writes the Auto-track line with the side the test read" }
 else { Fail ("Auto-track: " + ($why -join "; ")) }
 # The tracking guide hides - arrow, ground-path line and label - while Rules.GuideHidden says so: LateUpdate gives it the
 # HUD-hidden flag, the guarded cutscene test, dead, waiting for the respawn and teleporting, each read from the local
@@ -1186,10 +1241,9 @@ Test-Calls @(,
     @("MobTracker.WatchAlerts", "ResetSession", "StarSetSettler::Reset", @("WatchAlerts::AlertStarsSettler"), $null)
 )
 # ModConfig.ResetSession: KeepBetweenSessions on returns before anything is written; otherwise each of the three
-# entries - Watchlist, ListStarFilter, AlertStarFilter - is written once, with its own default, while the cfg's
-# SaveOnConfigSet is false (set false before the first write, put back in a finally around the writes), and the file
-# is saved once after them, in a try with a catch: BepInEx saves before it runs a setting's change handlers, so a save
-# that threw inside a write would leave a parsed view behind its entry for good.
+# entries - Watchlist, ListStarFilter, AlertStarFilter - is written once, with its own default, while ConfigSaver.Each
+# is false (set false before the first write, put back in a finally around the writes, from the value read before),
+# and the file is saved once after them, through ConfigSaver.Save, which catches a failure (its own shape, below).
 $checks++
 $why = @()
 $rs = Get-Method "MobTracker.ModConfig" "ResetSession"
@@ -1213,35 +1267,37 @@ else {
     if ((@($written | Sort-Object -CaseSensitive) -join ",") -cne ($expected -join ",")) { $why += ("it writes {0}, not each of {1} once" -f ($written -join ", "), ($expected -join ", ")) }
     # The single save around the writes.
     $rsIns = @($rs.Body.Instructions)
-    $off = @(for ($k = 1; $k -lt $shape.Count; $k++) { if ($shape[$k] -ceq 'callvirt ConfigFile::set_SaveOnConfigSet' -and (Test-LiteralZero $rsIns ($k - 1))) { $k } })
-    $back = @(for ($k = 1; $k -lt $shape.Count; $k++) { if ($shape[$k] -ceq 'callvirt ConfigFile::set_SaveOnConfigSet' -and $shape[$k - 1] -clike "ldloc V*") { $k } })
-    $saves = @(for ($k = 0; $k -lt $shape.Count; $k++) { if ($shape[$k] -ceq 'callvirt ConfigFile::Save') { $k } })
+    $off = @(for ($k = 1; $k -lt $shape.Count; $k++) { if ($shape[$k] -ceq 'stsfld ConfigSaver::Each' -and (Test-LiteralZero $rsIns ($k - 1))) { $k } })
+    $back = @(for ($k = 1; $k -lt $shape.Count; $k++) { if ($shape[$k] -ceq 'stsfld ConfigSaver::Each' -and $shape[$k - 1] -clike "ldloc V*") { $k } })
+    $saves = @(for ($k = 0; $k -lt $shape.Count; $k++) { if ($shape[$k] -ceq 'call ConfigSaver::Save') { $k } })
     $first = if ($writes.Count) { ($writes | Measure-Object -Minimum).Minimum } else { -1 }
     $last = if ($writes.Count) { ($writes | Measure-Object -Maximum).Maximum } else { -1 }
     $fin = @($rs.Body.ExceptionHandlers | Where-Object { "$($_.HandlerType)" -eq "Finally" -and
         [array]::IndexOf($rsIns, $_.TryStart) -le $first -and [array]::IndexOf($rsIns, $_.TryEnd) -gt $last -and
         $back.Count -eq 1 -and [array]::IndexOf($rsIns, $_.HandlerStart) -le $back[0] -and [array]::IndexOf($rsIns, $_.HandlerEnd) -gt $back[0] })
-    $caught = @($rs.Body.ExceptionHandlers | Where-Object { "$($_.HandlerType)" -eq "Catch" -and $saves.Count -eq 1 -and
-        [array]::IndexOf($rsIns, $_.TryStart) -le $saves[0] -and [array]::IndexOf($rsIns, $_.TryEnd) -gt $saves[0] })
-    if ($off.Count -ne 1 -or $first -lt 0 -or $off[0] -gt $first) { $why += "SaveOnConfigSet is not set false once, before the first write" }
-    if ($fin.Count -ne 1) { $why += "SaveOnConfigSet is not put back (from a local) in a finally around the writes" }
+    if ($off.Count -ne 1 -or $first -lt 0 -or $off[0] -gt $first) { $why += "ConfigSaver.Each is not set false once, before the first write" }
+    if ($fin.Count -ne 1) { $why += "ConfigSaver.Each is not put back (from a local) in a finally around the writes" }
     # SC-5: what decides whether the writes happen, and that the value put back is the one read before - exact.
     $gate = @("ldsfld ModConfig::WatchlistEntry", "call ModConfig::Held", "ldsfld ModConfig::ListStarsText", "call ModConfig::Held",
         "ldsfld ModConfig::AlertStarsText", "call ModConfig::Held", "call String::Concat", "stloc V0", "ldloc V0", "callvirt String::get_Length",
-        "brtrue ->16", "ret", "ldsfld ModConfig::WatchlistEntry", "callvirt ConfigEntryBase::get_ConfigFile", "stloc V1", "ldloc V1",
-        "callvirt ConfigFile::get_SaveOnConfigSet", "stloc V2", "ldloc V1", "ldc.i4.0", "callvirt ConfigFile::set_SaveOnConfigSet")
-    if ($shape.Count -lt 25 -or (($shape[4..24]) -join "`n") -cne ($gate -join "`n")) {
-        $why += ("after KeepBetweenSessions it is not: {0} - it is: {1}" -f ($gate -join "; "), (($shape | Select-Object -Skip 4 -First 21) -join "; "))
+        "brtrue ->16", "ret", "ldsfld ConfigSaver::Each", "stloc V1", "ldc.i4.0", "stsfld ConfigSaver::Each")
+    if ($shape.Count -lt 20 -or (($shape[4..19]) -join "`n") -cne ($gate -join "`n")) {
+        $why += ("after KeepBetweenSessions it is not: {0} - it is: {1}" -f ($gate -join "; "), (($shape | Select-Object -Skip 4 -First 16) -join "; "))
     }
-    if ($back.Count -ne 1 -or $shape[$back[0] - 1] -cne "ldloc V2" -or $shape[$back[0] - 2] -cne "ldloc V1") { $why += "the finally does not put back the SaveOnConfigSet value read before (ldloc V1; ldloc V2)" }
+    if ($back.Count -ne 1 -or $shape[$back[0] - 1] -cne "ldloc V1") { $why += "the finally does not put back the ConfigSaver.Each value read before (ldloc V1)" }
     $held = Get-Method "MobTracker.ModConfig" "Held"
     $hWant = @("ldarg.0", 'callvirt ConfigEntry`1::get_Value', "ldarg.0", "callvirt ConfigEntryBase::get_DefaultValue", "castclass System.String",
         "call String::op_Equality", "brfalse ->9", "ldstr ", "ret")
     $hGot = if ($held) { @(Get-Shape $held | Select-Object -First $hWant.Count) } else { @() }
     if (($hGot -join "`n") -cne ($hWant -join "`n")) { $why += ("Held does not start with: {0} - it starts with: {1}" -f ($hWant -join "; "), ($hGot -join "; ")) }
-    if ($saves.Count -ne 1 -or $saves[0] -lt $last -or $caught.Count -ne 1) { $why += "the cfg is not saved once, after the writes, inside a try with a catch" }
+    if ($saves.Count -ne 1 -or $saves[0] -lt $last -or $shape[$saves[0] + 1] -cne "ret" -or $shape[$saves[0] - 1] -cne "ldstr after the session reset") { $why += "the cfg is not saved once, through ConfigSaver.Save(""after the session reset""), after the writes, as the method's last call" }
+    # Each is stored only here (false, then put back) and by ConfigSaver's type initializer (true).
+    $eachStores = @()
+    foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }; foreach ($x in $m.Body.Instructions) { $o = $x.Operand
+        if ($x.OpCode.Name -eq "stsfld" -and $o -is [Mono.Cecil.FieldReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -ceq "ConfigSaver::Each") { $eachStores += ("{0}.{1}" -f $t.Name, $m.Name) } } } }
+    if ((@($eachStores | Sort-Object -CaseSensitive) -join ", ") -cne "ConfigSaver..cctor, ModConfig.ResetSession, ModConfig.ResetSession") { $why += ("ConfigSaver.Each is stored by: " + ($eachStores -join ", ")) }
 }
-if ($why.Count -eq 0) { Ok "ModConfig.ResetSession: returns first when KeepBetweenSessions is on, and when Held finds every entry at its default; else writes Watchlist, ListStarFilter and AlertStarFilter each once, with its own default, with SaveOnConfigSet off (the value read before put back in a finally), then saves once, catching a failure" }
+if ($why.Count -eq 0) { Ok "ModConfig.ResetSession: returns first when KeepBetweenSessions is on, and when Held finds every entry at its default; else writes Watchlist, ListStarFilter and AlertStarFilter each once, with its own default, with ConfigSaver.Each off (the value read before put back in a finally; Each stored nowhere else), then saves once through ConfigSaver.Save(""after the session reset"")" }
 else { Fail ("ModConfig.ResetSession: " + ($why -join "; ")) }
 # KeepBetweenSessions is General.KeepBetweenSessions, off unless the player turns it on.
 $checks++
@@ -2300,7 +2356,11 @@ function Test-Table($got, $want, $ok, $what) {
     $g = @($got) -join "; "; $w = @($want) -join "; "
     if ($g -ceq $w) { Ok $ok }
     else {
-        $diff = @(Compare-Object -CaseSensitive @($want) @($got) | ForEach-Object { if ($_.SideIndicator -eq "=>") { "+ " + $_.InputObject } else { "- " + $_.InputObject } })
+        # Compare-Object refuses an empty side: with no row at all (a type gone, 0.7.1's ConfigSaver - an empty table comes
+        # back from Get-CallTable as $null), every wanted row is missing.
+        $rows = @($got | Where-Object { $null -ne $_ })
+        $diff = if ($rows.Count -eq 0) { @($want | ForEach-Object { "- " + $_ }) }
+                else { @(Compare-Object -CaseSensitive @($want) $rows | ForEach-Object { if ($_.SideIndicator -eq "=>") { "+ " + $_.InputObject } else { "- " + $_.InputObject } }) }
         Fail ("{0} differ from the checked ones: {1}" -f $what, ($diff -join "; "))
     }
 }
@@ -2423,7 +2483,7 @@ $Shape_Events_AlertMemoryClearing = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'r
 $Handlers_Events_AlertMemoryClearing = @('Catch System.Exception 4..13 13..18')
 $Shape_Events_AutoTrack = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'call Tracker::get_Generation', 'ldsfld Events::_alertGeneration',
     'call Tracker::get_IsTrackingCreature', 'call Tracker::get_Target', 'ldarg.0', 'call Object::op_Equality', 'ldsfld ModConfig::AutoTrack',
-    'callvirt ConfigEntry`1::get_Value', 'call NearestWatched::get_IsPending', 'call EventLines::AutoTrackOutcome', 'call Tracker::get_Tracked',
+    'callvirt ConfigEntry`1::get_Value', 'ldarg.1', 'call EventLines::AutoTrackOutcome', 'call Tracker::get_Tracked',
     'call EventLines::AutoTrack', 'call ModLog::Event', 'leave ->23', 'stloc V0', 'ldstr AutoTrack', 'ldloc V0', 'call Events::Failed',
     'leave ->23', 'ret')
 $Handlers_Events_AutoTrack = @('Catch System.Exception 4..18 18..23')
@@ -2498,25 +2558,31 @@ Test-ExactShape "MobTracker.LogFile" "Switched" $Shape_LogFile_Switched "only a 
 # LogObserver, as LogEvent does - Bound runs in Awake, and a throw out of it would drop the plugin.
 Test-ExactShape "MobTracker.LogFile" "Bound" $Shape_LogFile_Bound "ends the binding window, then writes the settings line inside a catch that only hands the failure to Broke" $Handlers_LogFile_Bound
 
-# Who starts and stops it: Awake begins with the log source, then LogFile.Start (the folder beside LogOutput.log and the
-# game's folder), ModConfig.Bind, LogFile.Bound - so ModConfig.Bind's warnings reach the file - and OnDestroy ends with
-# LogFile.Stop; the file is opened only by Start and Switched, and only those two places touch BepInEx's listeners.
+# Who starts and stops it: Awake begins with the log source, then ConfigSaver.Take (0.7.1: BepInEx saves nothing from
+# here on - before the first setting is bound, so a read-only cfg cannot throw out of a Bind), LogFile.Start (the folder
+# beside LogOutput.log and the game's folder), ModConfig.Bind, LogFile.Bound - so ModConfig.Bind's warnings reach the
+# file - then ConfigSaver.Watch (after the last Bind: the first save, and the last handler on the whole cfg); OnDestroy
+# starts with ConfigSaver.Stop and ends with LogFile.Stop; the file is opened only by Start and Switched, and only
+# those two places touch BepInEx's listeners.
 $checks++
 $why = @()
 $awWant = @("ldarg.0", "call BaseUnityPlugin::get_Logger", "stsfld MobTrackerPlugin::Log", "ldarg.0", "call BaseUnityPlugin::get_Config",
+    "call ConfigSaver::Take", "ldarg.0", "call BaseUnityPlugin::get_Config",
     "call Paths::get_BepInExRootPath", "call Paths::get_GameRootPath", "call LogFile::Start", "ldarg.0", "call BaseUnityPlugin::get_Config",
-    "call ModConfig::Bind", "ldarg.0", "call BaseUnityPlugin::get_Config", "call LogFile::Bound")
+    "call ModConfig::Bind", "ldarg.0", "call BaseUnityPlugin::get_Config", "call LogFile::Bound", "ldarg.0", "call BaseUnityPlugin::get_Config",
+    "call ConfigSaver::Watch")
 $awGot = if ($awake) { @(Get-Shape $awake | Select-Object -First $awWant.Count) } else { @() }
 if (($awGot -join "`n") -cne ($awWant -join "`n")) { $why += ("Awake does not start with: {0} - it starts with: {1}" -f ($awWant -join "; "), ($awGot -join "; ")) }
 $odm = Get-Method "MobTracker.MobTrackerPlugin" "OnDestroy"
 $odGot = if ($odm) { @(Get-Shape $odm) } else { @() }
 if ($odGot.Count -lt 3 -or (@($odGot[($odGot.Count - 3)..($odGot.Count - 1)]) -join "; ") -cne "call Harmony::UnpatchSelf; call LogFile::Stop; ret") { $why += ("OnDestroy does not end with UnpatchSelf, LogFile.Stop: {0}" -f ($odGot -join "; ")) }
+if ($odGot.Count -lt 1 -or $odGot[0] -cne "call ConfigSaver::Stop") { $why += ("OnDestroy does not start with ConfigSaver.Stop: {0}" -f ($odGot -join "; ")) }
 $lifeWant = @("LogFile.Open -> Logger::get_Listeners x1", "LogFile.Start -> LogFile::Open x1", "LogFile.Stop -> Logger::get_Listeners x1",
     "LogFile.Switched -> LogFile::Open x1", "MobTrackerPlugin.Awake -> LogFile::Bound x1", "MobTrackerPlugin.Awake -> LogFile::Start x1",
     "MobTrackerPlugin.OnDestroy -> LogFile::Stop x1")
 $lifeGot = Get-CallTable '^(LogFile::(Start|Bound|Stop|Open)|Logger::get_Listeners)$'
 if (($lifeGot -join "; ") -cne ($lifeWant -join "; ")) { $why += ("the calls that start, open and stop the file are [{0}], not [{1}]" -f ($lifeGot -join "; "), ($lifeWant -join "; ")) }
-if ($why.Count -eq 0) { Ok "MobTrackerPlugin: Awake starts the log first (LogFile.Start, ModConfig.Bind, LogFile.Bound) and OnDestroy stops it last; only Start and Switched open the file" }
+if ($why.Count -eq 0) { Ok "MobTrackerPlugin: Awake turns BepInEx's saving off first (ConfigSaver.Take), then starts the log (LogFile.Start, ModConfig.Bind, LogFile.Bound), then ConfigSaver.Watch; OnDestroy tries a failed save once more first and stops the log last; only Start and Switched open the file" }
 else { Fail ("the log's start and stop: " + ($why -join "; ")) }
 
 # Opening the file: MobTracker.log taken first (OpenOrCreate, ReadWrite, sharing Read only - a second copy of the game
@@ -2613,15 +2679,16 @@ if ($why.Count -eq 0) { Ok "LogRules' Fatal, Error, Warning, Message, Info and D
 # of LogOutput.log); every other line is one of the 0.6.0 lines or one of the log's own warnings. A new line anywhere,
 # at any level, is a row more here.
 Test-ExactShape "MobTracker.ModLog" "Event" $Shape_ModLog_Event "a verbose line is Info, written only while VerboseLog is on"
-$mlWant = @("Ding.Routed -> ManualLogSource::LogInfo x1", "Ding.Routed -> ManualLogSource::LogWarning x1", "Events.Failed -> ManualLogSource::LogWarning x1",
+$mlWant = @("ConfigSaver.Save -> ManualLogSource::LogInfo x1", "ConfigSaver.Save -> ManualLogSource::LogWarning x1",
+    "Ding.Routed -> ManualLogSource::LogInfo x1", "Ding.Routed -> ManualLogSource::LogWarning x1", "Events.Failed -> ManualLogSource::LogWarning x1",
     "Hotkeys.Refuse -> ManualLogSource::LogWarning x1", "LogFile.Open -> ManualLogSource::LogWarning x1", "LogFile.ReportNotice -> ManualLogSource::LogWarning x1",
     "LogFile.Switched -> ManualLogSource::LogMessage x1", "MobTrackerPlugin.Awake -> ManualLogSource::LogInfo x1", "MobTrackerPlugin.Patch -> ManualLogSource::LogError x1",
     "MobTrackerPlugin.Start -> ManualLogSource::LogError x1", "ModConfig.ParseStars -> ManualLogSource::LogWarning x1", "ModConfig.ResetSession -> ManualLogSource::LogInfo x1",
-    "ModConfig.ResetSession -> ManualLogSource::LogWarning x1", "ModLog.Event -> ManualLogSource::LogInfo x1", "NearestWatched.Cancel -> ManualLogSource::LogInfo x1",
+    "ModLog.Event -> ManualLogSource::LogInfo x1", "NearestWatched.Cancel -> ManualLogSource::LogInfo x1",
     "NearestWatched.Lost -> ManualLogSource::LogInfo x1", "NearestWatched.Update -> ManualLogSource::LogInfo x2", "SpawnFinder.Report -> ManualLogSource::LogInfo x3",
     "Tracker.Awake -> ManualLogSource::LogError x1", "WatchAlerts.Update -> ManualLogSource::LogWarning x1", "WaypointerCompat.ApplyTo -> ManualLogSource::LogError x1",
     "WaypointerCompat.ApplyTo -> ManualLogSource::LogInfo x1", "WaypointerCompat.ApplyTo -> ManualLogSource::LogWarning x1")
-Test-Table (Get-CallTable '^ManualLogSource::Log') $mlWant "every log line is a 0.6.0 line, a warning of the log's own, a switch note (Message) or a verbose line through ModLog.Event (Info); no Debug line" "the log lines by method and level"
+Test-Table (Get-CallTable '^ManualLogSource::Log') $mlWant "every log line is a 0.6.0 line, a warning of the log's own, a switch note (Message), the cfg's save lines (0.7.1) or a verbose line through ModLog.Event (Info); no Debug line" "the log lines by method and level"
 $evWant = @(Get-CallTable '^ModLog::Event$' | Where-Object { $_ -cnotlike "Events.*" })
 $checks++
 if ($evWant.Count -eq 0 -and @(Get-CallTable '^ModLog::Event$').Count -gt 0) { Ok "ModLog.Event is called only from Events" } else { Fail ("ModLog.Event is called from outside Events: " + ($evWant -join "; ")) }
@@ -2732,7 +2799,7 @@ else { Fail ("Events: " + ($why -join "; ")) }
 # HandleKeys would, with the same warning) - and they store only their own fields.
 $checks++
 $why = @()
-$forbidden = '^(AlertGate`1::(ShouldAlert|Clear)|ConfigEntry`1::set_Value|ConfigEntryBase::(set_BoxedValue|SetSerializedValue)|ConfigFile::(Save|Reload)|Tracker::(Track|TrackPoint|Stop)|NearestWatched::(Cancel|Lost)|Retrack::|EntityListWindow::(Open|Close)|ModConfig::(ToggleWatch|ResetSession|Bind)|SpawnFinder::(Find|Clear|StartFind|RemovePins|RemovePinNear)|Minimap::|MessageHud::|Ding::|Hotkeys::(Forget|Refuse)|StarSetSettler::|WatchAlerts::ResetSession|ZInput::|Object::Destroy|GameObject::SetActive|Renderer::set_enabled)'
+$forbidden = '^(AlertGate`1::(ShouldAlert|Clear)|ConfigEntry`1::set_Value|ConfigEntryBase::(set_BoxedValue|SetSerializedValue)|ConfigFile::(Save|Reload|set_SaveOnConfigSet)|ConfigSaver::|Tracker::(Track|TrackPoint|Stop)|NearestWatched::(Cancel|Lost)|Retrack::|EntityListWindow::(Open|Close)|ModConfig::(ToggleWatch|ResetSession|Bind)|SpawnFinder::(Find|Clear|StartFind|RemovePins|RemovePinNear)|Minimap::|MessageHud::|Ding::|Hotkeys::(Forget|Refuse)|StarSetSettler::|WatchAlerts::ResetSession|ZInput::|Object::Destroy|GameObject::SetActive|Renderer::set_enabled)'
 $bodies = @()
 foreach ($t in $plug.GetTypes()) {
     if ($t.FullName -ceq "MobTracker.Events" -or $t.FullName -clike "MobTracker.Events/*" -or $t.FullName -ceq "MobTracker.LogObserver") { $bodies += @($t.Methods | Where-Object { $_.HasBody }) }
@@ -2782,9 +2849,31 @@ $why = @()
 $bd2 = Get-Method "MobTracker.ModConfig" "Bind"
 $bdSh = if ($bd2) { @(Get-Shape $bd2) } else { @() }
 if ($bdSh.Count -lt 3 -or $bdSh[$bdSh.Count - 2] -cne "call Events::Watch" -or $bdSh[$bdSh.Count - 3] -cne "ldarg.0") { $why += "ModConfig.Bind does not end with Events.Watch(config)" }
-$addSc = Get-CallTable '^ConfigFile::add_SettingChanged$'
-if (($addSc -join "; ") -cne "Events.Watch -> ConfigFile::add_SettingChanged x1") { $why += ("the cfg-wide handler is added by: " + ($addSc -join "; ")) }
-if ($why.Count -eq 0) { Ok "ModConfig.Bind ends with Events.Watch, the only place a cfg-wide SettingChanged handler is added" } else { Fail ("settings' changes: " + ($why -join "; ")) }
+if ($why.Count -eq 0) { Ok "ModConfig.Bind ends with Events.Watch" } else { Fail ("settings' changes: " + ($why -join "; ")) }
+# The cfg (0.7.1): who binds, saves and listens to it, and who may turn BepInEx's own saving on or off. BepInEx saves a
+# changed setting before it tells anyone, uncaught, so a read-only cfg threw out of the setter and no handler ran: its
+# SaveOnConfigSet is turned off once, by ConfigSaver.Take (first in Awake), and the file is saved by ConfigSaver.Save
+# alone. Every Bind sits in LogFile.Start or ModConfig.Bind - after Take, before Watch, by Awake's exact start above -
+# and the cfg-wide handlers are Events.Watch's and ConfigSaver.Watch's, the saver last. ConfigSaver's own calls: Take
+# and Watch from Awake, Stop from OnDestroy, Save from its own three and from the session reset.
+$cfgWant = @("ConfigSaver.Save -> ConfigFile::Save x1", "ConfigSaver.Take -> ConfigFile::set_SaveOnConfigSet x1", "ConfigSaver.Watch -> ConfigFile::add_SettingChanged x1",
+    "Events.Watch -> ConfigFile::add_SettingChanged x1", "LogFile.Start -> ConfigFile::Bind x2", "ModConfig.Bind -> ConfigFile::Bind x12")
+Test-Table (Get-CallTable '^ConfigFile::(Save|Reload|Bind|set_SaveOnConfigSet|add_SettingChanged|remove_SettingChanged)$') $cfgWant "the cfg is bound only in LogFile.Start and ModConfig.Bind, saved only by ConfigSaver.Save, its SaveOnConfigSet set only by ConfigSaver.Take, and listened to by Events.Watch and ConfigSaver.Watch only" "the cfg's calls"
+$csWant = @("ConfigSaver.SettingChanged -> ConfigSaver::Save x1", "ConfigSaver.Stop -> ConfigSaver::Save x1", "ConfigSaver.Watch -> ConfigSaver::Save x1",
+    "MobTrackerPlugin.Awake -> ConfigSaver::Take x1", "MobTrackerPlugin.Awake -> ConfigSaver::Watch x1", "MobTrackerPlugin.OnDestroy -> ConfigSaver::Stop x1",
+    "ModConfig.ResetSession -> ConfigSaver::Save x1")
+Test-Table (Get-CallTable '^ConfigSaver::') $csWant "ConfigSaver is taken and watched from Awake, stopped from OnDestroy, and saves from its own handler, its start, its stop and the session reset" "ConfigSaver's callers"
+Test-ExactShape "MobTracker.ConfigSaver" "Take" @('ldarg.0', 'stsfld ConfigSaver::_file', 'ldarg.0', 'ldc.i4.0', 'callvirt ConfigFile::set_SaveOnConfigSet', 'ret') "keeps the cfg and turns BepInEx's SaveOnConfigSet off"
+Test-ExactShape "MobTracker.ConfigSaver" "Watch" @('ldarg.0', 'ldsfld <>O::<0>__SettingChanged', 'dup', 'brtrue ->10', 'pop', 'ldnull', 'ldftn ConfigSaver::SettingChanged',
+    'newobj EventHandler`1::.ctor', 'dup', 'stsfld <>O::<0>__SettingChanged', 'callvirt ConfigFile::add_SettingChanged', "ldstr at the game's start",
+    'call ConfigSaver::Save', 'ret') "adds its handler to the whole cfg, then saves once at the game's start"
+Test-ExactShape "MobTracker.ConfigSaver" "SettingChanged" @('ldsfld ConfigSaver::Each', 'brfalse ->4', 'ldstr after a change', 'call ConfigSaver::Save', 'ret') "saves after every change, except while ConfigSaver.Each is off (the session reset's writes)"
+Test-ExactShape "MobTracker.ConfigSaver" "Stop" @('ldsfld ConfigSaver::_failing', 'brfalse ->4', 'ldstr as the game quits', 'call ConfigSaver::Save', 'ret') "tries once more as the game quits, only when the last save failed"
+Test-ExactShape "MobTracker.ConfigSaver" "Save" @('ldsfld ConfigSaver::_file', 'callvirt ConfigFile::Save', 'leave ->16', 'stloc V0', 'ldsfld ConfigSaver::_failing', 'brtrue ->15',
+    'ldc.i4.1', 'stsfld ConfigSaver::_failing', 'ldsfld MobTrackerPlugin::Log', 'ldarg.0', 'ldloc V0', 'callvirt Exception::GetType', 'callvirt MemberInfo::get_Name',
+    'call EventLines::CfgNotSaved', 'callvirt ManualLogSource::LogWarning', 'leave ->24', 'ldsfld ConfigSaver::_failing', 'brfalse ->24', 'ldc.i4.0',
+    'stsfld ConfigSaver::_failing', 'ldsfld MobTrackerPlugin::Log', 'ldarg.0', 'call EventLines::CfgSavedAgain', 'callvirt ManualLogSource::LogInfo', 'ret') "saves inside a catch of every exception: the first failure warned about by its type only, nothing more until a save works again, which is said once" @('Catch System.Exception 0..3 3..16')
+Test-ExactShape "MobTracker.ConfigSaver" ".cctor" @('ldc.i4.1', 'stsfld ConfigSaver::Each', 'ret') "saves each change unless told otherwise (Each starts true)"
 # The ground path's line: only with VerboseLog on and only when the state or the tracking changed, from LateUpdate
 # right after UpdatePath (at most once a second).
 Test-ExactShape "MobTracker.Tracker" "LogPath" $Shape_Tracker_LogPath "only with VerboseLog on, only when the path's state or the tracking changed"
@@ -2803,7 +2892,7 @@ else { Fail "Tracker.LateUpdate does not call LogPath once, right after UpdatePa
 # and what each hands to EventLines, whose decisions (AutoTrackOutcome, TurnedAway, ClosedUnseen) the unit tests pin.
 Test-ExactShape "MobTracker.Events" "Failed" $Shape_Events_Failed "a verbose line's failure is warned about once per site (FailedOnce), its words EventLines'"
 Test-ExactShape "MobTracker.Events" "AlertMemoryClearing" $Shape_Events_AlertMemoryClearing "forgets the creatures told about, and says the memory is cleared only when it held some" $Handlers_Events_AlertMemoryClearing
-Test-ExactShape "MobTracker.Events" "AutoTrack" $Shape_Events_AutoTrack "hands EventLines.AutoTrackOutcome the generation now and at the alert, the creature tracked, whether it is the alerted one, AutoTrack and the re-track's wait" $Handlers_Events_AutoTrack
+Test-ExactShape "MobTracker.Events" "AutoTrack" $Shape_Events_AutoTrack "hands EventLines.AutoTrackOutcome the generation now and at the alert, the creature tracked, whether it is the alerted one, AutoTrack and the dungeon side Auto-track's test read (its second parameter)" $Handlers_Events_AutoTrack
 Test-ExactShape "MobTracker.Events" "NotAlertingEach" $Shape_Events_NotAlertingEach "each watched creature without its alert, not told before, once (ToldNotAlerting), with the first reason EventLines.TurnedAway names - the dungeon side never asked - each in its own catch" $Handlers_Events_NotAlertingEach
 Test-ExactShape "MobTracker.Events" "EmptyLookEach" $Shape_Events_EmptyLookEach "counts each watched creature by EventLines.TurnedAway's answer, each in its own catch, and writes the line only when it differs from the last look's" $Handlers_Events_EmptyLookEach
 Test-ExactShape "MobTracker.Events" "ListClosed" $Shape_Events_ListClosed "a cause no caller named is EventLines.ClosedUnseen's, from the inventory and the local player" $Handlers_Events_ListClosed

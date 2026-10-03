@@ -181,14 +181,15 @@ namespace MobTracker
         /// After Auto-track's test: whether it took the creature Alert named, and if not, why - read after the fact from
         /// what it leaves behind; EventLines.AutoTrackOutcome decides.
         /// </summary>
-        public static void AutoTrack(Character nearest)
+        /// <param name="sameSide">Auto-track's own dungeon-side answer (WatchAlerts.Update), not asked again here.</param>
+        public static void AutoTrack(Character nearest, bool sameSide)
         {
             if (!ModLog.Verbose)
                 return;
             try
             {
                 int outcome = EventLines.AutoTrackOutcome(Tracker.Generation, _alertGeneration, Tracker.IsTrackingCreature, Tracker.Target == nearest,
-                    ModConfig.AutoTrack.Value, NearestWatched.IsPending);
+                    ModConfig.AutoTrack.Value, sameSide);
                 ModLog.Event(EventLines.AutoTrack(outcome, Tracker.Tracked));
             }
             catch (Exception e) { Failed("AutoTrack", e); }

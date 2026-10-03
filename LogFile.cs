@@ -411,8 +411,8 @@ namespace MobTracker
             "opened and closed, its key and its buttons, Find area's steps, each setting changed, a world entered or left - to " +
             "MobTracker.log and to LogOutput.log, to see what happened and when; the README's Known limits name what it does " +
             "not say yet. On, MobTracker.log gets every MobTracker line, whatever ErrorLog says. Off, none of these lines is " +
-            "even put together. Changed in ConfigurationManager, it takes effect at once, also while the game runs - " +
-            "unless the cfg cannot be saved then (read-only, or held by another program). Edited in this file by hand, it " +
+            "even put together. Changed in ConfigurationManager, it takes effect at once, also while the game runs. Edited " +
+            "in this file by hand, it " +
             "is read only at the next start of the game - edit with the game closed: while it runs, any setting the game " +
             "saves writes its own values back over the file.";
     }

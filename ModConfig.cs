@@ -60,7 +60,8 @@ namespace MobTracker
                 "250 m, and as well while the line is missing or ends 5 m or more (measured on the flat) short of the " +
                 "target: still being built, a flying or swimming target, a cliff.");
             // Ranges, so the arrow can neither turn round (a negative size) nor vanish (0). BepInEx sets a value outside to
-            // the nearest end - also one read from the cfg, when the game starts - and saves it.
+            // the nearest end - also one read from the cfg, when the game starts - and the file is saved with it once
+            // every setting is read (ConfigSaver.Watch).
             ArrowSize = config.Bind("Tracking", "ArrowSize", 0.6f,
                 new ConfigDescription("Arrow length in metres, from 0.1 to 3. A value outside the range is set to the nearest end.",
                     new AcceptableValueRange<float>(0.1f, 3f)));
@@ -168,10 +169,8 @@ namespace MobTracker
         /// and the Alerts: row's revision follow as they do for any change (an entry already at its default is not
         /// written, nor counted). The log says what was set back, if anything.
         ///
-        /// The cfg is saved once, after the three writes, not at each: BepInEx saves a changed setting before it tells
-        /// the setting's SettingChanged handlers, so a save that throws (the file locked, the disk full) would leave a
-        /// parsed view behind its entry - for good, as the entry would already hold its default at the next reset. A
-        /// save that fails here is said in the log; the next change of any setting saves the file again.
+        /// The cfg is saved once, after the three writes, not at each (ConfigSaver.Each); a save that fails is caught and
+        /// said by ConfigSaver, and the next save that works writes the defaults.
         /// </summary>
         public static void ResetSession()
         {
@@ -182,9 +181,8 @@ namespace MobTracker
             if (held.Length == 0)
                 return;
 
-            ConfigFile file = WatchlistEntry.ConfigFile;
-            bool saveEach = file.SaveOnConfigSet;
-            file.SaveOnConfigSet = false;
+            bool saveEach = ConfigSaver.Each;
+            ConfigSaver.Each = false;
             try
             {
                 WatchlistEntry.Value = (string)WatchlistEntry.DefaultValue;
@@ -193,18 +191,11 @@ namespace MobTracker
             }
             finally
             {
-                file.SaveOnConfigSet = saveEach;
+                ConfigSaver.Each = saveEach;
             }
 
             MobTrackerPlugin.Log.LogInfo("Game session changed and KeepBetweenSessions is off, so these are back to their defaults:" + held);
-            try
-            {
-                file.Save();
-            }
-            catch (System.Exception e)
-            {
-                MobTrackerPlugin.Log.LogWarning("The cfg could not be saved after that: " + e.Message);
-            }
+            ConfigSaver.Save("after the session reset");
         }
 
         /// <summary>" Section.Key was 'value'." for an entry away from its default, else "".</summary>

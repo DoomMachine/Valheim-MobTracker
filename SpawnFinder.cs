@@ -173,7 +173,7 @@ namespace MobTracker
             WorldGenerator world = WorldGenerator.instance;
             var clock = Stopwatch.StartNew();
             var total = Stopwatch.StartNew(); // for the verbose log: the whole search, and the frames it took
-            int frames = 0;
+            int frames = 1; // this one; each pause below adds the frame it resumes in
 
             // Pass 1, cheap: every zone whose centre has a biome and centre-distance some rule allows.
             var candidates = new List<Vector2>();

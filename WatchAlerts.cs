@@ -127,11 +127,16 @@ namespace MobTracker
             // few hundred.) Nor while "always track nearest watched" waits after a loss: every watched creature it
             // could take, alerting or not, is its to choose from, and it takes the nearest at its next look (5 s after
             // the loss, then once a second); taking the alerting one here could pass over a nearer one.
-            if (ModConfig.AutoTrack.Value && !Tracker.IsTrackingCreature
-                && Rules.SameLayer(nearest.InInterior(), Character.InInterior(from))
-                && !NearestWatched.IsPending)
-                Tracker.Track(nearest);
-            Events.AutoTrack(nearest);
+            // The side is asked first, into a local, so the Auto-track line is handed the answer this test used. Two ifs, not
+            // one && chain: the compiler would join the local to the test before it with an 'and', not a branch, and
+            // tools\preflight.ps1 reads each test as a branch to the same skip.
+            bool sameSide = Rules.SameLayer(nearest.InInterior(), Character.InInterior(from));
+            if (ModConfig.AutoTrack.Value && !Tracker.IsTrackingCreature)
+            {
+                if (sameSide && !NearestWatched.IsPending)
+                    Tracker.Track(nearest);
+            }
+            Events.AutoTrack(nearest, sameSide);
         }
     }
 }

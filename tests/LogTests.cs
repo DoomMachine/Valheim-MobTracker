@@ -298,24 +298,25 @@ namespace MobTracker
                 && EventLines.AwayStars == 3 && EventLines.AwayRadius == 4 && EventLines.AwayOtherSide == 5, "");
 
             // What Auto-track did, worked out after its test.
-            // (generation now, generation at the alert, tracking a creature, its target is the alerted one, AutoTrack on, the re-track waits)
+            // (generation now, generation at the alert, tracking a creature, its target is the alerted one, AutoTrack on, the
+            // same side of a dungeon entrance - the answer Auto-track's test read)
             object[][] autoCases =
             {
-                new object[] { 5, 4, true, true, true, false },     // took it
-                new object[] { 4, 4, true, true, true, false },     // tracked before the alert already: not taken, it is tracked
-                new object[] { 5, 4, true, false, true, false },    // the tracking changed, but to another creature
+                new object[] { 5, 4, true, true, true, true },      // took it
+                new object[] { 4, 4, true, true, true, true },      // tracked before the alert already: not taken, it is tracked
+                new object[] { 5, 4, true, false, true, true },     // the tracking changed, but to another creature
                 new object[] { 5, 4, false, true, true, false },    // the alerted creature left as Target, no creature tracked now
-                new object[] { 4, 4, true, false, false, false },   // off, though a creature is tracked: off is said
-                new object[] { 4, 4, false, false, false, true },   // off, though the re-track waits: off is said
-                new object[] { 4, 4, true, false, true, true },     // a creature tracked while the re-track waits: tracked is said
-                new object[] { 4, 4, false, false, true, true },    // the re-track waits
-                new object[] { 4, 4, false, false, true, false }    // none of those: the other side of a dungeon entrance
+                new object[] { 4, 4, true, false, false, false },   // off, though a creature is tracked and it is across: off is said
+                new object[] { 4, 4, false, false, false, false },  // off, though it is across: off is said
+                new object[] { 4, 4, true, false, true, false },    // a creature tracked, and it is across: tracked is said
+                new object[] { 4, 4, false, false, true, false },   // across a dungeon entrance - also while the re-track waits
+                new object[] { 4, 4, false, false, true, true }     // none of those: the re-track waits
             };
             string autoGot = "";
             foreach (object[] c in autoCases)
                 autoGot += EventLines.AutoTrackOutcome((int)c[0], (int)c[1], (bool)c[2], (bool)c[3], (bool)c[4], (bool)c[5]).ToString(CultureInfo.InvariantCulture);
-            Eq("log: Auto-track's outcome - taken only when the tracking changed since the alert to that creature; else off, tracked, waiting, other side, in that order",
-                autoGot, "022411234");
+            Eq("log: Auto-track's outcome - taken only when the tracking changed since the alert to that creature; else off, tracked, other side, waiting - Auto-track's own order",
+                autoGot, "022411243");
             Eq("log: the ding's volume is written with a point", EventLines.DingPlayed(0.8f), "Ding: played at AlertVolume 0.8");
             Eq("log: no ding without its mixer group", EventLines.DingNotPlayed(false),
                 "Ding: not played - the game's interface-sound mixer group is not found (yet)");
@@ -412,6 +413,10 @@ namespace MobTracker
                 "MobTracker.log closed - the game is quitting; 3 repeated error(s) were left out since they were last written");
             Eq("log: the file could not be opened - the type only, never the message (it holds a path)", EventLines.OpenFailed("IOException"),
                 "MobTracker.log could not be opened (IOException; another running copy of the game may hold it, or it is read-only), so none is written for now; LogOutput.log still gets every MobTracker line.");
+            Eq("log: the cfg could not be saved - the type only, never the message (it holds a path)", EventLines.CfgNotSaved("at the game's start", "UnauthorizedAccessException"),
+                "Settings could not be saved to com.mobtracker.plugin.cfg at the game's start (UnauthorizedAccessException; it may be read-only, or held by another program). Changes still take effect in the game; the next save that works - at a later change, or when the game quits - writes them all, and if none does they last only until the game closes. Said once until a save works again.");
+            Eq("log: the cfg saved again", EventLines.CfgSavedAgain("after a change"),
+                "Settings saved to com.mobtracker.plugin.cfg again after a change, with every change made while it could not be written.");
             Eq("log: a line could not be written", EventLines.WriteFailed("IOException"),
                 "MobTracker.log could not be written (IOException) and is closed until the game starts again; LogOutput.log still gets every MobTracker line.");
         }

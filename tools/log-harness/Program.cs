@@ -4,11 +4,41 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
+using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 
+namespace UnityEngine
+{
+    // Stand-in for the one Unity type ModConfig.cs names (0.7.1).
+    public enum KeyCode { None = 0, F7 = 288, F8 = 289 }
+}
+
 namespace MobTracker
 {
+    // Stand-ins for what ModConfig.cs calls outside the files compiled here (0.7.1): Hotkeys.Forget, and Events.Watch's
+    // handler on the whole cfg, which only notes each change it is told of.
+    internal static class Hotkeys
+    {
+        public static int Forgot;
+        public static void Forget() { Forgot++; }
+    }
+
+    internal static class Events
+    {
+        public static readonly List<string> Told = new List<string>();
+        public static void Watch(ConfigFile config) { config.SettingChanged += (sender, args) => Told.Add(args.ChangedSetting.Definition.Key); }
+    }
+
+    /// <summary>Every line of every source, as BepInEx hands it out (0.7.1: BepInEx's own warnings too).</summary>
+    internal sealed class AllLines : ILogListener
+    {
+        public readonly List<string> Lines = new List<string>();
+        public void LogEvent(object sender, LogEventArgs e) { Lines.Add((e.Source == null ? "?" : e.Source.SourceName) + " " + e.Level + ": " + LogRules.TextOf(e.Data)); }
+        public void Dispose() { }
+    }
+
     // Stand-ins for the two game-side pieces LogFile.cs uses; LogFile.cs, LogRules.cs and EventLines.cs are the plugin's own.
     internal static class MobTrackerPlugin
     {
@@ -39,6 +69,13 @@ namespace MobTracker
         public override string ToString() { throw new InvalidOperationException("no text"); }
     }
 
+    /// <summary>A setting whose text throws while armed, so a save fails after BepInEx has emptied the file (cfg-cut-short).</summary>
+    public sealed class Cutter
+    {
+        public static bool Armed;
+        public int N;
+    }
+
     /// <summary>
     /// Each scenario runs in a process of its own (LogFile's state is static, once per game start, as in the game), in a
     /// folder of its own standing in for BepInEx's. Run with no scenario, it runs them all and exits 1 if any failed.
@@ -49,12 +86,15 @@ namespace MobTracker
         private static string _dir;
         private static ManualLogSource _bepinex, _unity, _other;
         private static Capture _capture;
+        private static AllLines _all;
 
         private static readonly string[] Scenarios =
         {
             "first-start", "second-start", "verbose-live", "both-off", "foreign", "second-copy", "prev-read-only",
             "log-read-only", "retry-on-only", "cap", "write-fails", "bound-fails", "header-write-fails", "stop", "stop-write-fails",
-            "scrub", "verbose-off"
+            "scrub", "verbose-off",
+            "cfg-read-only-start", "cfg-read-only-changes", "cfg-reset-once", "cfg-quit-retry", "cfg-start-file",
+            "cfg-storm", "cfg-start-locked", "cfg-held-for-writing", "cfg-cut-short", "cfg-read-only-unwatch", "cfg-recovery-twice"
         };
 
         public static int Main(string[] args)
@@ -74,6 +114,8 @@ namespace MobTracker
             _other = Logger.CreateLogSource("OtherMod");
             _capture = new Capture();
             Logger.Listeners.Add(_capture);
+            _all = new AllLines();
+            Logger.Listeners.Add(_all);
             Console.WriteLine("== " + args[1]);
             typeof(Program).GetMethod(args[1].Replace("-", ""), BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.IgnoreCase).Invoke(null, null);
             return _failures == 0 ? 0 : 1;
@@ -111,7 +153,7 @@ namespace MobTracker
 
         private static void Check(string what, bool ok, string detail = "")
         {
-            Console.WriteLine((ok ? "  ok    " : "  FAIL  ") + what + (ok || detail.Length == 0 ? "" : "  ->  " + detail));
+            Console.WriteLine((ok ? "  ok    " : "  FAIL  ") + what + (ok || string.IsNullOrEmpty(detail) ? "" : "  ->  " + detail));
             if (!ok)
                 _failures++;
         }
@@ -152,16 +194,68 @@ namespace MobTracker
             return new ConfigFile(path, true);
         }
 
-        /// <summary>The plugin's own order: LogFile.Start, then the settings (ModConfig.Bind's stand-in), then LogFile.Bound.</summary>
+        /// <summary>
+        /// The plugin's own order: ConfigSaver.Take, LogFile.Start, then the settings (ModConfig.Bind's stand-in), then
+        /// LogFile.Bound and ConfigSaver.Watch.
+        /// </summary>
         private static ConfigFile StartGame(string cfgText, Action whileBinding = null)
         {
             ConfigFile cfg = Cfg(cfgText);
+            ConfigSaver.Take(cfg);
             LogFile.Start(cfg, _dir, Path.Combine(_dir, "game"));
             cfg.Bind("General", "ListKey", "F7", "stand-in");
             if (whileBinding != null)
                 whileBinding();
             LogFile.Bound(cfg);
+            ConfigSaver.Watch(cfg);
             return cfg;
+        }
+
+        private static string CfgPath { get { return Path.Combine(_dir, "com.mobtracker.plugin.cfg"); } }
+
+        /// <summary>
+        /// MobTrackerPlugin.Awake's order with the real settings (0.7.1): ConfigSaver.Take, LogFile.Start, ModConfig.Bind,
+        /// LogFile.Bound, ConfigSaver.Watch, on a ConfigFile made as BaseUnityPlugin makes it (saveOnInit false, the plugin's
+        /// metadata). With <paramref name="takeFirst"/> false, 0.7.0's order: no Take, no Watch - BepInEx saves at each Bind.
+        /// </summary>
+        private static ConfigFile StartPlugin(string path, bool takeFirst = true)
+        {
+            var cfg = new ConfigFile(path, false, new BepInPlugin("com.mobtracker.plugin", "MobTracker", MobTrackerPlugin.Version));
+            if (takeFirst)
+                ConfigSaver.Take(cfg);
+            LogFile.Start(cfg, _dir, Path.Combine(_dir, "game"));
+            ModConfig.Bind(cfg);
+            LogFile.Bound(cfg);
+            if (takeFirst)
+                ConfigSaver.Watch(cfg);
+            return cfg;
+        }
+
+        private static string Try(Action action)
+        {
+            try
+            {
+                action();
+                return null;
+            }
+            catch (Exception e)
+            {
+                return e.GetType().Name + ": " + e.Message;
+            }
+        }
+
+        /// <summary>A setting's text in the cfg ("Section"'s "Key = value" line), read while nothing holds it.</summary>
+        private static string CfgValue(string key)
+        {
+            foreach (string line in File.ReadAllLines(CfgPath))
+                if (line.StartsWith(key + " = ", StringComparison.Ordinal))
+                    return line.Substring(key.Length + 3);
+            return null;
+        }
+
+        private static int Count(string prefix)
+        {
+            return _capture.Lines.Count(l => l.StartsWith(prefix, StringComparison.Ordinal));
         }
 
         private static void Seed(string log, string prev)
@@ -529,10 +623,10 @@ namespace MobTracker
             StartGame(null);
             string game = Path.Combine(_dir, "game");
             string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            MobTrackerPlugin.Log.LogWarning("The cfg could not be saved after that: Sharing violation on path " + game + "\\BepInEx\\config\\com.mobtracker.plugin.cfg");
+            MobTrackerPlugin.Log.LogWarning("a sample line: Sharing violation on path " + game + "\\BepInEx\\config\\com.mobtracker.plugin.cfg");
             MobTrackerPlugin.Log.LogWarning("a file under " + user + "\\AppData");
             string[] lines = Bodies(LogPath);
-            Check("the game's folder is written as <game>", lines.Contains("[Warning:MobTracker] The cfg could not be saved after that: Sharing violation on path <game>\\BepInEx\\config\\com.mobtracker.plugin.cfg"), Show(lines));
+            Check("the game's folder is written as <game>", lines.Contains("[Warning:MobTracker] a sample line: Sharing violation on path <game>\\BepInEx\\config\\com.mobtracker.plugin.cfg"), Show(lines));
             Check("the Windows user folder as <user>", lines.Contains("[Warning:MobTracker] a file under <user>\\AppData"), Show(lines));
             Check("LogOutput.log's side is as the game wrote it", _capture.Lines.Any(l => l.Contains(game)), "");
         }
@@ -543,6 +637,310 @@ namespace MobTracker
             for (int i = 0; i < 10; i++)
                 ModLog.Event("Track: verbose line " + i);
             Check("with VerboseLog off a verbose line reaches neither log", !_capture.Lines.Any(l => l.Contains("verbose line")) && !Bodies(LogPath).Any(l => l.Contains("verbose line")), "");
+        }
+
+        // ---- the cfg (0.7.1): ConfigSaver with the real settings ----
+
+        private static void CfgReadOnlyStart()
+        {
+            const string text = "[Alerts]\r\n\r\nWatchlist = Troll\r\n\r\n[Tracking]\r\n\r\nArrowSize = 9\r\n";
+            File.WriteAllText(CfgPath, text);
+            File.SetAttributes(CfgPath, FileAttributes.ReadOnly);
+            ConfigFile cfg = null;
+            string thrown;
+            try
+            {
+                thrown = Try(() => cfg = StartPlugin(CfgPath));
+                Check("a read-only cfg at the start: nothing throws out of Awake's order", thrown == null, thrown);
+                Check("every setting is bound, the stored values read and an out-of-range one moved into its range",
+                    cfg != null && cfg.Count == 14 && ModConfig.Watchlist.Contains("Troll") && ModConfig.ArrowSize.Value == 3f, cfg == null ? "" : cfg.Count + " bound");
+                Check("the cfg is not touched", File.ReadAllText(CfgPath) == text, File.ReadAllText(CfgPath));
+                Check("one warning, at the game's start, naming the exception's type only",
+                    Count("Warning: Settings could not be saved") == 1 && _capture.Lines.Contains("Warning: " + EventLines.CfgNotSaved("at the game's start", "UnauthorizedAccessException")),
+                    string.Join(" | ", _capture.Lines));
+                Check("and in MobTracker.log", Bodies(LogPath).Contains("[Warning:MobTracker] " + EventLines.CfgNotSaved("at the game's start", "UnauthorizedAccessException")), Show(Bodies(LogPath)));
+                Check("no 'could not be parsed' warning from BepInEx (a save failing inside a Bind)", !_all.Lines.Any(l => l.Contains("could not be parsed")), string.Join(" | ", _all.Lines));
+                thrown = Try(() => ModConfig.ToggleWatch("Serpent"));
+                Check("a change after it: no throw, the parsed watchlist follows, no second warning", thrown == null && ModConfig.Watchlist.Contains("Serpent")
+                    && Count("Warning: Settings could not be saved") == 1, thrown);
+            }
+            finally
+            {
+                File.SetAttributes(CfgPath, FileAttributes.Normal);
+            }
+        }
+
+        private static void CfgReadOnlyChanges()
+        {
+            StartPlugin(CfgPath);
+            Check("a writable start makes the cfg, and says nothing about it", File.Exists(CfgPath) && Count("Warning: Settings") == 0, string.Join(" | ", _capture.Lines));
+            File.SetAttributes(CfgPath, FileAttributes.ReadOnly);
+            string before = File.ReadAllText(CfgPath);
+            var thrown = new List<string>();
+            try
+            {
+                // As the window writes (EntityListWindow: Value), then as ConfigurationManager does (BoxedValue).
+                thrown.Add(Try(() => ModConfig.ToggleWatch("Troll")));
+                thrown.Add(Try(() => ModConfig.ListStarsText.Value = StarSets.Format(StarSets.Toggle(ModConfig.ListStars, StarFilter.OneStar))));
+                thrown.Add(Try(() => ModConfig.AutoTrack.Value = false));
+                thrown.Add(Try(() => ModConfig.AlertStarsText.BoxedValue = "TwoStars"));
+                thrown.Add(Try(() => LogFile.VerboseLog.BoxedValue = true));
+                thrown.Add(Try(() => ModConfig.ListKey.BoxedValue = UnityEngine.KeyCode.F8));
+                Check("no write throws while the cfg is read-only - the window's or ConfigurationManager's", thrown.All(t => t == null), string.Join(" | ", thrown));
+                Check("each parsed view follows its setting", ModConfig.Watchlist.Contains("Troll") && ModConfig.ListStars == StarSet.OneStar
+                    && ModConfig.AlertStars == StarSet.TwoStars && ModConfig.AlertStarsRevision == 1, ModConfig.ListStars + " " + ModConfig.AlertStars + " " + ModConfig.AlertStarsRevision);
+                Check("VerboseLog takes effect, with its note", ModLog.Verbose && Count("Message: Logging: VerboseLog turned on") == 1, string.Join(" | ", _capture.Lines));
+                Check("a new ListKey is tried afresh", Hotkeys.Forgot == 1, Hotkeys.Forgot.ToString());
+                Check("the handler on the whole cfg is told of every change", Events.Told.Count == 6, string.Join(",", Events.Told));
+                Check("the file is not touched, and the failure is said once", File.ReadAllText(CfgPath) == before
+                    && Count("Warning: Settings could not be saved to com.mobtracker.plugin.cfg after a change (UnauthorizedAccessException;") == 1
+                    && Count("Warning: Settings could not be saved") == 1, string.Join(" | ", _capture.Lines));
+            }
+            finally
+            {
+                File.SetAttributes(CfgPath, FileAttributes.Normal);
+            }
+            ModConfig.Guide.Value = GuideMode.GroundPath;
+            Check("the next change once it can be written: saved, said once, at Info", Count("Info: " + EventLines.CfgSavedAgain("after a change")) == 1, string.Join(" | ", _capture.Lines));
+            Check("and the file has every change made while it could not be written",
+                CfgValue("Watchlist") == "Troll" && CfgValue("ListStarFilter") == "OneStar" && CfgValue("AutoTrack") == "false" && CfgValue("AlertStarFilter") == "TwoStars"
+                && CfgValue("VerboseLog") == "true" && CfgValue("ListKey") == "F8" && CfgValue("GuideMode") == "GroundPath", File.ReadAllText(CfgPath));
+        }
+
+        private static void CfgResetOnce()
+        {
+            ConfigFile cfg = StartPlugin(CfgPath);
+            ModConfig.ToggleWatch("Troll");
+            ModConfig.ListStarsText.Value = "OneStar";
+            ModConfig.AlertStarsText.Value = "TwoStars";
+            // Added after ConfigSaver's handler, so it reads the file after the saver had its turn at each of the reset's writes.
+            var seen = new List<string>();
+            cfg.SettingChanged += (sender, args) => seen.Add(CfgValue("Watchlist"));
+            ModConfig.ResetSession();
+            Check("the session reset's writes are not saved one by one", seen.Count == 3 && seen.All(v => v == "Troll"), string.Join(",", seen));
+            Check("it saves once after them", CfgValue("Watchlist") == "" && CfgValue("ListStarFilter") == "All" && CfgValue("AlertStarFilter") == "All", File.ReadAllText(CfgPath));
+            Check("the views follow, and a change is saved as it happens again after it", ModConfig.Watchlist.Count == 0 && ModConfig.ListStars == StarSet.All
+                && ModConfig.AlertStars == StarSet.All && ConfigSaver.Each, ConfigSaver.Each.ToString());
+            ModConfig.ToggleWatch("Boar");
+            File.SetAttributes(CfgPath, FileAttributes.ReadOnly);
+            try
+            {
+                string thrown = Try(ModConfig.ResetSession);
+                Check("a read-only cfg: the reset throws nothing, its views follow, one warning after the reset", thrown == null && ModConfig.Watchlist.Count == 0
+                    && Count("Warning: " + EventLines.CfgNotSaved("after the session reset", "UnauthorizedAccessException")) == 1, thrown);
+            }
+            finally
+            {
+                File.SetAttributes(CfgPath, FileAttributes.Normal);
+            }
+        }
+
+        private static void CfgQuitRetry()
+        {
+            StartPlugin(CfgPath);
+            File.SetAttributes(CfgPath, FileAttributes.ReadOnly);
+            try
+            {
+                ModConfig.AutoTrack.Value = false;
+            }
+            finally
+            {
+                File.SetAttributes(CfgPath, FileAttributes.Normal);
+            }
+            Check("a change while read-only is not in the file", CfgValue("AutoTrack") == "true", CfgValue("AutoTrack"));
+            ConfigSaver.Stop();
+            Check("at quit, once the file can be written, it is saved, and said", CfgValue("AutoTrack") == "false"
+                && Count("Info: " + EventLines.CfgSavedAgain("as the game quits")) == 1, string.Join(" | ", _capture.Lines));
+            File.SetAttributes(CfgPath, FileAttributes.ReadOnly);
+            try
+            {
+                ConfigSaver.Stop();
+                Check("a quit with no failed save tries nothing (no warning on a read-only file)", Count("Warning: Settings could not be saved") == 1, string.Join(" | ", _capture.Lines));
+            }
+            finally
+            {
+                File.SetAttributes(CfgPath, FileAttributes.Normal);
+            }
+        }
+
+        private static void CfgStartFile()
+        {
+            // 0.7.0's order (BepInEx saves at each Bind) in a folder of its own, then 0.7.1's: the same file either way.
+            const string text = "[Alerts]\r\n\r\nWatchlist = Troll\r\nGone = 1\r\n\r\n[Tracking]\r\n\r\nArrowSize = 9\r\n\r\n[Zzz]\r\n\r\nOther = x\r\n";
+            string old = Path.Combine(_dir, "old");
+            Directory.CreateDirectory(old);
+            File.WriteAllText(Path.Combine(old, "com.mobtracker.plugin.cfg"), text);
+            StartPlugin(Path.Combine(old, "com.mobtracker.plugin.cfg"), false);
+            File.WriteAllText(CfgPath, text);
+            StartPlugin(CfgPath);
+            string mine = File.ReadAllText(CfgPath);
+            Check("the start writes the file BepInEx's per-Bind saves would have left, byte for byte", mine == File.ReadAllText(Path.Combine(old, "com.mobtracker.plugin.cfg")), mine);
+            Check("every setting with its description, a value moved into its range, keys MobTracker no longer has kept",
+                Regex.Matches(mine, "^## ", RegexOptions.Multiline).Count >= 14 && CfgValue("ArrowSize") == "3" && CfgValue("Gone") == "1" && CfgValue("Other") == "x"
+                && CfgValue("Watchlist") == "Troll", mine);
+        }
+
+        /// <summary>
+        /// ConfigurationManager's text box writes at every keystroke: 500 changes on a read-only cfg each take effect, with
+        /// one warning for them all and nothing thrown.
+        /// </summary>
+        private static void CfgStorm()
+        {
+            StartPlugin(CfgPath);
+            File.SetAttributes(CfgPath, FileAttributes.ReadOnly);
+            try
+            {
+                int told = Events.Told.Count, revision = ModConfig.AlertStarsRevision;
+                var thrown = new List<string>();
+                for (int i = 0; i < 500; i++)
+                {
+                    string text = i % 2 == 0 ? "OneStar" : "TwoStars";
+                    string t = Try(() => ModConfig.AlertStarsText.BoxedValue = text);
+                    if (t != null)
+                        thrown.Add(t);
+                }
+                Check("500 changes on a read-only cfg: none throws", thrown.Count == 0, string.Join(" | ", thrown.Take(3)));
+                Check("each is handled: the Alerts: row's revision and the handler on the whole cfg count all 500, and the view holds the last",
+                    ModConfig.AlertStarsRevision == revision + 500 && Events.Told.Count == told + 500 && ModConfig.AlertStars == StarSet.TwoStars,
+                    (ModConfig.AlertStarsRevision - revision) + " " + (Events.Told.Count - told) + " " + ModConfig.AlertStars);
+                Check("one warning for them all", Count("Warning: Settings could not be saved") == 1, string.Join(" | ", _capture.Lines));
+                Check("and one in MobTracker.log", Bodies(LogPath).Count(l => l.Contains("Settings could not be saved")) == 1, Show(Bodies(LogPath)));
+            }
+            finally
+            {
+                File.SetAttributes(CfgPath, FileAttributes.Normal);
+            }
+        }
+
+        /// <summary>
+        /// A cfg another program has open when the game starts, sharing reading only: BepInEx reads it, every setting is
+        /// bound, and the start's save fails with one IOException warning that names no path.
+        /// </summary>
+        private static void CfgStartLocked()
+        {
+            File.WriteAllText(CfgPath, "[Alerts]\r\n\r\nWatchlist = Troll\r\n");
+            ConfigFile cfg = null;
+            string thrown;
+            using (new FileStream(CfgPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                thrown = Try(() => cfg = StartPlugin(CfgPath));
+            Check("a cfg another program reads, sharing reading only, at the start: nothing throws, every setting is bound and read",
+                thrown == null && cfg != null && cfg.Count == 14 && ModConfig.Watchlist.Contains("Troll"), thrown ?? (cfg == null ? "" : cfg.Count + " bound"));
+            string[] warnings = _capture.Lines.Where(l => l.StartsWith("Warning: Settings could not be saved", StringComparison.Ordinal)).ToArray();
+            Check("one warning, an IOException, by type only - no path", warnings.Length == 1
+                && warnings[0] == "Warning: " + EventLines.CfgNotSaved("at the game's start", "IOException") && !warnings[0].Contains(_dir), Show(warnings));
+        }
+
+        /// <summary>
+        /// A known limit: a cfg another program holds open for writing - or for reading, sharing nothing - when the game
+        /// starts makes BepInEx's ConfigFile constructor throw, before any MobTracker code runs. Rewrite this only if
+        /// BepInEx changes.
+        /// </summary>
+        private static void CfgHeldForWriting()
+        {
+            File.WriteAllText(CfgPath, "[Alerts]\r\n\r\nWatchlist = Troll\r\n");
+            foreach (FileShare share in new[] { FileShare.Read, FileShare.None })
+            {
+                FileAccess access = share == FileShare.Read ? FileAccess.ReadWrite : FileAccess.Read;
+                string thrown;
+                using (new FileStream(CfgPath, FileMode.Open, access, share))
+                    thrown = Try(() => new ConfigFile(CfgPath, false, new BepInPlugin("com.mobtracker.plugin", "MobTracker", MobTrackerPlugin.Version)));
+                Check("a cfg another program holds (" + access + ", sharing " + share + ") at the start: BepInEx's ConfigFile constructor throws an IOException",
+                    thrown != null && thrown.StartsWith("IOException:", StringComparison.Ordinal), thrown ?? "no throw");
+            }
+        }
+
+        /// <summary>
+        /// BepInEx's Save empties the file as it opens it: a save that fails after that (a full disk, say - here a setting
+        /// whose text throws) leaves it cut short, and the next save that works - at a change, or at the quit - writes it
+        /// whole again.
+        /// </summary>
+        private static void CfgCutShort()
+        {
+            TomlTypeConverter.AddConverter(typeof(Cutter), new TypeConverter
+            {
+                ConvertToString = (o, t) => { if (Cutter.Armed) throw new IOException("Disk full (simulated)"); return ((Cutter)o).N.ToString(); },
+                ConvertToObject = (s, t) => new Cutter { N = int.Parse(s) }
+            });
+            ConfigFile cfg = StartPlugin(CfgPath);
+            cfg.Bind("Zz", "Cutter", new Cutter { N = 1 }, "a setting whose text throws while armed");
+            ModConfig.ToggleWatch("Troll");
+            int whole = File.ReadAllText(CfgPath).Length;
+            Cutter.Armed = true;
+            ModConfig.Guide.Value = GuideMode.GroundPath;
+            Cutter.Armed = false;
+            Check("a save that fails after the file is opened leaves it cut short, and says so once", CfgValue("Watchlist") == null
+                && File.ReadAllText(CfgPath).Length < whole / 4 && Count("Warning: " + EventLines.CfgNotSaved("after a change", "IOException")) == 1,
+                File.ReadAllText(CfgPath).Length + " of " + whole + " | " + string.Join(" | ", _capture.Lines));
+            ModConfig.AutoTrack.Value = false;
+            Check("the next save that works writes the whole file again, with every change", CfgValue("Watchlist") == "Troll" && CfgValue("GuideMode") == "GroundPath"
+                && CfgValue("AutoTrack") == "false" && CfgValue("Cutter") == "1" && Count("Info: " + EventLines.CfgSavedAgain("after a change")) == 1,
+                File.ReadAllText(CfgPath));
+            Cutter.Armed = true;
+            ModConfig.Guide.Value = GuideMode.Arrow;
+            Cutter.Armed = false;
+            Check("cut short again by the next failed save", CfgValue("Watchlist") == null, File.ReadAllText(CfgPath));
+            ConfigSaver.Stop();
+            Check("a file cut short by the last save is written whole at the quit", CfgValue("Watchlist") == "Troll" && CfgValue("GuideMode") == "Arrow"
+                && Count("Info: " + EventLines.CfgSavedAgain("as the game quits")) == 1, File.ReadAllText(CfgPath));
+        }
+
+        /// <summary>
+        /// Writes back to a default with the cfg read-only - Unwatch of the last type, the last star taken off: the views
+        /// follow, so the session reset (which skips settings at their default) finds nothing left behind, however often it
+        /// runs, and a later Watch gives that type only, not the unwatched one with it.
+        /// </summary>
+        private static void CfgReadOnlyUnwatch()
+        {
+            StartPlugin(CfgPath);
+            ModConfig.ToggleWatch("Troll");
+            ModConfig.ListStarsText.Value = "OneStar";
+            File.SetAttributes(CfgPath, FileAttributes.ReadOnly);
+            try
+            {
+                var thrown = new List<string>();
+                thrown.Add(Try(() => ModConfig.ToggleWatch("Troll")));
+                thrown.Add(Try(() => ModConfig.ListStarsText.Value = StarSets.Format(StarSets.Toggle(ModConfig.ListStars, StarFilter.OneStar))));
+                Check("written back to their defaults on a read-only cfg: nothing throws, and the views follow", thrown.All(t => t == null)
+                    && ModConfig.WatchlistEntry.Value == "" && ModConfig.Watchlist.Count == 0 && ModConfig.ListStarsText.Value == "All" && ModConfig.ListStars == StarSet.All,
+                    string.Join(" | ", thrown) + " " + ModConfig.ListStarsText.Value + " / " + ModConfig.ListStars);
+                int lines = _capture.Lines.Count;
+                thrown.Add(Try(ModConfig.ResetSession));
+                thrown.Add(Try(ModConfig.ResetSession));
+                Check("two session resets find nothing to set back: nothing thrown, nothing said, nothing left behind", thrown.All(t => t == null)
+                    && _capture.Lines.Count == lines && ModConfig.Watchlist.Count == 0 && ModConfig.ListStars == StarSet.All, Show(_capture.Lines.Skip(lines).ToArray()));
+                thrown.Add(Try(() => ModConfig.ToggleWatch("Serpent")));
+                Check("a later Watch gives that type only, not the unwatched one with it", thrown.All(t => t == null) && ModConfig.WatchlistEntry.Value == "Serpent"
+                    && ModConfig.Watchlist.Count == 1, ModConfig.WatchlistEntry.Value);
+            }
+            finally
+            {
+                File.SetAttributes(CfgPath, FileAttributes.Normal);
+            }
+        }
+
+        /// <summary>
+        /// After a failed save and the save that works again, later saves that work say nothing more, nor does the quit:
+        /// "saved again" comes once per run of failures.
+        /// </summary>
+        private static void CfgRecoveryTwice()
+        {
+            StartPlugin(CfgPath);
+            File.SetAttributes(CfgPath, FileAttributes.ReadOnly);
+            try
+            {
+                ModConfig.AutoTrack.Value = false;
+            }
+            finally
+            {
+                File.SetAttributes(CfgPath, FileAttributes.Normal);
+            }
+            ModConfig.Guide.Value = GuideMode.GroundPath;
+            ModConfig.AutoTrack.Value = true;
+            ModConfig.Guide.Value = GuideMode.Arrow;
+            Check("one failure, one recovery line, then silence at later saves that work", Count("Warning: Settings could not be saved") == 1
+                && Count("Info: Settings saved to com.mobtracker.plugin.cfg again") == 1 && CfgValue("GuideMode") == "Arrow", string.Join(" | ", _capture.Lines));
+            ConfigSaver.Stop();
+            Check("and no retry line at quit after a recovery", Count("Info: Settings saved to com.mobtracker.plugin.cfg again") == 1, string.Join(" | ", _capture.Lines));
         }
 
         private static bool LogFileIsOpen()

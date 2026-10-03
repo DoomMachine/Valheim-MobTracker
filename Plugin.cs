@@ -13,7 +13,7 @@ namespace MobTracker
         public const string PluginId = "com.mobtracker.plugin";
 
         /// <summary>Also MobTracker.csproj's Version; tools/preflight.ps1 checks that the two agree.</summary>
-        public const string Version = "0.7.0";
+        public const string Version = "0.7.1";
 
         internal static ManualLogSource Log;
 
@@ -22,9 +22,11 @@ namespace MobTracker
         private void Awake()
         {
             Log = Logger;
+            ConfigSaver.Take(Config); // before any setting is bound: BepInEx saves nothing from here on, ConfigSaver does
             LogFile.Start(Config, Paths.BepInExRootPath, Paths.GameRootPath); // first: ModConfig.Bind's own warnings go to MobTracker.log too
             ModConfig.Bind(Config);
             LogFile.Bound(Config);
+            ConfigSaver.Watch(Config); // after the last setting is bound and its handlers: the cfg saved now, and at each change
             Ding.Init(gameObject);
 
             gameObject.AddComponent<EntityListWindow>();
@@ -78,6 +80,7 @@ namespace MobTracker
 
         private void OnDestroy()
         {
+            ConfigSaver.Stop();
             _harmony?.UnpatchSelf();
             LogFile.Stop();
         }

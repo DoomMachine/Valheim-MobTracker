@@ -2,7 +2,9 @@
 
   <!--
     Proves MobTracker.log's file handling outside the game (0.7.0): LogFile.cs, LogRules.cs and EventLines.cs are compiled
-    as they are, with stand-ins for MobTrackerPlugin and LogHost (Program.cs), against the game's own BepInEx.dll.
+    as they are, with stand-ins for MobTrackerPlugin and LogHost (Program.cs), against the game's own BepInEx.dll; since
+    0.7.1 also ModConfig.cs and ConfigSaver.cs, with stand-ins for UnityEngine.KeyCode, Hotkeys and Events, to prove the
+    cfg's saving with the real settings (the cfg-* scenarios).
     Build:  dotnet build tools\log-harness\log-harness.csproj -c Release
     Run:    build\log-harness\log-harness.exe <an empty scratch folder>     (exit 0: every scenario passed)
     It runs on .NET Framework 4.8, not the game's Mono: what it proves about file sharing is Windows' and .NET's.
@@ -30,6 +32,8 @@
     <Compile Include="..\..\EventLines.cs" />
     <Compile Include="..\..\Rules.cs" />
     <Compile Include="..\..\StarFilter.cs" />
+    <Compile Include="..\..\ModConfig.cs" />
+    <Compile Include="..\..\ConfigSaver.cs" />
   </ItemGroup>
 
   <ItemGroup>
