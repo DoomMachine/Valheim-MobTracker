@@ -897,6 +897,20 @@ it at most once a minute, with a count).
 - Would take: a once-only warning in the cutscene test, a per-session count for the alert check, and per-creature
   catches as the alert check has, with the checks re-derived.
 
+### FW-11 An exact star count, typed in
+
+Planned (requested 2026-10-12), not started. The List and Alerts star rows offer No star, 1 star, 2 stars and 2+
+stars; with mods that give creatures more stars, 2+ is too coarse. Wanted: a field in the window where a star count is
+typed - a whole number, refused when it is not one - so that the list, the watch alerts, Auto-track and Always track
+nearest watched can pick exactly that many stars.
+
+- To settle first: whether a typed count joins a row's categories or replaces them, and whether more than one count can
+  be given; how the cfg keeps it - a number in `ListStarFilter` or `AlertStarFilter` is already a category code today
+  (3 means 2+ stars, 4 means All), so an exact count needs its own setting or spelling; what 2+ means beside it; the
+  largest count accepted.
+- Would take: a minor version - the window's field and its parsing, the star filters, preflight's checks with their
+  planted defects, the tests and the README. Every check runs before it ships, the full planted-defect run included.
+
 ## Decided or not planned - reopen only with a new reason
 
 - **The list keeps the game out while it is open:** Tab, the mouse wheel and the keys typed in its search do not reach
