@@ -4,7 +4,7 @@ The one list of what is untested, unverified, open or only an idea for MobTracke
 again. It lives with the code, so each release can check it. What a player meets is in the README's "Known limits";
 what each release changed is in its "History".
 
-As of **0.8.0**.
+As of **0.8.0**, and `main` after it (OI-7, FW-11).
 
 ## Keeping it up to date
 
@@ -24,7 +24,8 @@ work, **OQ** open questions - behaviour choices discussed and not taken (yet).
 
 ## Not yet tried in play
 
-0.8.0 has not been played yet (LT-20). 0.7.1 ran through short play sessions without errors, in which `VerboseLog` was
+0.8.0 was played without errors in the sessions read so far, in which nothing was watched or tracked, so its new rules
+did not act in them (LT-20). 0.7.1 ran through short play sessions without errors, in which `VerboseLog` was
 turned on while the game ran; the cfg could be written throughout, so none of LT-19's checks was run in them. 0.7.0 ran
 through short play sessions without errors, in which `MobTracker.log` was opened at each start, closed at each quit and
 kept as `MobTracker-prev.log` at the next start; its logging settings were not changed in them (LT-17). In one, Always
@@ -157,7 +158,7 @@ spawn the wild creatures after it. A tamed creature can attack a wild one nearby
 or after the loss, so that it is alive when the wait looks. Copy `BepInEx/LogOutput.log` before the game starts again,
 and read its `Always track nearest watched:` lines.
 
-- [ ] The log says `MobTracker 0.8.0 loaded`.
+- [x] The log says `MobTracker 0.8.0 loaded`.
 - [ ] With only `Boar` watched and **Always track nearest watched** ticked, track a wild `Neck` by hand, with a Boar
   around, and kill it: "Lost track of" shows, about 5 seconds later the arrow and the "Tracking:" label are on the
   nearest Boar, and the log has `waiting - lost Neck; watching Boar`, then `took Boar at <m> m, 5 s after losing Neck`.
@@ -364,12 +365,14 @@ let go of it: the game reads that button there with no test the list can hold sh
 
 ### LT-19 0.7.1: a cfg that cannot be written
 
-Copy `DoomMachine.MobTracker.cfg` before these checks, and make it writable again (Properties, untick Read-only)
-afterwards.
+Copy the cfg before these checks, and make it writable again (Properties, untick Read-only) afterwards. Up to the 0.8.0
+release it is `com.mobtracker.plugin.cfg`, after it `DoomMachine.MobTracker.cfg` (OI-7): the lines below name the newer
+file, and a release up to 0.8.0 names the older one.
 
 - [ ] With the game closed, make the cfg read-only and start the game: `LogOutput.log` says
   `Settings could not be saved to DoomMachine.MobTracker.cfg at the game's start (UnauthorizedAccessException; ...` and
-  then `MobTracker 0.7.1 loaded`, and `MobTracker.log` has the same warning; the cfg's contents and time do not change.
+  then `MobTracker <version> loaded`, and `MobTracker.log` has the same warning; the cfg's contents and time do not
+  change.
 - [ ] Still read-only, in a world: Watch a creature type, click a star on each row, untick Auto-track: each takes effect
   (the Watching row, the rows' marks, a watched creature's alert) and no error appears in either log.
 - [ ] Turn `VerboseLog` on in ConfigurationManager: `Logging: VerboseLog turned on - ...` in both logs, then the verbose
@@ -405,8 +408,10 @@ has happened in a log kept so far.
 MobTracker goes only into each player's game. A dedicated server needs nothing and can be vanilla: the game checks no
 mods when a player joins, and MobTracker sends nothing over the network. A client of a dedicated server builds its world
 generator from the seed the server sends at the join, so Find area works there as in single player, and the server's
-range caps the client's (LT-11). All of this is read from the code: MobTracker has not been played on a dedicated
-server, which LT-11's second check needs as well; LT-7 needs another player, there or in a game one of you hosts.
+range caps the client's (LT-11). All of this is read from the code. Among the sessions read so far is a game joined to
+a dedicated server - one with BepInEx on it, not a vanilla one - in which 0.8.0 ran without errors, but its list,
+alerts, tracking and Find area were not used, so none of the checks below was run as written; LT-11's second check
+needs a server too, and LT-7 another player, there or in a game one of you hosts.
 
 - [ ] Join a vanilla dedicated server (no BepInEx on it) with MobTracker installed: the join works, F7 lists
   creatures, and the log has no exception naming MobTracker.
@@ -453,12 +458,17 @@ no player, and say so.
 
 ### OI-7 The settings file's new name
 
-Since 2026-10-12, on `main` after the 0.8.0 release, MobTracker's plugin id is `DoomMachine.MobTracker`, so
-ConfigurationManager names the author, as it does for the other DoomMachine plugins. BepInEx names the settings file
-after that id: it is now `BepInEx/config/DoomMachine.MobTracker.cfg`, and the old `com.mobtracker.plugin.cfg` is no
-longer read. A player who does not rename the old file starts with every setting at its default (the README,
-**Installing**). Open for the next release: move the old file's settings over at the first start, or say it in the
-release notes. Either way, that release's History line names the change.
+Since 2026-10-12, on `main` after the 0.8.0 release, MobTracker's plugin id is `DoomMachine.MobTracker`, so the Valheim
+Configuration Manager heads MobTracker's settings in its Split View with
+"MobTracker <version> (DoomMachine.MobTracker)", as it does for the other DoomMachine plugins (read from its 1.1.25
+code; not yet seen in a game). BepInEx names the
+settings file after that id: it is now `BepInEx/config/DoomMachine.MobTracker.cfg`, and the old
+`com.mobtracker.plugin.cfg` is no longer read. A player who does not rename the old file starts with every setting at
+its default (the README, **Installing**). And BepInEx loads one plugin per id, so an older copy left anywhere in
+`BepInEx/plugins/` - under another file name or in a subfolder - would now load beside the new one. Open for the next
+release, which needs a new version number (0.8.0 is the release with the old id): move the old file's settings over
+at the first start, or say it in the release notes, and say what to do about a leftover copy. Either way, that
+release's History line names the change.
 
 ### OI-6 A log listener that throws at quit
 
@@ -626,7 +636,7 @@ the next world you enter empties the watchlist).
 
 ### KL-22 The cfg is read when the game starts
 
-A setting edited in `DoomMachine.MobTracker.cfg` while the game runs takes effect at the next start, and is lost if the
+A setting edited in the cfg while the game runs takes effect at the next start, and is lost if the
 file is written before then: any setting changed in the window or in ConfigurationManager writes the whole file back
 from the values in use, and so, with `KeepBetweenSessions` off, does entering a world or going back to the main menu
 while the watchlist or a star filter is away from its default, and so does quitting the game after a save that failed
@@ -636,7 +646,7 @@ world is entered, even one made with the game closed.
 
 ### KL-29 A cfg BepInEx cannot read when the game starts
 
-BepInEx reads `DoomMachine.MobTracker.cfg` while it creates the plugin, before any MobTracker code runs. A file another
+BepInEx reads the cfg while it creates the plugin, before any MobTracker code runs. A file another
 program holds open for writing then, or without sharing, or one whose section name was edited by hand to start or end
 with a space or to hold `=`, or whose section or setting name holds a tab, `\`, `"`, `'`, `[` or `]`, makes that read
 throw, and MobTracker cannot catch it (decompiled; BepInEx 5.4.23.3). Unverified: whether Unity then drops the plugin,
@@ -647,7 +657,7 @@ say so.
 
 With `KeepBetweenSessions` off, the watchlist and both star filters are set back when you enter a world or go back to
 the main menu, not when the game closes. Quitting from a world - from the game's menu, or by closing its window - ends
-the game without going back to the main menu, so `DoomMachine.MobTracker.cfg` keeps that session's watchlist and star
+the game without going back to the main menu, so the cfg keeps that session's watchlist and star
 filters through the next start and the main menu, where nothing is listed, alerted or tracked, until you enter a world.
 The README says so in the `KeepBetweenSessions` row of its settings table, not under Known limits. What would change
 it: setting them back when the game quits as well. LT-14 checks it in the game.
@@ -899,10 +909,10 @@ it at most once a minute, with a count).
 
 ### FW-11 An exact star count, typed in
 
-Planned (requested 2026-10-12), not started. The List and Alerts star rows offer No star, 1 star, 2 stars and 2+
-stars; with mods that give creatures more stars, 2+ is too coarse. Wanted: a field in the window where a star count is
-typed - a whole number, refused when it is not one - so that the list, the watch alerts, Auto-track and Always track
-nearest watched can pick exactly that many stars.
+Requested 2026-10-12; not started. The List and Alerts star rows offer All, No star, 1 star, 2 stars and 2+
+stars; with mods that give creatures more stars, 2+ is too coarse. Wanted: a field where a star count is typed - a
+whole number, refused when it is not one - so that the list, the watch alerts, Auto-track and Always track nearest
+watched can pick exactly that many stars. Where the field sits is open.
 
 - To settle first: whether a typed count joins a row's categories or replaces them, and whether more than one count can
   be given; how the cfg keeps it - a number in `ListStarFilter` or `AlertStarFilter` is already a category code today

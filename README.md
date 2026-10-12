@@ -132,11 +132,12 @@ https://github.com/DoomMachine/Valheim-MobTracker
 MobTracker needs BepInEx 5 for Valheim (the BepInExPack for Valheim, for example). Download
 `MobTracker-<version>.zip` from this repository's Releases, remove any older `MobTracker.dll` from
 `BepInEx/plugins/`, and put the `MobTracker.dll` from the zip there; the zip also holds this README and the
-licence. The settings in `BepInEx/config/DoomMachine.MobTracker.cfg` are kept from one version to the next - since
-0.5.0 the watchlist and the two star filters only with `KeepBetweenSessions` on - and a new version adds its own
-with their defaults. Releases up to 0.8.0 named that file `com.mobtracker.plugin.cfg`, which MobTracker no longer
-reads: rename it to `DoomMachine.MobTracker.cfg` to keep your settings. When the game starts,
-`BepInEx/LogOutput.log` says
+licence. The settings are kept from one version to the next - since 0.5.0 the watchlist and the two star filters only
+with `KeepBetweenSessions` on - and a new version adds its own with their defaults. The releases up to 0.8.0 keep them
+in `BepInEx/config/com.mobtracker.plugin.cfg`; versions after 0.8.0 use `BepInEx/config/DoomMachine.MobTracker.cfg`
+(see **Unreleased** under History) - when you move to one, rename the old file to `DoomMachine.MobTracker.cfg` with the
+game closed to keep your settings (if the new version has already started once, delete the
+`DoomMachine.MobTracker.cfg` it made first). When the game starts, `BepInEx/LogOutput.log` says
 `MobTracker <version> loaded`, and, with the default settings, `BepInEx/MobTracker.log` has a line that reads
 `MobTracker <version> - MobTracker.log opened at the game's start; ...` after its date, time, frame and
 `[File   :MobTracker]`. To remove it, delete `MobTracker.dll`, the .cfg too to forget the settings, and
@@ -147,10 +148,11 @@ own game, as above. The server can be vanilla, without BepInEx: the game never c
 MobTracker sends nothing over the network. A copy in a dedicated server's own `BepInEx/plugins/` is not needed - a
 dedicated server has no player of its own for MobTracker to work for - so leave it out. A server's range caps how far
 the list reaches (see **F7**), and losing the connection to the server takes you back to the main menu, which sets back
-what you watch and both star rows unless `KeepBetweenSessions` is on (see **One game session**). Not yet played on a
-dedicated server.
+what you watch and both star rows unless `KeepBetweenSessions` is on (see **One game session**). Among the sessions
+read so far is a game joined to a dedicated server - one with BepInEx on it, not a vanilla one - in which 0.8.0 ran
+without errors, but its list, alerts, tracking and Find area were not used.
 
-## Configuration (`BepInEx/config/DoomMachine.MobTracker.cfg`)
+## Configuration (`BepInEx/config/com.mobtracker.plugin.cfg`; after 0.8.0 `DoomMachine.MobTracker.cfg`)
 
 ConfigurationManager lists MobTracker's **Logging** section first (unless its own "Sort by name" setting is on); the
 file lists its sections by name.
@@ -231,7 +233,7 @@ file lists its sections by name.
   happened, except the state it finds when `VerboseLog` is turned on and the guide's state in a tracking's first two
   frames, which it takes as it is without a line: a guide already hidden when you start tracking (the HUD hidden with
   Ctrl+F3, say) gets no `Guide: hidden` line. The ground path's lines come only within 250 m, where the line is built.
-- While `DoomMachine.MobTracker.cfg` cannot be written (read-only, or held by another program), a setting changed in the
+- While the cfg cannot be written (read-only, or held by another program), a setting changed in the
   window or in ConfigurationManager takes effect but is not in the file: the log says so once, as a warning, and says
   when a later change saves it again - the reset of **One game session** counts as a change. The next save that works -
   at such a change, or when you quit the game - writes every change made meanwhile; the line for a save as you quit may
@@ -278,6 +280,15 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **Unreleased** (on `main` after 0.8.0; a build of it still says 0.8.0) - the plugin id is `DoomMachine.MobTracker`
+  (it was `com.mobtracker.plugin`), so the Valheim Configuration Manager heads MobTracker's settings in its Split View
+  with "MobTracker <version> (DoomMachine.MobTracker)", as it does for the other DoomMachine plugins. BepInEx names the
+  settings file after the id: it is now `BepInEx/config/DoomMachine.MobTracker.cfg`, and the two log lines that name the
+  file say so. With the game closed, rename the old `com.mobtracker.plugin.cfg` to that name to keep your settings (if
+  the new build has already started once, delete the file it made first), and remove the older `MobTracker.dll`: with
+  the new id, a copy left anywhere in `BepInEx/plugins/` - under another name or in a subfolder - would load beside it.
+  Since 0.8.0 this README also says how far a server lets the list reach (see **F7**) and has **Multiplayer and
+  dedicated servers**.
 - **0.8.0** - Always track nearest watched starts its wait after the loss of any tracked creature while something is
   watched: one of a kind you do not watch, tracked by hand for a while, or a tamed one, too. And taming the creature you
   track - by you or another player, when it was wild as you began tracking it - now ends its tracking as a loss does
@@ -290,7 +301,8 @@ The copyright holder is DoomMachine (see `LICENSE`).
   line for a creature tamed while tracked says that its tracking ends, no longer that losing it starts no wait, and the
   line for a tracked creature gone from your client reads `gone from this client (killed, despawned, or out of range)`,
   no longer blaming another player's game for a kill of your own. The unit tests and the safety checks hold the new
-  rules, with planted defects that put each old gate back or keep a tamed creature tracked. Not yet played in the game.
+  rules, with planted defects that put each old gate back or keep a tamed creature tracked. Played without errors in
+  the sessions read so far, in which nothing was watched or tracked, so its new rules did not act in them.
 - **0.7.1** - fixes. While `com.mobtracker.plugin.cfg` cannot be written (read-only, or held by another program), a
   setting changed in the window or in ConfigurationManager now takes effect in full, and without an error. Before, a
   click in the window threw an error, ConfigurationManager logged one, the watchlist or star filter changed could stay
