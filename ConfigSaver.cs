@@ -4,7 +4,7 @@ using BepInEx.Configuration;
 namespace MobTracker
 {
     /// <summary>
-    /// Saves com.mobtracker.plugin.cfg (0.7.1); BepInEx no longer does. BepInEx saves a changed setting before it tells
+    /// Saves DoomMachine.MobTracker.cfg (0.7.1); BepInEx no longer does. BepInEx saves a changed setting before it tells
     /// anyone of the change, and nothing catches a save that throws - the file read-only, or held by another program: the
     /// setting kept its new value, but no change handler ran (the parsed watchlist and star filters, the verbose flag, the
     /// refused keys stayed as they were), and the exception left the window's click, ConfigurationManager's control or -

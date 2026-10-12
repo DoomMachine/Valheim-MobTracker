@@ -188,7 +188,7 @@ namespace MobTracker
 
         private static ConfigFile Cfg(string text)
         {
-            string path = Path.Combine(_dir, "com.mobtracker.plugin.cfg");
+            string path = Path.Combine(_dir, "DoomMachine.MobTracker.cfg");
             if (text != null)
                 File.WriteAllText(path, text);
             return new ConfigFile(path, true);
@@ -211,7 +211,7 @@ namespace MobTracker
             return cfg;
         }
 
-        private static string CfgPath { get { return Path.Combine(_dir, "com.mobtracker.plugin.cfg"); } }
+        private static string CfgPath { get { return Path.Combine(_dir, "DoomMachine.MobTracker.cfg"); } }
 
         /// <summary>
         /// MobTrackerPlugin.Awake's order with the real settings (0.7.1): ConfigSaver.Take, LogFile.Start, ModConfig.Bind,
@@ -220,7 +220,7 @@ namespace MobTracker
         /// </summary>
         private static ConfigFile StartPlugin(string path, bool takeFirst = true)
         {
-            var cfg = new ConfigFile(path, false, new BepInPlugin("com.mobtracker.plugin", "MobTracker", MobTrackerPlugin.Version));
+            var cfg = new ConfigFile(path, false, new BepInPlugin("DoomMachine.MobTracker", "MobTracker", MobTrackerPlugin.Version));
             if (takeFirst)
                 ConfigSaver.Take(cfg);
             LogFile.Start(cfg, _dir, Path.Combine(_dir, "game"));
@@ -623,10 +623,10 @@ namespace MobTracker
             StartGame(null);
             string game = Path.Combine(_dir, "game");
             string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            MobTrackerPlugin.Log.LogWarning("a sample line: Sharing violation on path " + game + "\\BepInEx\\config\\com.mobtracker.plugin.cfg");
+            MobTrackerPlugin.Log.LogWarning("a sample line: Sharing violation on path " + game + "\\BepInEx\\config\\DoomMachine.MobTracker.cfg");
             MobTrackerPlugin.Log.LogWarning("a file under " + user + "\\AppData");
             string[] lines = Bodies(LogPath);
-            Check("the game's folder is written as <game>", lines.Contains("[Warning:MobTracker] a sample line: Sharing violation on path <game>\\BepInEx\\config\\com.mobtracker.plugin.cfg"), Show(lines));
+            Check("the game's folder is written as <game>", lines.Contains("[Warning:MobTracker] a sample line: Sharing violation on path <game>\\BepInEx\\config\\DoomMachine.MobTracker.cfg"), Show(lines));
             Check("the Windows user folder as <user>", lines.Contains("[Warning:MobTracker] a file under <user>\\AppData"), Show(lines));
             Check("LogOutput.log's side is as the game wrote it", _capture.Lines.Any(l => l.Contains(game)), "");
         }
@@ -693,7 +693,7 @@ namespace MobTracker
                 Check("a new ListKey is tried afresh", Hotkeys.Forgot == 1, Hotkeys.Forgot.ToString());
                 Check("the handler on the whole cfg is told of every change", Events.Told.Count == 6, string.Join(",", Events.Told));
                 Check("the file is not touched, and the failure is said once", File.ReadAllText(CfgPath) == before
-                    && Count("Warning: Settings could not be saved to com.mobtracker.plugin.cfg after a change (UnauthorizedAccessException;") == 1
+                    && Count("Warning: Settings could not be saved to DoomMachine.MobTracker.cfg after a change (UnauthorizedAccessException;") == 1
                     && Count("Warning: Settings could not be saved") == 1, string.Join(" | ", _capture.Lines));
             }
             finally
@@ -769,12 +769,12 @@ namespace MobTracker
             const string text = "[Alerts]\r\n\r\nWatchlist = Troll\r\nGone = 1\r\n\r\n[Tracking]\r\n\r\nArrowSize = 9\r\n\r\n[Zzz]\r\n\r\nOther = x\r\n";
             string old = Path.Combine(_dir, "old");
             Directory.CreateDirectory(old);
-            File.WriteAllText(Path.Combine(old, "com.mobtracker.plugin.cfg"), text);
-            StartPlugin(Path.Combine(old, "com.mobtracker.plugin.cfg"), false);
+            File.WriteAllText(Path.Combine(old, "DoomMachine.MobTracker.cfg"), text);
+            StartPlugin(Path.Combine(old, "DoomMachine.MobTracker.cfg"), false);
             File.WriteAllText(CfgPath, text);
             StartPlugin(CfgPath);
             string mine = File.ReadAllText(CfgPath);
-            Check("the start writes the file BepInEx's per-Bind saves would have left, byte for byte", mine == File.ReadAllText(Path.Combine(old, "com.mobtracker.plugin.cfg")), mine);
+            Check("the start writes the file BepInEx's per-Bind saves would have left, byte for byte", mine == File.ReadAllText(Path.Combine(old, "DoomMachine.MobTracker.cfg")), mine);
             Check("every setting with its description, a value moved into its range, keys MobTracker no longer has kept",
                 Regex.Matches(mine, "^## ", RegexOptions.Multiline).Count >= 14 && CfgValue("ArrowSize") == "3" && CfgValue("Gone") == "1" && CfgValue("Other") == "x"
                 && CfgValue("Watchlist") == "Troll", mine);
@@ -843,7 +843,7 @@ namespace MobTracker
                 FileAccess access = share == FileShare.Read ? FileAccess.ReadWrite : FileAccess.Read;
                 string thrown;
                 using (new FileStream(CfgPath, FileMode.Open, access, share))
-                    thrown = Try(() => new ConfigFile(CfgPath, false, new BepInPlugin("com.mobtracker.plugin", "MobTracker", MobTrackerPlugin.Version)));
+                    thrown = Try(() => new ConfigFile(CfgPath, false, new BepInPlugin("DoomMachine.MobTracker", "MobTracker", MobTrackerPlugin.Version)));
                 Check("a cfg another program holds (" + access + ", sharing " + share + ") at the start: BepInEx's ConfigFile constructor throws an IOException",
                     thrown != null && thrown.StartsWith("IOException:", StringComparison.Ordinal), thrown ?? "no throw");
             }
@@ -938,9 +938,9 @@ namespace MobTracker
             ModConfig.AutoTrack.Value = true;
             ModConfig.Guide.Value = GuideMode.Arrow;
             Check("one failure, one recovery line, then silence at later saves that work", Count("Warning: Settings could not be saved") == 1
-                && Count("Info: Settings saved to com.mobtracker.plugin.cfg again") == 1 && CfgValue("GuideMode") == "Arrow", string.Join(" | ", _capture.Lines));
+                && Count("Info: Settings saved to DoomMachine.MobTracker.cfg again") == 1 && CfgValue("GuideMode") == "Arrow", string.Join(" | ", _capture.Lines));
             ConfigSaver.Stop();
-            Check("and no retry line at quit after a recovery", Count("Info: Settings saved to com.mobtracker.plugin.cfg again") == 1, string.Join(" | ", _capture.Lines));
+            Check("and no retry line at quit after a recovery", Count("Info: Settings saved to DoomMachine.MobTracker.cfg again") == 1, string.Join(" | ", _capture.Lines));
         }
 
         private static bool LogFileIsOpen()

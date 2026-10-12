@@ -132,9 +132,11 @@ https://github.com/DoomMachine/Valheim-MobTracker
 MobTracker needs BepInEx 5 for Valheim (the BepInExPack for Valheim, for example). Download
 `MobTracker-<version>.zip` from this repository's Releases, remove any older `MobTracker.dll` from
 `BepInEx/plugins/`, and put the `MobTracker.dll` from the zip there; the zip also holds this README and the
-licence. The settings in `BepInEx/config/com.mobtracker.plugin.cfg` are kept from one version to the next - since
+licence. The settings in `BepInEx/config/DoomMachine.MobTracker.cfg` are kept from one version to the next - since
 0.5.0 the watchlist and the two star filters only with `KeepBetweenSessions` on - and a new version adds its own
-with their defaults. When the game starts, `BepInEx/LogOutput.log` says
+with their defaults. Releases up to 0.8.0 named that file `com.mobtracker.plugin.cfg`, which MobTracker no longer
+reads: rename it to `DoomMachine.MobTracker.cfg` to keep your settings. When the game starts,
+`BepInEx/LogOutput.log` says
 `MobTracker <version> loaded`, and, with the default settings, `BepInEx/MobTracker.log` has a line that reads
 `MobTracker <version> - MobTracker.log opened at the game's start; ...` after its date, time, frame and
 `[File   :MobTracker]`. To remove it, delete `MobTracker.dll`, the .cfg too to forget the settings, and
@@ -148,7 +150,7 @@ the list reaches (see **F7**), and losing the connection to the server takes you
 what you watch and both star rows unless `KeepBetweenSessions` is on (see **One game session**). Not yet played on a
 dedicated server.
 
-## Configuration (`BepInEx/config/com.mobtracker.plugin.cfg`)
+## Configuration (`BepInEx/config/DoomMachine.MobTracker.cfg`)
 
 ConfigurationManager lists MobTracker's **Logging** section first (unless its own "Sort by name" setting is on); the
 file lists its sections by name.
@@ -229,7 +231,7 @@ file lists its sections by name.
   happened, except the state it finds when `VerboseLog` is turned on and the guide's state in a tracking's first two
   frames, which it takes as it is without a line: a guide already hidden when you start tracking (the HUD hidden with
   Ctrl+F3, say) gets no `Guide: hidden` line. The ground path's lines come only within 250 m, where the line is built.
-- While `com.mobtracker.plugin.cfg` cannot be written (read-only, or held by another program), a setting changed in the
+- While `DoomMachine.MobTracker.cfg` cannot be written (read-only, or held by another program), a setting changed in the
   window or in ConfigurationManager takes effect but is not in the file: the log says so once, as a warning, and says
   when a later change saves it again - the reset of **One game session** counts as a change. The next save that works -
   at such a change, or when you quit the game - writes every change made meanwhile; the line for a save as you quit may

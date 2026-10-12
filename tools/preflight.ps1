@@ -3,7 +3,7 @@
   Checks a compiled MobTracker.dll against the shipped game, without launching it.
 
 .DESCRIPTION
-  1. identity: BepInPlugin GUID com.mobtracker.plugin, name MobTracker, the expected version
+  1. identity: BepInPlugin GUID DoomMachine.MobTracker, name MobTracker, the expected version
   2. every [HarmonyPatch] target type and method (the overload, when one is named) still exists in the game,
      every patch parameter is a target parameter or a Harmony injection, Awake applies every patch class, and
      a patch priority sits on the method (Harmony ignores one on the class)
@@ -123,8 +123,8 @@ Write-Output "== identity =="
 $checks++
 $bep = $null
 foreach ($t in $plug.Types) { foreach ($ca in $t.CustomAttributes) { if ($ca.AttributeType.Name -eq "BepInPlugin") { $bep = @($ca.ConstructorArguments | ForEach-Object { "$($_.Value)" }) } } }
-if ($bep -and $bep[0] -ceq "com.mobtracker.plugin" -and $bep[1] -ceq "MobTracker" -and $bep[2] -ceq $ExpectedVersion) { Ok ("BepInPlugin {0} / {1} / {2}" -f $bep[0], $bep[1], $bep[2]) }
-else { Fail ("BepInPlugin is '{0}', expected 'com.mobtracker.plugin / MobTracker / {1}'" -f ($bep -join " / "), $ExpectedVersion) }
+if ($bep -and $bep[0] -ceq "DoomMachine.MobTracker" -and $bep[1] -ceq "MobTracker" -and $bep[2] -ceq $ExpectedVersion) { Ok ("BepInPlugin {0} / {1} / {2}" -f $bep[0], $bep[1], $bep[2]) }
+else { Fail ("BepInPlugin is '{0}', expected 'DoomMachine.MobTracker / MobTracker / {1}'" -f ($bep -join " / "), $ExpectedVersion) }
 # The version is written in two places (Plugin.cs's Version constant, the csproj's <Version>); both must agree.
 $checks++
 $asmVersion = "$($plug.Assembly.Name.Version)"

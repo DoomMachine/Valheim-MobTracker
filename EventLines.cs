@@ -490,7 +490,7 @@ namespace MobTracker
         /// <param name="when">"at the game's start", "after a change", "after the session reset".</param>
         public static string CfgNotSaved(string when, string exceptionType)
         {
-            return "Settings could not be saved to com.mobtracker.plugin.cfg " + when + " (" + exceptionType + "; it may be read-only, or held"
+            return "Settings could not be saved to DoomMachine.MobTracker.cfg " + when + " (" + exceptionType + "; it may be read-only, or held"
                    + " by another program). Changes still take effect in the game; the next save that works - at a later change, or when"
                    + " the game quits - writes them all, and if none does they last only until the game closes. Said once until a save"
                    + " works again.";
@@ -499,7 +499,7 @@ namespace MobTracker
         /// <param name="when">"after a change", "after the session reset", "as the game quits".</param>
         public static string CfgSavedAgain(string when)
         {
-            return "Settings saved to com.mobtracker.plugin.cfg again " + when + ", with every change made while it could not be written.";
+            return "Settings saved to DoomMachine.MobTracker.cfg again " + when + ", with every change made while it could not be written.";
         }
 
         public static string WriteFailed(string exceptionType)

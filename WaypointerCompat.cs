@@ -14,7 +14,7 @@ namespace MobTracker
     /// the chat, a sign, the map's pin box and the console as they really are.
     ///
     /// Applied from MobTrackerPlugin.Start, not Awake: BepInEx creates the plugins in case-insensitive GUID order and
-    /// loads each one's assembly only just before creating it (Chainloader.Start), so when com.mobtracker.plugin's
+    /// loads each one's assembly only just before creating it (Chainloader.Start), so when DoomMachine.MobTracker's
     /// Awake runs DoomMachine.TomTom's assembly is not loaded yet. Every plugin exists by the time Unity calls Start.
     /// </summary>
     internal static class WaypointerCompat

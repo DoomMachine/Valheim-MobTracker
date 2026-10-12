@@ -10,7 +10,7 @@ namespace MobTracker
     [BepInPlugin(PluginId, "MobTracker", Version)]
     public class MobTrackerPlugin : BaseUnityPlugin
     {
-        public const string PluginId = "com.mobtracker.plugin";
+        public const string PluginId = "DoomMachine.MobTracker";
 
         /// <summary>Also MobTracker.csproj's Version; tools/preflight.ps1 checks that the two agree.</summary>
         public const string Version = "0.8.0";

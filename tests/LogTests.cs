@@ -417,9 +417,9 @@ namespace MobTracker
             Eq("log: the file could not be opened - the type only, never the message (it holds a path)", EventLines.OpenFailed("IOException"),
                 "MobTracker.log could not be opened (IOException; another running copy of the game may hold it, or it is read-only), so none is written for now; LogOutput.log still gets every MobTracker line.");
             Eq("log: the cfg could not be saved - the type only, never the message (it holds a path)", EventLines.CfgNotSaved("at the game's start", "UnauthorizedAccessException"),
-                "Settings could not be saved to com.mobtracker.plugin.cfg at the game's start (UnauthorizedAccessException; it may be read-only, or held by another program). Changes still take effect in the game; the next save that works - at a later change, or when the game quits - writes them all, and if none does they last only until the game closes. Said once until a save works again.");
+                "Settings could not be saved to DoomMachine.MobTracker.cfg at the game's start (UnauthorizedAccessException; it may be read-only, or held by another program). Changes still take effect in the game; the next save that works - at a later change, or when the game quits - writes them all, and if none does they last only until the game closes. Said once until a save works again.");
             Eq("log: the cfg saved again", EventLines.CfgSavedAgain("after a change"),
-                "Settings saved to com.mobtracker.plugin.cfg again after a change, with every change made while it could not be written.");
+                "Settings saved to DoomMachine.MobTracker.cfg again after a change, with every change made while it could not be written.");
             Eq("log: a line could not be written", EventLines.WriteFailed("IOException"),
                 "MobTracker.log could not be written (IOException) and is closed until the game starts again; LogOutput.log still gets every MobTracker line.");
         }

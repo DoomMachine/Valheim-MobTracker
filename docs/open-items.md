@@ -364,11 +364,11 @@ let go of it: the game reads that button there with no test the list can hold sh
 
 ### LT-19 0.7.1: a cfg that cannot be written
 
-Copy `com.mobtracker.plugin.cfg` before these checks, and make it writable again (Properties, untick Read-only)
+Copy `DoomMachine.MobTracker.cfg` before these checks, and make it writable again (Properties, untick Read-only)
 afterwards.
 
 - [ ] With the game closed, make the cfg read-only and start the game: `LogOutput.log` says
-  `Settings could not be saved to com.mobtracker.plugin.cfg at the game's start (UnauthorizedAccessException; ...` and
+  `Settings could not be saved to DoomMachine.MobTracker.cfg at the game's start (UnauthorizedAccessException; ...` and
   then `MobTracker 0.7.1 loaded`, and `MobTracker.log` has the same warning; the cfg's contents and time do not change.
 - [ ] Still read-only, in a world: Watch a creature type, click a star on each row, untick Auto-track: each takes effect
   (the Watching row, the rows' marks, a watched creature's alert) and no error appears in either log.
@@ -376,11 +376,11 @@ afterwards.
   lines; ConfigurationManager shows no `Failed to draw setting MobTracker - ...` error and no
   `Failed to draw this field` text.
 - [ ] Make the cfg writable while the game runs and change any setting: the log says
-  `Settings saved to com.mobtracker.plugin.cfg again after a change, ...`, and the cfg holds every change made while it
+  `Settings saved to DoomMachine.MobTracker.cfg again after a change, ...`, and the cfg holds every change made while it
   was read-only.
 - [ ] Make it read-only again, change a setting, make it writable, and quit from inside the world (from the game's
   menu), not by logging out first, with `VerboseLog` still on, which the line needs to reach `MobTracker.log`:
-  `MobTracker.log` ends with `Settings saved to com.mobtracker.plugin.cfg again as the game quits, ...` before its
+  `MobTracker.log` ends with `Settings saved to DoomMachine.MobTracker.cfg again as the game quits, ...` before its
   closing line, and the cfg holds that change.
 - [ ] With `KeepBetweenSessions` off, a type watched and the cfg read-only, go back to the main menu: the log says
   `Game session changed and KeepBetweenSessions is off, ...`, with no error, and entering a world again nothing is
@@ -450,6 +450,15 @@ alert does with Auto-track on. After a respawn at once (no bed, near the start) 
 nearest watched ends its wait at a death by design.)
 Whether tracking should carry on after the respawn is open: the tracker would have to keep its target while there is
 no player, and say so.
+
+### OI-7 The settings file's new name
+
+Since 2026-10-12, on `main` after the 0.8.0 release, MobTracker's plugin id is `DoomMachine.MobTracker`, so
+ConfigurationManager names the author, as it does for the other DoomMachine plugins. BepInEx names the settings file
+after that id: it is now `BepInEx/config/DoomMachine.MobTracker.cfg`, and the old `com.mobtracker.plugin.cfg` is no
+longer read. A player who does not rename the old file starts with every setting at its default (the README,
+**Installing**). Open for the next release: move the old file's settings over at the first start, or say it in the
+release notes. Either way, that release's History line names the change.
 
 ### OI-6 A log listener that throws at quit
 
@@ -617,7 +626,7 @@ the next world you enter empties the watchlist).
 
 ### KL-22 The cfg is read when the game starts
 
-A setting edited in `com.mobtracker.plugin.cfg` while the game runs takes effect at the next start, and is lost if the
+A setting edited in `DoomMachine.MobTracker.cfg` while the game runs takes effect at the next start, and is lost if the
 file is written before then: any setting changed in the window or in ConfigurationManager writes the whole file back
 from the values in use, and so, with `KeepBetweenSessions` off, does entering a world or going back to the main menu
 while the watchlist or a star filter is away from its default, and so does quitting the game after a save that failed
@@ -627,7 +636,7 @@ world is entered, even one made with the game closed.
 
 ### KL-29 A cfg BepInEx cannot read when the game starts
 
-BepInEx reads `com.mobtracker.plugin.cfg` while it creates the plugin, before any MobTracker code runs. A file another
+BepInEx reads `DoomMachine.MobTracker.cfg` while it creates the plugin, before any MobTracker code runs. A file another
 program holds open for writing then, or without sharing, or one whose section name was edited by hand to start or end
 with a space or to hold `=`, or whose section or setting name holds a tab, `\`, `"`, `'`, `[` or `]`, makes that read
 throw, and MobTracker cannot catch it (decompiled; BepInEx 5.4.23.3). Unverified: whether Unity then drops the plugin,
@@ -638,7 +647,7 @@ say so.
 
 With `KeepBetweenSessions` off, the watchlist and both star filters are set back when you enter a world or go back to
 the main menu, not when the game closes. Quitting from a world - from the game's menu, or by closing its window - ends
-the game without going back to the main menu, so `com.mobtracker.plugin.cfg` keeps that session's watchlist and star
+the game without going back to the main menu, so `DoomMachine.MobTracker.cfg` keeps that session's watchlist and star
 filters through the next start and the main menu, where nothing is listed, alerted or tracked, until you enter a world.
 The README says so in the `KeepBetweenSessions` row of its settings table, not under Known limits. What would change
 it: setting them back when the game quits as well. LT-14 checks it in the game.
