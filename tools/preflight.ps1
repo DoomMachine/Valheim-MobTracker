@@ -68,6 +68,9 @@
      Events.Watch), except while the session reset writes (ConfigSaver.Each), which saves once after; ConfigSaver.Save
      is the only ConfigFile.Save, catches every failure, says the first by type only and then nothing until a save
      works again, which it says; OnDestroy tries once more, first, if the last save failed
+ 11. the plugin id (after 0.8.0): the plugin's one Harmony instance is made in Awake with the BepInPlugin GUID; the
+     two cfg lines (EventLines.CfgNotSaved, CfgSavedAgain) name <GUID>.cfg, the file BepInEx makes from the GUID; and
+     the plugin makes no ConfigFile of its own - BepInEx's Config is the only one it reads or writes
   Run it after every Valheim update. Exits 1 on any failure. The number of checks depends on how many TomTom or
   Wayfinder DLLs it reads (one check each).
 
@@ -3126,6 +3129,37 @@ foreach ($ar in $plug.AssemblyReferences) {
     else { Fail ("{0} cannot be found in the game folder" -f $ar.Name) }
 }
 
+# 11. The plugin id (after 0.8.0, DoomMachine.MobTracker): what else must follow the BepInPlugin GUID. Each check fails
+# on a defect tools\mutants.ps1 plants: P11 (the Harmony id), PE1-PE6 (the cfg lines), P12 and P21 (a ConfigFile).
+Write-Output "== the plugin id's other uses =="
+# The Harmony id is the plugin's id: one Harmony instance, made in Awake from the BepInPlugin GUID's own string.
+$checks++
+$hx = @()
+foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }; $ins = @($m.Body.Instructions); for ($k = 0; $k -lt $ins.Count; $k++) { $o = $ins[$k].Operand
+    if ($ins[$k].OpCode.Name -eq "newobj" -and $o -is [Mono.Cecil.MethodReference] -and $o.DeclaringType.FullName -ceq "HarmonyLib.Harmony") {
+        $arg = if ($k -gt 0 -and $ins[$k - 1].OpCode.Name -eq "ldstr") { "'" + $ins[$k - 1].Operand + "'" } else { "not a literal" }
+        $hx += ("{0}.{1} {2}" -f $t.Name, $m.Name, $arg) } } } }
+$guid = if ($bep) { $bep[0] } else { "?" }
+if (($hx -join "; ") -ceq ("MobTrackerPlugin.Awake '" + $guid + "'")) { Ok ("one Harmony instance, made in Awake with the plugin's id {0}" -f $guid) }
+else { Fail ("the Harmony ids are [{0}]; expected one, made in MobTrackerPlugin.Awake, equal to the BepInPlugin GUID '{1}'" -f ($hx -join "; "), $guid) }
+# The two cfg lines name the file BepInEx writes: <GUID>.cfg (BaseUnityPlugin's constructor: Paths.ConfigPath, GUID + ".cfg").
+$checks++
+$why = @()
+$cfgName = $guid + ".cfg"
+foreach ($mn in @("CfgNotSaved", "CfgSavedAgain")) {
+    $em = Get-Method "MobTracker.EventLines" $mn
+    $ls = if ($em) { @($em.Body.Instructions | Where-Object { $_.OpCode.Name -eq "ldstr" } | ForEach-Object { "$($_.Operand)" }) } else { @() }
+    $named = @($ls | Where-Object { $_ -match '(?i)\.cfg|mobtracker' })
+    if ($named.Count -ne 1 -or -not $named[0].Contains(" " + $cfgName + " ")) { $why += ("EventLines.{0} names [{1}], not '{2}'" -f $mn, ($named -join " | "), $cfgName) }
+}
+if ($why.Count -eq 0) { Ok ("EventLines.CfgNotSaved and CfgSavedAgain name {0}, the file BepInEx makes from the GUID" -f $cfgName) }
+else { Fail ("the cfg lines: " + ($why -join "; ")) }
+# The plugin makes no ConfigFile of its own: BepInEx's Config is the only one it reads or writes.
+$checks++
+$cf = @()
+foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }; foreach ($x in $m.Body.Instructions) { $o = $x.Operand
+    if ($x.OpCode.Name -eq "newobj" -and $o -is [Mono.Cecil.MethodReference] -and $o.DeclaringType.FullName -ceq "BepInEx.Configuration.ConfigFile") { $cf += ("{0}.{1}" -f $t.Name, $m.Name) } } } }
+if ($cf.Count -eq 0) { Ok "no ConfigFile but BepInEx's own" } else { Fail ("a ConfigFile of its own, made in: " + ($cf -join ", ")) }
 Close-Cecil
 
 Write-Output ""

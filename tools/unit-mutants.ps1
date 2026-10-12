@@ -251,7 +251,14 @@ $mutants = @(
     @("U157 a creature that passes every test said as outside AlertRadius", "EventLines.cs", "why = ""no test turns it away"";", "why = ""outside AlertRadius"";"),
     @("U158 the radius reason left to the default - outside AlertRadius said as a code not known", "EventLines.cs", "                case AwayRadius:`n                    why = ""outside AlertRadius"";`n                    break;`n", ""),
     # Since 0.7.0: the settings' settler forgets a burst once said.
-    @("U159 a burst never forgotten once said - its settled line again on every frame of the settings flush", "LogRules.cs", "                done.Add(pair.Key);`n", "")
+    @("U159 a burst never forgotten once said - its settled line again on every frame of the settings flush", "LogRules.cs", "                done.Add(pair.Key);`n", ""),
+    # ---- the plugin id (after 0.8.0): the two cfg lines name DoomMachine.MobTracker.cfg, exactly (LogTests).
+    @("U186 the cfg warning names the 0.8.0 release's file, com.mobtracker.plugin.cfg", "EventLines.cs", "return ""Settings could not be saved to DoomMachine.MobTracker.cfg "" + when", "return ""Settings could not be saved to com.mobtracker.plugin.cfg "" + when"),
+    @("U187 the cfg's 'saved again' line names the 0.8.0 release's file", "EventLines.cs", "return ""Settings saved to DoomMachine.MobTracker.cfg again "" + when", "return ""Settings saved to com.mobtracker.plugin.cfg again "" + when"),
+    @("U188 the cfg warning names no file", "EventLines.cs", "return ""Settings could not be saved to DoomMachine.MobTracker.cfg "" + when", "return ""Settings could not be saved "" + when"),
+    @("U189 the cfg's 'saved again' line names no file", "EventLines.cs", "return ""Settings saved to DoomMachine.MobTracker.cfg again "" + when", "return ""Settings saved again "" + when"),
+    @("U190 the cfg warning names the file in lower case", "EventLines.cs", "return ""Settings could not be saved to DoomMachine.MobTracker.cfg "" + when", "return ""Settings could not be saved to doommachine.mobtracker.cfg "" + when"),
+    @("U191 the cfg's 'saved again' line drops .cfg", "EventLines.cs", "return ""Settings saved to DoomMachine.MobTracker.cfg again "" + when", "return ""Settings saved to DoomMachine.MobTracker again "" + when")
 )
 $ids = @($mutants | ForEach-Object { ($_[0] -split " ")[0] })
 $unknown = @($Only | Where-Object { $ids -notcontains $_ })
