@@ -14,3 +14,5 @@
   - 2026-11-02: accepted; to be built in 0.9.0 (D-005). Cases the options did not cover (a range written high to low,
     an open range, a range past the largest count D-004 allows, repeated or overlapping entries, spaces, an empty
     entry) are left to the design; the docs will state each with its reason.
+  - 2026-11-03: the open range was put to the developer instead: D-013, not accepted. The design decides the other
+    cases, and `docs/open-items.md` is to state each with its reason (checked before the release).

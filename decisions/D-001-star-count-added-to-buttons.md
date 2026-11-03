@@ -15,3 +15,4 @@
 - **Reason:** no reason given.
 - **Status:**
   - 2026-11-02: accepted; to be built in 0.9.0 (D-005).
+  - 2026-11-03: refined by D-012 (the field's look) and D-014 (a click on All empties the field too).

@@ -27,3 +27,12 @@ The log was started on 2026-11-02. Decisions taken before it (behaviour choices 
   `DoomMachine.MobTracker`, a text fix with no new version.
 - [D-010](D-010-star-count-requested.md) (2026-10-12; accepted): FW-11 requested, logged first; every check once it is
   built.
+- [D-011](D-011-older-copy-rename-and-stay-off.md) (2026-11-03; accepted): OI-7, beside an older MobTracker, 0.9.0
+  renames its assembly and stays off with one warning.
+- [D-012](D-012-count-field-label-and-red.md) (2026-11-03; accepted): FW-11, the count field has a label, "Exactly:"
+  or "Invalid:", and red text while invalid.
+- [D-013](D-013-no-open-ranges.md) (2026-11-03; accepted): FW-11, an open range such as "5-" is not accepted.
+- [D-014](D-014-all-click-empties-field.md) (2026-11-03; accepted): FW-11, a click on All resets the whole row, its
+  count field too.
+- [D-015](D-015-copy-whenever-new-file-missing.md) (2026-11-03; accepted): OI-7, the old settings are copied at every
+  start that finds no new settings file.

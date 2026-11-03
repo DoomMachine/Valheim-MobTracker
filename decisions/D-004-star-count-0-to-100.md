@@ -15,3 +15,4 @@
 - **Reason:** no reason given.
 - **Status:**
   - 2026-11-02: accepted; to be built in 0.9.0 (D-005).
+  - 2026-11-03: refined by D-012 (how an invalid field shows) and D-013 (no open ranges).

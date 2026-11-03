@@ -23,3 +23,13 @@ status, is in [`decisions/INDEX.md`](decisions/INDEX.md). The log names roles, n
   0.9.0) - [entry](decisions/D-009-plugin-id-as-a-text-fix.md)
 - D-010 (2026-10-12) FW-11 requested; every check runs once it is built, the full planted-defect run included -
   [entry](decisions/D-010-star-count-requested.md)
+- D-011 (2026-11-03) OI-7: beside an older MobTracker, 0.9.0 renames its assembly and stays off with one warning -
+  [entry](decisions/D-011-older-copy-rename-and-stay-off.md)
+- D-012 (2026-11-03) FW-11: the count field has a label, "Exactly:" or "Invalid:", and red text while invalid -
+  [entry](decisions/D-012-count-field-label-and-red.md)
+- D-013 (2026-11-03) FW-11: an open range such as "5-" is not accepted -
+  [entry](decisions/D-013-no-open-ranges.md)
+- D-014 (2026-11-03) FW-11: a click on All resets the whole row, its count field too -
+  [entry](decisions/D-014-all-click-empties-field.md)
+- D-015 (2026-11-03) OI-7: the old settings are copied at every start that finds no new settings file -
+  [entry](decisions/D-015-copy-whenever-new-file-missing.md)
