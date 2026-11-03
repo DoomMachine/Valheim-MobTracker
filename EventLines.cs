@@ -524,7 +524,8 @@ namespace MobTracker
         {
             return "The settings of com.mobtracker.plugin.cfg (MobTracker 0.8.0 and earlier) could not be copied to"
                    + " DoomMachine.MobTracker.cfg (" + exceptionType + "), so MobTracker starts with its default settings. To take the"
-                   + " older ones, close the game, delete DoomMachine.MobTracker.cfg if it is there, and start the game again.";
+                   + " older ones, close the game, make sure no other program holds com.mobtracker.plugin.cfg and that BepInEx/config"
+                   + " can be written, delete DoomMachine.MobTracker.cfg if it is there, and start the game again.";
         }
 
         /// <param name="exceptionType">The exception's type only, as for <see cref="SettingsNotCopied"/>.</param>

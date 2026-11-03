@@ -816,7 +816,7 @@ $mutants = @(
     @("P43 the copy keeps the older file's read-only attribute - every save of the new file fails", "OldSettings.cs", '[ \t]*if \(\(attributes & FileAttributes\.ReadOnly\) != 0\)\r?\n[ \t]*File\.SetAttributes\(target, attributes & ~FileAttributes\.ReadOnly\);\r?\n', ''),
     @("P44 the copy's line not reset at its start", "OldSettings.cs", '[ \t]*_line = null;\r?\n[ \t]*_warning = false;\r?\n', ''),
     @("PE7 the copy's line names the new file in lower case", "EventLines.cs", [regex]::Escape('return "Settings copied: DoomMachine.MobTracker.cfg did not exist yet'), 'return "Settings copied: doommachine.mobtracker.cfg did not exist yet'),
-    @("PE8 the copy's failure line names no older file", "EventLines.cs", [regex]::Escape('return "The settings of com.mobtracker.plugin.cfg (MobTracker 0.8.0 and earlier) could not be copied to"'), 'return "The settings of MobTracker 0.8.0 and earlier could not be copied to"'),
+    @("PE8 the copy's failure line names no older file", "EventLines.cs", 'return "The settings of com\.mobtracker\.plugin\.cfg \(MobTracker 0\.8\.0 and earlier\) could not be copied to"(\r?\n[^\r\n]*\r?\n[^\r\n]*no other program holds )com\.mobtracker\.plugin\.cfg', 'return "The settings of MobTracker 0.8.0 and earlier could not be copied to"${1}the older file'),
     # The count fields' helpers and every-frame callers, the list's row as applied, rows rebuilt from their categories, the
     # Alerts: handlers' count of every write, and the verbose lines' rows (0.9.0): S69-S78 fail the helpers' shapes, S79-S82
     # the table of who drives the count fields and the keyboard (and the _focusSearch and count-entry scans), S83-S84 where

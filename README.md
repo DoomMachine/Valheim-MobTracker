@@ -309,6 +309,9 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
+- **Unreleased** (on `main` after 0.9.0; a build of it still says 0.9.0) - the warning for settings that could not be
+  copied now also says to make sure no other program holds `com.mobtracker.plugin.cfg` and that `BepInEx/config` can be
+  written.
 - **0.9.0** - exact star counts, and a new plugin id. Each star row, **List:** and **Alerts:**, ends with a field for
   exact star counts, for mods that give creatures more stars: whole numbers from 0 to 100, single or as ranges, such as
   `3-5, 8` (`ListStarCounts`, `AlertStarCounts`). A creature with one of the counts passes as well as the marked

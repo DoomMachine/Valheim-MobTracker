@@ -4,7 +4,7 @@ The one list of what is untested, unverified, open or only an idea for MobTracke
 again. It lives with the code, so each release can check it. What a player meets is in the README's "Known limits";
 what each release changed is in its "History".
 
-As of **0.9.0**.
+As of **0.9.0**, and `main` after it.
 
 ## Keeping it up to date
 
@@ -994,7 +994,7 @@ the watch alert and "Lost track of" - so one with 100 stars has 100 of them.
 - **Each star row also has a field for exact star counts** (0.9.0; D-001 to D-004 in `decisions/`): whole numbers and
   ranges from 0 to 100, added to the marked categories; with no category marked, only the counts pass. What cannot be
   read is not applied and the counts read before it stay; a click on *All* empties the field (D-014). The field's label
-  is *Exactly:*, or *Invalid:* with red text while it cannot be read (D-012).
+  is *Exactly:*, or *Invalid:* while its text cannot be read, and that text then shows red (D-012).
 - **How a star-count field reads its text** (0.9.0; D-002 left these cases to the design, D-004 set the range): entries
   are separated by commas, and an empty entry (`3,,5`, `3,`, `,3`) is skipped, so a comma typed on the way to the next
   number never shows as invalid; spaces and tabs around a number, the dash and the commas are ignored, so `3, 5` and

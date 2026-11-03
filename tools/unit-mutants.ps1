@@ -310,7 +310,19 @@ $mutants = @(
     @("U236 a text it cannot read gives the counts read before the bad entry", "StarFilter.cs", "problem = s.Substring(start, end - start).Trim(' ', '\t');`n                        return false;", "problem = s.Substring(start, end - start).Trim(' ', '\t');`n                        counts = read;`n                        return false;"),
     @("U237 the entry named with every white space trimmed", "StarFilter.cs", "problem = s.Substring(start, end - start).Trim(' ', '\t');", "problem = s.Substring(start, end - start).Trim();"),
     @("U238 a row with no count tested as one with counts - All lets nothing through", "StarFilter.cs", "            if (rule.Counts.IsEmpty)`n                return Accepts(rule.Set, level);`n", ""),
-    @("U239 the List: row's click given the Alerts: row's leave to empty", "StarFilter.cs", "return Toggle(rule.Set, button, false);", "return Toggle(rule.Set, button, true);")
+    @("U239 the List: row's click given the Alerts: row's leave to empty", "StarFilter.cs", "return Toggle(rule.Set, button, false);", "return Toggle(rule.Set, button, true);"),
+    # After 0.9.0: the blanks after a range's last number, before a comma or the end of the text.
+    @("U240 the blanks after a range's last number not skipped - '3-5 ' and '3 -5 , 8' show invalid", "StarFilter.cs", "ok = ReadNumber(s, ref i, end, out to);`n                            SkipBlanks(s, ref i, end);", "ok = ReadNumber(s, ref i, end, out to);"),
+    # After 0.9.0, more: the copy's failure line (tests\LogTests.cs pins its whole text; preflight sees only the two file
+    # names, and its advice names both too), and what may follow a number: only spaces and tabs, then a comma or the
+    # entry's end - or, after a range's first number, its dash.
+    @("U241 the copy's failure line back to 0.9.0's advice - no word of a held older file or a config folder that cannot be written", "EventLines.cs", "+ "" older ones, close the game, make sure no other program holds com.mobtracker.plugin.cfg and that BepInEx/config""`n                   + "" can be written, delete DoomMachine.MobTracker.cfg if it is there, and start the game again."";", "+ "" older ones, close the game, delete DoomMachine.MobTracker.cfg if it is there, and start the game again."";"),
+    @("U242 the copy's failure line names the older file only in its advice", "EventLines.cs", "return ""The settings of com.mobtracker.plugin.cfg (MobTracker 0.8.0 and earlier) could not be copied to""", "return ""The settings of MobTracker 0.8.0 and earlier could not be copied to"""),
+    @("U243 any white space skipped after a range's last number - a no-break space too", "StarFilter.cs", "ok = ReadNumber(s, ref i, end, out to);`n                            SkipBlanks(s, ref i, end);", "ok = ReadNumber(s, ref i, end, out to);`n                            while (i < end && char.IsWhiteSpace(s[i])) i++;"),
+    @("U244 any white space skipped after a number, before the dash or the entry's end - a no-break space too", "StarFilter.cs", "SkipBlanks(s, ref i, end);`n                        if (i < end && s[i] == '-')", "while (i < end && char.IsWhiteSpace(s[i])) i++;`n                        if (i < end && s[i] == '-')"),
+    @("U245 an entry's end tested with every white space trimmed - a no-break space after a number read", "StarFilter.cs", "ok = ok && i == end;", "ok = ok && s.Substring(i, end - i).Trim().Length == 0;"),
+    @("U246 only spaces skipped after a range's last number - '3-5' followed by a tab shows invalid", "StarFilter.cs", "ok = ReadNumber(s, ref i, end, out to);`n                            SkipBlanks(s, ref i, end);", "ok = ReadNumber(s, ref i, end, out to);`n                            while (i < end && s[i] == ' ') i++;"),
+    @("U247 anything after a range's last number ignored - 3-5-7 reads as 3-5", "StarFilter.cs", "ok = ReadNumber(s, ref i, end, out to);`n                            SkipBlanks(s, ref i, end);", "ok = ReadNumber(s, ref i, end, out to);`n                            i = end;")
 )
 $ids = @($mutants | ForEach-Object { ($_[0] -split " ")[0] })
 $unknown = @($Only | Where-Object { $ids -notcontains $_ })
