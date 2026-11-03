@@ -27,3 +27,5 @@ status, is in [`decisions/INDEX.md`](decisions/INDEX.md). The log names roles, n
   [entry](decisions/D-014-all-click-empties-field.md)
 - D-015 (2026-11-03) OI-7: the old settings are copied at every start that finds no new settings file -
   [entry](decisions/D-015-copy-whenever-new-file-missing.md)
+- D-016 (2026-11-03) The 0.9.0 release audit's minor items are worked through now, not left for the next change -
+  [entry](decisions/D-016-minor-items-now.md)

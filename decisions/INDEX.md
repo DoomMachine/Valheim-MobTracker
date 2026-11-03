@@ -37,3 +37,5 @@ The log was started on 2026-11-02. Decisions taken before it (behaviour choices 
   whole row, its count field too.
 - [D-015](D-015-copy-whenever-new-file-missing.md) (2026-11-03; built in 0.9.0, in force): OI-7, the old settings are
   copied at every start that finds no new settings file.
+- [D-016](D-016-minor-items-now.md) (2026-11-03; accepted): the 0.9.0 release audit's minor items are worked through
+  now.
