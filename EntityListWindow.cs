@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BepInEx.Configuration;
 using UnityEngine;
 
 namespace MobTracker
@@ -16,6 +17,8 @@ namespace MobTracker
         }
 
         private const string SearchControl = "MobTracker_Search";
+        private const string ListCountsControl = "MobTracker_ListCounts";
+        private const string AlertCountsControl = "MobTracker_AlertCounts";
 
         public static bool IsOpen { get; private set; }
 
@@ -48,7 +51,8 @@ namespace MobTracker
         private bool _refreshNow; // opening the window refreshes at once, wherever the pointer is
         private bool _focusSearch;
 
-        // Whether the search box has the keyboard, sampled at each Repaint while the list is open.
+        // Whether a text field - the search box or a star-count field - has the keyboard, sampled at each Repaint while the
+        // list is open.
         private bool _searchFocused;
 
         // Console visibility as sampled by the previous Update: Unity does not order this Update against
@@ -66,13 +70,23 @@ namespace MobTracker
         // Why the list is closing, for the verbose log: set just before Close by the callers that know (Events.ListClosed).
         private string _closeCause;
 
-        // The list's star filter as of the last refresh; a change (the List: row or the cfg) refreshes at once.
-        private StarSet _appliedListStars = StarSet.All;
+        // The list's star row - categories and counts - as of the last refresh; a change (the List: row, its field or the
+        // cfg) refreshes at once. All to begin with (no category, no count).
+        private StarRule _appliedListStars;
+
+        // The two star rows' count fields, after each row's buttons (StarFilter.cs, CountsField).
+        private readonly CountsField _listCounts = new CountsField();
+        private readonly CountsField _alertCounts = new CountsField();
+        // The count fields' style while their text cannot be read: the text field's, with red text. Made at its first use
+        // (a GUIStyle needs the GUI skin), then kept.
+        private static GUIStyle _unreadable;
 
         // The star rows' buttons, left to right, and their labels - built once, not on every event.
         private static readonly StarFilter[] StarButtons = StarFilters.Buttons();
         private static readonly GUIContent[] StarChoices = BuildStarChoices();
         private static readonly GUILayoutOption[] RowLabelWidth = { GUILayout.Width(50f) };
+        private static readonly GUILayoutOption[] CountsLabelWidth = { GUILayout.Width(52f) };
+        private static readonly GUILayoutOption[] CountsFieldWidth = { GUILayout.Width(64f) };
 
         private static GUIContent[] BuildStarChoices()
         {
@@ -95,6 +109,11 @@ namespace MobTracker
                 Close(); // also drops a click not yet applied, so it never reaches the next game session
                 return;
             }
+
+            // The star rows' count fields, before the keys: text typed in the last OnGUI is written even when this
+            // frame's key closes the list.
+            if (IsOpen)
+                SyncCounts();
 
             HandleKeys(consoleVisible, consoleWasVisible);
 
@@ -144,6 +163,36 @@ namespace MobTracker
         }
 
         /// <summary>
+        /// The two star rows' count fields, once a frame while the list is open (CountsField.Sync): typed text that can be
+        /// read is written to the row's own setting, whose handler re-reads the row, and the cfg is saved; a change made
+        /// elsewhere is shown instead. A keystroke in the Alerts: field that writes nothing restarts that row's wait, as a
+        /// write does through its setting's handler.
+        /// </summary>
+        private void SyncCounts()
+        {
+            ApplyCounts(_listCounts, ModConfig.ListCountsText, "List:");
+            if (ApplyCounts(_alertCounts, ModConfig.AlertCountsText, "Alerts:"))
+                ModConfig.AlertRowChanged();
+        }
+
+        /// <summary>
+        /// One field and its own setting: writes what the field hands back; with VerboseLog on, says once that typing
+        /// turned the field to text it cannot read. True when typing changed the field and nothing was written.
+        /// </summary>
+        private static bool ApplyCounts(CountsField field, ConfigEntry<string> entry, string row)
+        {
+            string write = field.Sync(entry.Value);
+            if (write != null)
+            {
+                entry.Value = write;
+                return false;
+            }
+            if (field.TurnedUnreadable)
+                Events.CountsUnreadable(row, field.Text);
+            return field.TypedNotWritten;
+        }
+
+        /// <summary>
         /// The list's keys, read from ZInput here rather than from IMGUI events in OnGUI: the search box, focused on open,
         /// takes Escape's KeyDown event first (GUI.HandleTextFieldEventForDesktop uses up every key it does not type), so
         /// an Escape test in OnGUI never saw it. TomTom's rules (Plugin.Update); the decisions are ListKeys'.
@@ -186,6 +235,9 @@ namespace MobTracker
             _focusSearch = true;
             _refreshNow = true; // the rows of this opening at once, wherever the pointer is (Rules.ShouldRefresh)
             _closeCause = null;
+            // The count fields show their settings as they are now: text typed and not applied before the last close is gone.
+            _listCounts.Show(ModConfig.ListCountsText.Value);
+            _alertCounts.Show(ModConfig.AlertCountsText.Value);
             Events.ListOpened(_allTypes);
         }
 
@@ -304,9 +356,9 @@ namespace MobTracker
             try
             {
                 // With a list star filter on, the count is what it lets through, and the title names the categories
-                // marked - with KeepBetweenSessions on, the filter may be one set in an earlier session.
+                // marked and the counts typed - with KeepBetweenSessions on, the filter may be one set in an earlier session.
                 string what = _appliedAllTypes ? " creature types"
-                    : _appliedListStars == StarSet.All ? " creatures loaded"
+                    : StarSets.IsAll(_appliedListStars) ? " creatures loaded"
                     : " creatures, " + StarSets.Label(_appliedListStars);
                 _rect = GUILayout.Window(0x4D6F6254, _rect, DrawWindow, "MobTracker - " + _rows.Count + what);
             }
@@ -365,40 +417,58 @@ namespace MobTracker
                 ModConfig.AlwaysTrackNearest.Value = always;
             GUILayout.EndHorizontal();
 
-            // Star filters: each row is five toggle buttons, All and the four categories. A click on a category adds it
-            // or takes it off (taking off the last one gives All), a click on All resets. Not a button that cycles
-            // through the choices: the alert poll runs every second and alerts each creature once,
-            // so every choice passed on the way alerts for real. Toggles pass through states too - taking off the only
-            // marked category passes through All - so the alerts do not read this row's set as it is, but as
-            // WatchAlerts.EffectiveAlertStars, once it has held still (AlertsRow). The row itself and the cfg change at
-            // once. Five controls on every event, whatever is marked: IMGUI needs the same controls in its layout and
-            // its drawing. A type in the all-types view has no level, so the list's filter does not apply there and is
-            // greyed out.
+            // Star filters: each row is five toggle buttons, All and the four categories, then "Exactly:" and the row's
+            // star-count field (0.9.0). A click on a category adds it or takes it off (taking off the last one leaves no
+            // category marked: the row is back to All when it has no count, and lets only its counts through when it
+            // has some), a click on All resets the row and empties its field - the field's sync in Update then writes
+            // the empty text. Not a button that cycles through the choices: the alert poll runs every second and alerts
+            // each creature once, so every choice passed on the way alerts for real. Toggles pass through states too -
+            // taking off the only marked category passes through no category - so the alerts do not read this row as it
+            // is, but as WatchAlerts.EffectiveAlertStars, once it has held still (AlertsRow). The row itself and the cfg
+            // change at once. Seven controls on every event, whatever is marked or typed: IMGUI needs the same controls in
+            // its layout and its drawing. A type in the all-types view has no level, so the list's row does not apply
+            // there and is greyed out, its field taking nothing typed.
             GUILayout.BeginHorizontal();
             GUILayout.Label("List:", RowLabelWidth);
             bool enabled = GUI.enabled;
             GUI.enabled = enabled && !_allTypes;
-            StarSet listStars = ModConfig.ListStars;
+            StarRule listStars = ModConfig.ListStars;
             for (int i = 0; i < StarButtons.Length; i++)
             {
                 bool marked = StarSets.IsMarked(listStars, StarButtons[i]);
                 if (GUILayout.Toggle(marked, StarChoices[i], GUI.skin.button) != marked)
+                {
                     ModConfig.ListStarsText.Value = StarSets.Format(StarSets.Toggle(listStars, StarButtons[i]));
+                    if (StarButtons[i] == StarFilter.All)
+                        _listCounts.Clear();
+                }
             }
+            DrawCounts(_listCounts, !_allTypes, ListCountsControl);
             GUI.enabled = enabled;
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
             GUILayout.Label("Alerts:", RowLabelWidth);
-            StarSet alertStars = ModConfig.AlertStars;
+            StarRule alertStars = ModConfig.AlertStars;
             bool emptyIsNothing = AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode);
             for (int i = 0; i < StarButtons.Length; i++)
             {
                 bool marked = StarSets.IsMarked(alertStars, StarButtons[i]);
                 if (GUILayout.Toggle(marked, StarChoices[i], GUI.skin.button) != marked)
+                {
                     ModConfig.AlertStarsText.Value = StarSets.Format(StarSets.Toggle(alertStars, StarButtons[i], emptyIsNothing));
+                    if (StarButtons[i] == StarFilter.All)
+                        _alertCounts.Clear();
+                }
             }
+            DrawCounts(_alertCounts, true, AlertCountsControl);
             GUILayout.EndHorizontal();
+
+            // The List: row greys out in the all-types view: while its count field has the keyboard there - the view just
+            // switched with the field in use - the search box takes it. Asked here, after the field is drawn in this
+            // event, so the field's name is known to GUI.GetNameOfFocusedControl whatever IMGUI keeps between events.
+            if (_allTypes && GUI.GetNameOfFocusedControl() == ListCountsControl)
+                _focusSearch = true;
 
             if (_focusSearch && Event.current.type == EventType.Repaint)
             {
@@ -451,11 +521,54 @@ namespace MobTracker
 
             DrawWatchlist();
 
-            // Only the search box takes the keyboard in this window (buttons and toggles do not).
+            // Only the search box and the two star-count fields take the keyboard in this window (buttons and toggles do
+            // not).
             if (Event.current.type == EventType.Repaint)
                 _searchFocused = GUIUtility.keyboardControl != 0;
 
             GUI.DragWindow();
+        }
+
+        /// <summary>
+        /// A star row's count field (0.9.0): its label - "Exactly:", or "Invalid:" while its text cannot be read - and the
+        /// field, its text red then. The same two controls whatever it holds: IMGUI needs the same controls in its layout
+        /// and its drawing. No length cap: IMGUI's would cut a longer value set in ConfigurationManager, and the cut text
+        /// would be written back. takesTyping false: the List: row's field in the all-types view, greyed out, takes
+        /// nothing. Named (control), so DrawWindow can tell whether the List: row's field has the keyboard.
+        /// </summary>
+        private static void DrawCounts(CountsField field, bool takesTyping, string control)
+        {
+            GUILayout.Label(CountsLabel(field), CountsLabelWidth);
+            GUI.SetNextControlName(control);
+            string typed = GUILayout.TextField(field.Text, CountsStyle(field), CountsFieldWidth);
+            if (takesTyping)
+                field.Typed(typed);
+        }
+
+        private static string CountsLabel(CountsField field)
+        {
+            return field.Unreadable ? "Invalid:" : "Exactly:";
+        }
+
+        /// <summary>
+        /// The skin's text field, or the same with red text while the field's text cannot be read - the same size either
+        /// way. Made at its first use, in OnGUI, where GUI.skin can be read. Unreadable changes only in Update (Show,
+        /// Sync), so every GUI event of one frame draws the same.
+        /// </summary>
+        private static GUIStyle CountsStyle(CountsField field)
+        {
+            if (!field.Unreadable)
+                return GUI.skin.textField;
+            if (_unreadable == null)
+            {
+                _unreadable = new GUIStyle(GUI.skin.textField);
+                Color red = new Color(1f, 0.45f, 0.4f);
+                _unreadable.normal.textColor = red;
+                _unreadable.hover.textColor = red;
+                _unreadable.focused.textColor = red;
+                _unreadable.active.textColor = red;
+            }
+            return _unreadable;
         }
 
         /// <summary>The way to unwatch a type that is not around to have a row.</summary>

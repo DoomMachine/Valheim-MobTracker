@@ -71,7 +71,7 @@ namespace MobTracker
             // LateUpdate (Unity 6000.0.75f1, the game's engine) - so a kill on this client reads as gone.
             return "Track: lost " + what + " - "
                    + (killed ? "seen dead on this client" : "gone from this client (killed, despawned, or out of range)")
-                   + (tamed ? "; it was tamed" : "")
+                   + (tamed ? "; a tamed one" : "")
                    + (retrackOn ? "" : "; Always track nearest watched is off");
         }
 
@@ -184,7 +184,7 @@ namespace MobTracker
                    + " creature(s) is cleared - each watched creature can alert again";
         }
 
-        /// <param name="label">StarSets.Label of the set: "All", "1 star + 2 stars".</param>
+        /// <param name="label">StarSets.Label of the row: "All", "1 star + 2 stars", "stars 3-5", "1 star + stars 3".</param>
         public static string AlertStars(string label)
         {
             return "Alert: the star filter in effect is now " + label;
@@ -242,6 +242,13 @@ namespace MobTracker
         public static string ViewSwitched(bool allTypes)
         {
             return "List: view switched to " + (allTypes ? "all types" : "nearby");
+        }
+
+        /// <param name="row">"List:" or "Alerts:", the row whose field it is.</param>
+        /// <param name="text">The field's text as typed.</param>
+        public static string CountsUnreadable(string row, string text)
+        {
+            return "List: the " + row + " field's '" + text + "' cannot be read, so it is not applied; the row keeps the counts it had";
         }
 
         // ---- Find area and the map ----
@@ -500,6 +507,41 @@ namespace MobTracker
         public static string CfgSavedAgain(string when)
         {
             return "Settings saved to DoomMachine.MobTracker.cfg again " + when + ", with every change made while it could not be written.";
+        }
+
+        // ---- The settings file of 0.8.0 and earlier, and an older copy (0.9.0, OldSettings) ----
+
+        /// <summary>OldSettings.Report: the older file was copied and read (Info, once, at that start).</summary>
+        public static string SettingsCopied()
+        {
+            return "Settings copied: DoomMachine.MobTracker.cfg did not exist yet, so it was made from com.mobtracker.plugin.cfg,"
+                   + " the settings file of MobTracker 0.8.0 and earlier, which is left as it was. While DoomMachine.MobTracker.cfg"
+                   + " exists, the older file is not read again.";
+        }
+
+        /// <param name="exceptionType">The exception's type only: an IOException's message holds the full path.</param>
+        public static string SettingsNotCopied(string exceptionType)
+        {
+            return "The settings of com.mobtracker.plugin.cfg (MobTracker 0.8.0 and earlier) could not be copied to"
+                   + " DoomMachine.MobTracker.cfg (" + exceptionType + "), so MobTracker starts with its default settings. To take the"
+                   + " older ones, close the game, delete DoomMachine.MobTracker.cfg if it is there, and start the game again.";
+        }
+
+        /// <param name="exceptionType">The exception's type only, as for <see cref="SettingsNotCopied"/>.</param>
+        public static string SettingsNotAllRead(string exceptionType)
+        {
+            return "DoomMachine.MobTracker.cfg was made from com.mobtracker.plugin.cfg (MobTracker 0.8.0 and earlier), but not all"
+                   + " of it could be read (" + exceptionType + "), so some or all settings start at their defaults. The older file"
+                   + " is left as it was.";
+        }
+
+        /// <summary>MobTrackerPlugin.Awake: a MobTracker with the old plugin id is loaded beside this one, which stays off.</summary>
+        /// <param name="version">The older copy's version, as BepInEx read it.</param>
+        public static string OlderCopyLoaded(string version)
+        {
+            return "An older MobTracker (" + version + ", plugin id com.mobtracker.plugin) is loaded beside this one, so this one"
+                   + " stays off and the older one runs as before. To use this one, close the game, remove the older MobTracker.dll"
+                   + " from BepInEx/plugins - it may be in a subfolder or have another name - and start the game again.";
         }
 
         public static string WriteFailed(string exceptionType)

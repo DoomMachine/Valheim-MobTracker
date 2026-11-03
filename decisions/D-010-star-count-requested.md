@@ -16,3 +16,5 @@
     "You are still not to proceed with the implementation of the additional star-count feature."
   - 2026-11-02: the developer: "please proceed with implementations and checks." Scoped by D-001 to D-004; to ship in
     0.9.0 (D-005), with every check run, the full planted-defect run included.
+  - 2026-11-03: completed: built in 0.9.0 (tag `v0.9.0`) as D-001 to D-004 and D-012 to D-014 decided it, after every
+    check, the full planted-defect run included.

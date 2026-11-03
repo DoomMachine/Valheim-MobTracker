@@ -388,7 +388,8 @@ namespace MobTracker
         /// close it); not over the inventory (the list would close again at once); not over the Barber Station
         /// (PlayerCustomizaton.Update cancels it on a raw Escape, so the Escape that closes the list would also put back
         /// the hair and beard the player had). Closing: always, except with a key that types while a text field - the
-        /// search box or one of the game's - has the keyboard, so a letter ListKey never closes the list mid-word.
+        /// search box, a star-count field or one of the game's - has the keyboard, so a letter ListKey never closes the
+        /// list mid-word.
         /// </summary>
         public static bool MayToggle(bool open, bool keyTypesText, bool searchFocused, bool gameTyping, bool pauseMenu,
             bool buildMenu, bool inventory, bool barber)

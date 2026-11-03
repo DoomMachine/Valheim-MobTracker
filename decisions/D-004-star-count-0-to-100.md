@@ -16,3 +16,4 @@
 - **Status:**
   - 2026-11-02: accepted; to be built in 0.9.0 (D-005).
   - 2026-11-03: refined by D-012 (how an invalid field shows) and D-013 (no open ranges).
+  - 2026-11-03: built in 0.9.0 (tag `v0.9.0`), as D-012 and D-013 refined it; in force.

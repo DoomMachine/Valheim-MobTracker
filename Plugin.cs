@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BepInEx;
+using BepInEx.Bootstrap;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
@@ -13,7 +14,7 @@ namespace MobTracker
         public const string PluginId = "DoomMachine.MobTracker";
 
         /// <summary>Also MobTracker.csproj's Version; tools/preflight.ps1 checks that the two agree.</summary>
-        public const string Version = "0.8.0";
+        public const string Version = "0.9.0";
 
         internal static ManualLogSource Log;
 
@@ -23,7 +24,18 @@ namespace MobTracker
         {
             Log = Logger;
             ConfigSaver.Take(Config); // before any setting is bound: BepInEx saves nothing from here on, ConfigSaver does
+            // MobTracker 0.8.0 or earlier loaded beside this one: it runs as before, and this one says so and stays off - no
+            // setting, no file, no component, no patch (D-006, D-011). Its settings are copied at a later start without it
+            // that finds no DoomMachine.MobTracker.cfg.
+            string older = OldSettings.OlderVersion(Chainloader.PluginInfos);
+            if (older != null)
+            {
+                Log.LogWarning(EventLines.OlderCopyLoaded(older));
+                return;
+            }
+            OldSettings.Copy(Config); // before the first Bind: the settings of 0.8.0 and earlier, if this id has no cfg yet (OI-7)
             LogFile.Start(Config, Paths.BepInExRootPath, Paths.GameRootPath); // first: ModConfig.Bind's own warnings go to MobTracker.log too
+            OldSettings.Report(); // what the copy did, once MobTracker.log may be open
             ModConfig.Bind(Config);
             LogFile.Bound(Config);
             ConfigSaver.Watch(Config); // after the last setting is bound and its handlers: the cfg saved now, and at each change
@@ -51,10 +63,13 @@ namespace MobTracker
 
         /// <summary>
         /// TomTom's (or Wayfinder's) keys over the open list (WaypointerCompat). Here, not in Awake: BepInEx creates
-        /// every plugin, in GUID order, before Unity calls any Start, and DoomMachine.* sorts after com.mobtracker.
+        /// every plugin, in case-insensitive GUID order, before Unity calls any Start, and DoomMachine.MobTracker sorts
+        /// before DoomMachine.TomTom and DoomMachine.Wayfinder.
         /// </summary>
         private void Start()
         {
+            if (_harmony == null)
+                return; // stayed off in Awake: an older MobTracker is loaded beside this one
             try
             {
                 WaypointerCompat.Apply(_harmony);
@@ -156,7 +171,7 @@ namespace MobTracker
     /// its turn: HarmonyX runs every prefix, and a false from one of them arrives here as
     /// __runOriginal, meaning the gesture is taken - one click never removes two pins. The priority
     /// sits on the method: PatchAll(Type) ignores a [HarmonyPriority] on the class, and at the default
-    /// priority this plugin's prefix would run first (BepInEx loads com.mobtracker before DoomMachine).
+    /// priority this plugin's prefix would run first (BepInEx loads DoomMachine.MobTracker before DoomMachine.TomTom).
     /// </summary>
     [HarmonyPatch(typeof(Minimap), nameof(Minimap.RemovePin), new[] { typeof(Vector3), typeof(float) })]
     internal static class RemoveAreaPinPatch

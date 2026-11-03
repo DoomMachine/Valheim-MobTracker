@@ -94,8 +94,8 @@ namespace MobTracker
                 "(the text of this line could not be read: InvalidOperationException)");
 
             // A line as BepInEx writes it, and as the file writes it.
-            Eq("log: a line looks like LogOutput.log's", LogRules.Line(LogRules.Info, "MobTracker", "MobTracker 0.7.0 loaded"),
-                "[Info   :MobTracker] MobTracker 0.7.0 loaded");
+            Eq("log: a line looks like LogOutput.log's", LogRules.Line(LogRules.Info, "MobTracker", "MobTracker 1.2.3 loaded"),
+                "[Info   :MobTracker] MobTracker 1.2.3 loaded");
             Eq("log: another source's name is padded as BepInEx pads it", LogRules.Line(LogRules.Error, "Unity Log", "x"),
                 "[Error  : Unity Log] x");
             Eq("log: a level with no name of its own is its number", LogRules.Line(LogRules.Error | LogRules.Warning, "BepInEx", "y"),
@@ -210,7 +210,7 @@ namespace MobTracker
             Eq("log: a creature seen dead, the option on", EventLines.TrackLost("Boar (Boar)", true, false, true),
                 "Track: lost Boar (Boar) - seen dead on this client");
             Eq("log: a creature gone, tamed, the option off", EventLines.TrackLost("Wolf (Wolf)", false, true, false),
-                "Track: lost Wolf (Wolf) - gone from this client (killed, despawned, or out of range); it was tamed; Always track nearest watched is off");
+                "Track: lost Wolf (Wolf) - gone from this client (killed, despawned, or out of range); a tamed one; Always track nearest watched is off");
             Eq("log: no local player ends a tracking", EventLines.TrackNoPlayer("Boar (Boar)"),
                 "Track: no local player (dead and removed, or left the world) - ends the tracking of Boar (Boar)");
             Eq("log: an area reached", EventLines.TrackReached("Troll spawn area"), "Track: reached Troll spawn area (within 30 m on the flat)");
@@ -422,6 +422,18 @@ namespace MobTracker
                 "Settings saved to DoomMachine.MobTracker.cfg again after a change, with every change made while it could not be written.");
             Eq("log: a line could not be written", EventLines.WriteFailed("IOException"),
                 "MobTracker.log could not be written (IOException) and is closed until the game starts again; LogOutput.log still gets every MobTracker line.");
+            Eq("log: a star-count field turned to text it cannot read (verbose)", EventLines.CountsUnreadable("Alerts:", "3-"),
+                "List: the Alerts: field's '3-' cannot be read, so it is not applied; the row keeps the counts it had");
+            Eq("log: the settings of 0.8.0 and earlier copied", EventLines.SettingsCopied(),
+                "Settings copied: DoomMachine.MobTracker.cfg did not exist yet, so it was made from com.mobtracker.plugin.cfg, the settings file of MobTracker 0.8.0 and earlier, which is left as it was. While DoomMachine.MobTracker.cfg exists, the older file is not read again.");
+            Eq("log: the settings of 0.8.0 and earlier not copied - the type only, never the message (it holds a path)", EventLines.SettingsNotCopied("IOException"),
+                "The settings of com.mobtracker.plugin.cfg (MobTracker 0.8.0 and earlier) could not be copied to DoomMachine.MobTracker.cfg (IOException), so MobTracker starts with its default settings. To take the older ones, close the game, delete DoomMachine.MobTracker.cfg if it is there, and start the game again.");
+            Eq("log: the settings of 0.8.0 and earlier copied but not all read - the type only", EventLines.SettingsNotAllRead("ArgumentException"),
+                "DoomMachine.MobTracker.cfg was made from com.mobtracker.plugin.cfg (MobTracker 0.8.0 and earlier), but not all of it could be read (ArgumentException), so some or all settings start at their defaults. The older file is left as it was.");
+            Eq("log: an older MobTracker loaded beside this one", EventLines.OlderCopyLoaded("0.8.0"),
+                "An older MobTracker (0.8.0, plugin id com.mobtracker.plugin) is loaded beside this one, so this one stays off and the older one runs as before. To use this one, close the game, remove the older MobTracker.dll from BepInEx/plugins - it may be in a subfolder or have another name - and start the game again.");
+            Eq("log: the Alerts: row in effect, with counts", EventLines.AlertStars("1 star + stars 3-5, 8"), "Alert: the star filter in effect is now 1 star + stars 3-5, 8");
+            Eq("log: the Alerts: row in effect, counts alone", EventLines.AlertStars("stars 3"), "Alert: the star filter in effect is now stars 3");
         }
 
         private static void check(string label, bool condition, string detail)

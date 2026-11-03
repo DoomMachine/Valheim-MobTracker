@@ -15,7 +15,7 @@ namespace MobTracker
     {
         private bool _known;
         private bool _player;
-        private StarSet _stars;
+        private StarRule _stars;
         private int _generation = -1;
         private int _wait;
         private bool _guideHidden;
@@ -33,7 +33,7 @@ namespace MobTracker
             Events.FlushSettings();
 
             bool player = Player.m_localPlayer != null;
-            StarSet stars = WatchAlerts.EffectiveAlertStars;
+            StarRule stars = WatchAlerts.EffectiveAlertStars;
             if (_known && player != _player)
                 Events.PlayerPresence(player);
             if (_known && stars != _stars)

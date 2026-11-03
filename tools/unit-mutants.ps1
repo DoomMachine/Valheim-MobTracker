@@ -78,7 +78,7 @@ $mutants = @(
     @("U37 the first set leaves the pending one unset", "StarFilter.cs", "                _settled = current;`n                _pending = current;`n                return _settled;", "                _settled = current;`n                return _settled;"),
     @("U38 _started never set - every set taken at once", "StarFilter.cs", "                _started = true;`n", ""),
     # Every write of the Alerts: text restarts the wait (ConfigurationManager writes at each keystroke, and a text
-    # with no word it knows yet reads as All).
+    # with no word it knows yet marks no category).
     @("U46 a keystroke that keeps the set does not restart the wait - a half-typed word can apply as All", "StarFilter.cs", "if (current != _pending || revision != _revision)", "if (current != _pending)"),
     @("U47 the text's revision never remembered - a change never taken", "StarFilter.cs", "                _revision = revision;`n", ""),
     @("U48 the settler not given the text's revision", "StarFilter.cs", "settler.Settled(row, revision, now)", "settler.Settled(row, 0, now)"),
@@ -258,7 +258,59 @@ $mutants = @(
     @("U188 the cfg warning names no file", "EventLines.cs", "return ""Settings could not be saved to DoomMachine.MobTracker.cfg "" + when", "return ""Settings could not be saved "" + when"),
     @("U189 the cfg's 'saved again' line names no file", "EventLines.cs", "return ""Settings saved to DoomMachine.MobTracker.cfg again "" + when", "return ""Settings saved again "" + when"),
     @("U190 the cfg warning names the file in lower case", "EventLines.cs", "return ""Settings could not be saved to DoomMachine.MobTracker.cfg "" + when", "return ""Settings could not be saved to doommachine.mobtracker.cfg "" + when"),
-    @("U191 the cfg's 'saved again' line drops .cfg", "EventLines.cs", "return ""Settings saved to DoomMachine.MobTracker.cfg again "" + when", "return ""Settings saved to DoomMachine.MobTracker again "" + when")
+    @("U191 the cfg's 'saved again' line drops .cfg", "EventLines.cs", "return ""Settings saved to DoomMachine.MobTracker.cfg again "" + when", "return ""Settings saved to DoomMachine.MobTracker again "" + when"),
+    # 0.9.0: the star counts typed in a row's field (StarCounts, StarRule, CountsField; D-001 to D-004) and the lines of
+    # the settings file of 0.8.0 and earlier (D-006).
+    @("U192 a count of 101 read", "StarFilter.cs", "if (number > Most)", "if (number > Most + 1)"),
+    @("U193 a range written high to low reads as no count", "StarFilter.cs", "read = from <= to ? read.With(from, to) : read.With(to, from);", "read = read.With(from, to);"),
+    @("U194 a tab around a number not read", "StarFilter.cs", "while (i < end && (s[i] == ' ' || s[i] == '\t'))", "while (i < end && s[i] == ' ')"),
+    @("U195 a number followed by other text read as the number - 3x reads as 3", "StarFilter.cs", "ok = ok && i == end;", "ok = ok && i <= end;"),
+    @("U196 an empty entry not read - 3, on the way to 3, 5 shows invalid", "StarFilter.cs", "SkipBlanks(s, ref i, end);`n                if (i < end)`n", "SkipBlanks(s, ref i, end);`n                if (true)`n"),
+    @("U197 a creature of level 0 has no count 0 - the No star button reads it as no star", "StarFilter.cs", "int stars = level <= 1 ? 0 : level - 1;", "int stars = level - 1;"),
+    @("U198 the count 100 never matches", "StarFilter.cs", "return stars <= Most && Has(stars);", "return stars < Most && Has(stars);"),
+    @("U199 the count 64 read from the low word", "StarFilter.cs", "return stars < 64 ? (_low & (1UL << stars))", "return stars <= 64 ? (_low & (1UL << stars))"),
+    @("U200 a row with counts and no category lets every star level through", "StarFilter.cs", "return (rule.Set & Every) != 0 && Accepts(rule.Set, level);", "return Accepts(rule.Set, level);"),
+    @("U201 a creature with one of the row's counts is not let through by it", "StarFilter.cs", "            if (rule.Counts.Accepts(level))`n                return true;`n", ""),
+    @("U202 All shows marked while the row has counts", "StarFilter.cs", "return rule.Counts.IsEmpty && (rule.Set & (Every | StarSet.None)) == 0;", "return (rule.Set & (Every | StarSet.None)) == 0;"),
+    @("U203 a row of counts alone named 'All + stars ...'", "StarFilter.cs", "return (rule.Set & Every) == 0 ? counts : Label(rule.Set) + "" + "" + counts;", "return Label(rule.Set) + "" + "" + counts;"),
+    @("U204 two rows equal whatever their counts", "StarFilter.cs", "return Set == other.Set && Counts == other.Counts;", "return Set == other.Set;"),
+    @("U205 two count sets equal whatever their counts from 64 on", "StarFilter.cs", "return _low == other._low && _high == other._high;", "return _low == other._low;"),
+    @("U206 counts from 64 on kept in the low word - 64 reads as 0", "StarFilter.cs", "high |= 1UL << (stars - 64);", "low |= 1UL << (stars - 64);"),
+    @("U207 the counts' words list every count alone - 3-5 named 3, 4, 5", "StarFilter.cs", "while (last < Most && Has(last + 1))", "while (false)"),
+    @("U208 a count text's warning says the wrong counts are kept", "StarFilter.cs", "(kept.IsEmpty ? ""the row has no star count""", "(!kept.IsEmpty ? ""the row has no star count"""),
+    @("U209 a change made elsewhere not shown in the field", "StarFilter.cs", "if (_seen == null || setting != _seen)", "if (_seen == null)"),
+    @("U210 the field worked out again every frame - each frame a restart of the Alerts: wait", "StarFilter.cs", "            if (_text == _checked)`n                return null;`n", ""),
+    @("U211 the unreadable field said at every keystroke while it stays unreadable", "StarFilter.cs", "TurnedUnreadable = Unreadable && !was;", "TurnedUnreadable = Unreadable;"),
+    @("U212 the setting's own text typed back written again", "StarFilter.cs", "if (Unreadable || _text == setting)", "if (Unreadable)"),
+    @("U213 the field shown with nothing checked - the first frame after an opening counts as a keystroke", "StarFilter.cs", "            _text = _seen;`n            _checked = _text;`n", "            _text = _seen;`n"),
+    @("U214 the unreadable field's line drops what the row keeps", "EventLines.cs", "so it is not applied; the row keeps the counts it had""", "so it is not applied"""),
+    @("U215 the copy's line says the older file is deleted", "EventLines.cs", "which is left as it was. While DoomMachine.MobTracker.cfg""", "which is deleted. While DoomMachine.MobTracker.cfg"""),
+    @("U216 the copy's failure line says the settings are kept", "EventLines.cs", "so MobTracker starts with its default settings.", "so MobTracker keeps its settings."),
+    @("U217 the copy's read failure line says the settings are kept", "EventLines.cs", "so some or all settings start at their defaults.", "so the settings are kept."),
+    @("U218 the older copy's warning says this one stays on", "EventLines.cs", " stays off and the older one runs as before.", " stays on and the older one runs as before."),
+    @("U219 the tamed loss line back to 'it was tamed', which reads like the taming", "EventLines.cs", "(tamed ? ""; a tamed one"" : """")", "(tamed ? ""; it was tamed"" : """")"),
+    @("U220 a filter with no category it knows warned about as All - whatever the row's counts", "StarFilter.cs", """, so no category is marked: the row lets every star level through when it has no star count, """, """, so it works as All, """),
+    @("U221 a count text's warning names the whole text, not the entry it could not read", "StarFilter.cs", "problem = s.Substring(start, end - start).Trim(' ', '\t');", "problem = s;"),
+    @("U222 a click on All leaves the field's counts as they are", "StarFilter.cs", "        public void Clear()`n        {`n            _text = """";", "        public void Clear()`n        {`n            _text = _seen ?? """";"),
+    # 0.9.0, more: counts above 100 never matched however far up, a keystroke right after a write kept, and more of the
+    # grammar, the field and the row's marks and words (U223 and U224 need the two tests of the same change).
+    @("U223 a creature with more than 100 stars matched by a count - 128 stars read as 64", "StarFilter.cs", "return stars <= Most && Has(stars);", "return Has(stars);"),
+    @("U224 the text written not remembered as shown - a keystroke in the frame after a write is dropped", "StarFilter.cs", "            _seen = _text;`n            return _text;", "            return _text;"),
+    @("U225 the settled row compared by its categories alone - a change of the counts alone never taken", "StarFilter.cs", "if (current == _settled)", "if (current.Set == _settled.Set)"),
+    @("U226 any white space skipped around numbers - a no-break space too", "StarFilter.cs", "while (i < end && (s[i] == ' ' || s[i] == '\t'))", "while (i < end && char.IsWhiteSpace(s[i]))"),
+    @("U227 an en dash read as the range's dash", "StarFilter.cs", "if (i < end && s[i] == '-')", "if (i < end && (s[i] == '-' || s[i] == '\u2013'))"),
+    @("U228 a missing number read as 0 - 3- reads as 0-3", "StarFilter.cs", "return i > first;", "return true;"),
+    @("U229 All marked from the categories alone - marked while the row has counts", "StarFilter.cs", "return IsAll(rule);", "return IsMarked(rule.Set, button);"),
+    @("U230 a row of counts with no category marked named with its categories' word", "StarFilter.cs", "return (rule.Set & Every) == 0 ? counts : Label(rule.Set) + "" + "" + counts;", "return rule.Set == StarSet.All ? counts : Label(rule.Set) + "" + "" + counts;"),
+    @("U231 a range's last number left out - 3-5 reads as 3-4", "StarFilter.cs", "for (int stars = from; stars <= to; stars++)", "for (int stars = from; stars < to; stars++)"),
+    @("U232 the largest count 99", "StarFilter.cs", "public const int Most = 100;", "public const int Most = 99;"),
+    @("U233 the largest count 101", "StarFilter.cs", "public const int Most = 100;", "public const int Most = 101;"),
+    @("U234 a setting it cannot read shown as readable", "StarFilter.cs", "Unreadable = !StarCounts.TryParse(_text, out counts);`n            TypedNotWritten = false;", "Unreadable = StarCounts.TryParse(_text, out counts) && false;`n            TypedNotWritten = false;"),
+    @("U235 a click on All leaves the field as it is", "StarFilter.cs", "        public void Clear()`n        {`n            _text = """";", "        public void Clear()`n        {`n            ;"),
+    @("U236 a text it cannot read gives the counts read before the bad entry", "StarFilter.cs", "problem = s.Substring(start, end - start).Trim(' ', '\t');`n                        return false;", "problem = s.Substring(start, end - start).Trim(' ', '\t');`n                        counts = read;`n                        return false;"),
+    @("U237 the entry named with every white space trimmed", "StarFilter.cs", "problem = s.Substring(start, end - start).Trim(' ', '\t');", "problem = s.Substring(start, end - start).Trim();"),
+    @("U238 a row with no count tested as one with counts - All lets nothing through", "StarFilter.cs", "            if (rule.Counts.IsEmpty)`n                return Accepts(rule.Set, level);`n", ""),
+    @("U239 the List: row's click given the Alerts: row's leave to empty", "StarFilter.cs", "return Toggle(rule.Set, button, false);", "return Toggle(rule.Set, button, true);")
 )
 $ids = @($mutants | ForEach-Object { ($_[0] -split " ")[0] })
 $unknown = @($Only | Where-Object { $ids -notcontains $_ })

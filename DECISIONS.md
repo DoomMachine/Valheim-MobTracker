@@ -11,8 +11,6 @@ status, is in [`decisions/INDEX.md`](decisions/INDEX.md). The log names roles, n
   [entry](decisions/D-003-star-count-both-rows.md)
 - D-004 (2026-11-02) FW-11: counts from 0 to 100; anything else is not applied and shown as invalid -
   [entry](decisions/D-004-star-count-0-to-100.md)
-- D-005 (2026-11-02) One release, 0.9.0: the plugin id and the star-count field together -
-  [entry](decisions/D-005-one-release-0.9.0.md)
 - D-006 (2026-11-02) OI-7: at the first start, move the old settings file's settings over; warn once about an older
   copy - [entry](decisions/D-006-old-settings-file-move-and-warn.md)
 - D-007 (2026-11-02) After every check passes: release on GitHub, then install the downloaded release -
@@ -21,8 +19,6 @@ status, is in [`decisions/INDEX.md`](decisions/INDEX.md). The log names roles, n
   [entry](decisions/D-008-decision-log-public-no-names.md)
 - D-009 (2026-10-12) Plugin id `DoomMachine.MobTracker`, as a text fix with no new version (done on `main`; released in
   0.9.0) - [entry](decisions/D-009-plugin-id-as-a-text-fix.md)
-- D-010 (2026-10-12) FW-11 requested; every check runs once it is built, the full planted-defect run included -
-  [entry](decisions/D-010-star-count-requested.md)
 - D-011 (2026-11-03) OI-7: beside an older MobTracker, 0.9.0 renames its assembly and stays off with one warning -
   [entry](decisions/D-011-older-copy-rename-and-stay-off.md)
 - D-012 (2026-11-03) FW-11: the count field has a label, "Exactly:" or "Invalid:", and red text while invalid -

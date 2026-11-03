@@ -391,6 +391,18 @@ namespace MobTracker
             catch (Exception e) { Failed("Click", e); }
         }
 
+        /// <summary>
+        /// EntityListWindow.ApplyCounts (0.9.0): typing turned a row's count field to text it cannot read - once per such
+        /// turn, never per frame or per keystroke while it stays so.
+        /// </summary>
+        public static void CountsUnreadable(string row, string text)
+        {
+            if (!ModLog.Verbose)
+                return;
+            try { ModLog.Event(EventLines.CountsUnreadable(row, text)); }
+            catch (Exception e) { Failed("Counts", e); }
+        }
+
         // ---- Find area (SpawnFinder) ----
 
         public static void FindNotStarted()
@@ -554,7 +566,7 @@ namespace MobTracker
             catch (Exception e) { Failed("Player", e); }
         }
 
-        public static void AlertStars(StarSet stars)
+        public static void AlertStars(StarRule stars)
         {
             if (!ModLog.Verbose)
                 return;

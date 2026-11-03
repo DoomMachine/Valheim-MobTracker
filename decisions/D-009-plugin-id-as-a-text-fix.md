@@ -17,3 +17,5 @@
     Done in `161e8c3` (the README names the settings file by version) and `bfd3b02` (checks and planted defects for the
     plugin id).
   - 2026-11-02: to be released in 0.9.0 (D-005), with D-006 for the old settings file.
+  - 2026-11-03: completed in 0.9.0 (tag `v0.9.0`), with D-006, D-011 and D-015 for the old settings file; the id is in
+    force.

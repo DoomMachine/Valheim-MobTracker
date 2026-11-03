@@ -4,7 +4,7 @@ The one list of what is untested, unverified, open or only an idea for MobTracke
 again. It lives with the code, so each release can check it. What a player meets is in the README's "Known limits";
 what each release changed is in its "History".
 
-As of **0.8.0**, and `main` after it (OI-7, FW-11).
+As of **0.9.0**.
 
 ## Keeping it up to date
 
@@ -24,26 +24,30 @@ work, **OQ** open questions - behaviour choices discussed and not taken (yet).
 
 ## Not yet tried in play
 
-0.8.0 was played without errors in the sessions read so far, in which nothing was watched or tracked, so its new rules
-did not act in them (LT-20). 0.7.1 ran through short play sessions without errors, in which `VerboseLog` was
-turned on while the game ran; the cfg could be written throughout, so none of LT-19's checks was run in them. 0.7.0 ran
-through short play sessions without errors, in which `MobTracker.log` was opened at each start, closed at each quit and
-kept as `MobTracker-prev.log` at the next start; its logging settings were not changed in them (LT-17). In one, Always
-track nearest watched took a creature of another watched type than the one lost, and each of its waits ended in one
-`took` line (LT-16). 0.6.0 ran through a play session without errors, but its new rule did not act in it: the log has no
-`Always track nearest watched:` line. 0.5.1 ran through a long play session without errors, in which Always track
-nearest watched was seen acting (LT-4); none of LT-15's checks was confirmed in it. 0.5.0 ran through a long play
-session, with several logouts, without errors: at its first world entry it set back the **Alerts:** filter 0.4.1 had
-saved (LT-14), but nothing was watched in it, so a reset at a logout was not seen. 0.4.1 - and with it the changes of
-0.4.0 and 0.3.1 - ran through a long play session without errors, in which a watch alert came, the `AlertStarFilter`
-held several categories at once, types were watched and unwatched and the guide mode was switched; none of the checks
-below was run in it as written. 0.3.0 and 0.2.0 each ran through play sessions without errors; Always track nearest
-watched (0.3.0) was first reported acting in 0.5.1's session, not yet checked for taking the nearest, and 0.2.0's new
-features have not been confirmed in the game (LT-2, LT-4 to LT-6).
+0.9.0 has not been played yet (LT-22); a build with its new plugin id, and none of its other changes, ran without a
+MobTracker warning or error in the sessions read so far. 0.8.0 was played without errors in the sessions read so far, in
+which nothing was watched or tracked, so its new rules did not act in them (LT-20). 0.7.1 ran through short play
+sessions without errors, in which `VerboseLog` was turned on while the game ran; the cfg could be written throughout, so
+none of LT-19's checks was run in them. 0.7.0 ran through short play sessions without errors, in which `MobTracker.log`
+was opened at each start, closed at each quit and kept as `MobTracker-prev.log` at the next start; its logging settings
+were not changed in them (LT-17). In one, Always track nearest watched took a creature of another watched type than the
+one lost, and each of its waits ended in one `took` line (LT-16). 0.6.0 ran through a play session without errors, but
+its new rule did not act in it: the log has no `Always track nearest watched:` line. 0.5.1 ran through a long play
+session without errors, in which Always track nearest watched was seen acting (LT-4); none of LT-15's checks was
+confirmed in it. 0.5.0 ran through a long play session, with several logouts, without errors: at its first world entry
+it set back the **Alerts:** filter 0.4.1 had saved (LT-14), but nothing was watched in it, so a reset at a logout was
+not seen. 0.4.1 - and with it the changes of 0.4.0 and 0.3.1 - ran through a long play session without errors, in which
+a watch alert came, the `AlertStarFilter` held several categories at once, types were watched and unwatched and the
+guide mode was switched; none of the checks below was run in it as written. 0.3.0 and 0.2.0 each ran through play
+sessions without errors; Always track nearest watched (0.3.0) was first reported acting in 0.5.1's session, not yet
+checked for taking the nearest, and 0.2.0's new features have not been confirmed in the game (LT-2, LT-4 to LT-6).
 
-Single player is enough except for LT-7 (another player, on a dedicated server or in a game one of you hosts), and for
-LT-11's second check and LT-21 (a dedicated server). Where creatures of a given star level are needed, the console's
-`spawn` command (with `devcommands` on) makes them: level 1 is no star, 2 one star, 3 two stars. Afterwards,
+Single player is enough except for LT-7 (another player, on a dedicated server or in a game one of you hosts), for
+LT-11's second check and LT-21 (a dedicated server), and for LT-11's third check (a game another player hosts, which you
+join). Where creatures of a given star level are needed, the console's `spawn` command (with `devcommands` on) makes
+them - `spawn Boar 1 3` makes one two-star Boar: level 1 is no star, 2 one star, 3 two stars, and so on up to level 9,
+eight stars, one creature at a time: with an amount above 1 and a level above 4, only the first creature gets that level
+and the rest get level 4. The command makes no higher level, so more stars need a mod that gives them. Afterwards,
 `BepInEx/LogOutput.log` should have no exception naming MobTracker, and from 0.7.0 `BepInEx/MobTracker.log` no
 `[Error  : Unity Log]` line. With `VerboseLog` on (0.7.0), most checks below can be read from its lines as well: what
 was tracked, lost and taken, each alert and what Auto-track did.
@@ -92,7 +96,7 @@ Since 0.8.0 the loss of any tracked creature starts the wait while something is 
 or a tamed one: the two checks of the older rule (`no wait - lost Neck, not on the watchlist (Boar)` and `no wait - lost
 tamed <type>`) are gone from here, and LT-20 checks the new one.
 
-- [ ] The log says `MobTracker 0.6.0 loaded`.
+- [x] The log says `MobTracker 0.6.0 loaded`.
 - [ ] Watch `Deer` and `Boar`, tick **Always track nearest watched**, and track a Deer that has a Boar nearer than any
   other Deer; kill it. "Lost track of" shows, and about 5 seconds later the arrow and the "Tracking:" label are on that
   Boar. The log has `waiting - lost Deer; watching Boar,Deer`, then `took Boar at <m> m, 5 s after losing Deer`, its
@@ -149,6 +153,73 @@ Copy `BepInEx/MobTracker.log`, `MobTracker-prev.log` and `LogOutput.log` before 
 - [x] Quit the game normally: the last line of `MobTracker.log` is `MobTracker.log closed - the game is quitting`
   (LT-18).
 - [ ] Nothing in `MobTracker.log` names your Windows user folder in full, a player, a character or a world.
+
+### LT-22 0.9.0: star counts, and the settings file's new name
+
+`spawn` (with `devcommands` on) makes creatures up to level 9 - eight stars: `spawn Boar 1 4` makes one three-star Boar.
+More stars need a mod that gives them. Copy `BepInEx/LogOutput.log`, `BepInEx/MobTracker.log` and the cfg before the
+game starts again, and copy the cfg aside before the settings-file checks.
+
+- [ ] The log says `MobTracker 0.9.0 loaded`; the cfg has `ListStarCounts =` under `[General]` and `AlertStarCounts =`
+  under `[Alerts]`, both empty, and begins `## Settings file was created by plugin MobTracker v0.9.0` /
+  `## Plugin GUID: DoomMachine.MobTracker`; the Configuration Manager's Split View heads MobTracker's settings
+  "MobTracker 0.9.0 (DoomMachine.MobTracker)" and shows both counts as text boxes.
+- [ ] Each star row shows its five buttons with their whole labels, then `Exactly:` and a field; note the window's width
+  (it may open wider than before).
+- [ ] Spawn a plain, a one-, a two- and a three-star Boar (`spawn Boar 1 1` to `spawn Boar 1 4`). Type `3` in the
+  **List:** field: at once, also with the pointer on the window, only the three-star Boar is listed, *All* no longer
+  shows selected, and the title reads `MobTracker - 1 creatures, stars 3`. Mark *1 star*: the one-star Boar too
+  (`1 star + stars 3`). Type `0, 3`: the plain one joins. Click *All*: the field empties, every Boar is listed, the
+  title says `creatures loaded`, and no error comes - also when the field had the keyboard as you clicked.
+- [ ] Type `101`, `3-`, `-3`, `+3` and `abc` in the **List:** field in turn: each shows `Invalid:` and red text once
+  typed, and the list keeps what the last text it could read gave it (`1` and `10` on the way to `101`, `3` on the way
+  to `3-` and the field emptied between them apply at once); `3,` and `5-3` do not show `Invalid:` (`5-3` lists the
+  three-star Boar). Close the list (F7) and open it: the field shows the counts in use, not the invalid text.
+- [ ] While a field has the keyboard: F7 closes the list, Escape closes it (and the gamepad's B, if you have one), Tab
+  opens no inventory, the digit keys do not change the hotbar item, and with a hammer and a piece selected typing does
+  not cycle the snap point.
+- [ ] Click into the **List:** field and switch **View** to all types: the row greys out, and what you type next goes to
+  the search box.
+- [ ] Click *All* on **Alerts:**, type `3` in its field and wait 3 seconds; then Watch `Boar` and spawn Boars of levels
+  1 to 4 (`spawn Boar 1 1` to `spawn Boar 1 4`): only the three-star Boars alert, and with Auto-track on the arrow takes
+  one.
+- [ ] With *2 stars* marked on **Alerts:** and fresh one-star Boars around: type `1`, about a second later add `x` (the
+  field shows `Invalid:`), and about a second after that make it `12`: no one-star Boar alerts. Then make it `1` and
+  wait 3 seconds: they alert.
+- [ ] Always track nearest watched on, `3` alone on **Alerts:** (no category marked): track a creature and kill it with
+  a plain and a three-star Boar around: 5 seconds later the arrow takes the three-star one, never the plain one.
+- [ ] With `KeepBetweenSessions` off, counts typed in both fields are empty after a logout and a world entry, and the
+  `Game session changed and KeepBetweenSessions is off` line names `General.ListStarCounts` and
+  `Alerts.AlertStarCounts`; with it on, they are kept across a logout and a restart.
+- [ ] With the game closed and `KeepBetweenSessions` on, set `AlertStarCounts = abc`: at the start the log has one
+  warning naming `Alerts.AlertStarCounts`, and the **Alerts:** field shows `Invalid:` and `abc`; no count is applied, so
+  with no category marked on **Alerts:**, *All* shows selected and every watched Boar can alert.
+- [ ] With no category marked on **Alerts:** and `3` in its field (only three-star Boars alert), type `3-5` over
+  `AlertStarCounts` in the Configuration Manager at an ordinary pace: one warning for `3-`, no Boar outside three to
+  five stars alerts on the way, the counts apply about 1.5 to 2.5 seconds after the last key, and the **Alerts:** field
+  shows `3-5`.
+- [ ] With `VerboseLog` on, no category marked on **Alerts:** and its field emptied first, type `3`: the log has
+  `Setting: Alerts.AlertStarCounts = '3' (was '')`, about 1.5 seconds later
+  `Alert: the star filter in effect is now stars 3`, and a turned-away Boar's line names `(stars 3)`; typing `3-` then
+  writes one `List: the Alerts: field's '3-' cannot be read ...` line, not one per key.
+- [ ] With the game closed, `KeepBetweenSessions` on and `ListStarCounts = 3`, set `ListStarFilter = Foo`: at the start
+  the log's warning about `General.ListStarFilter` says that no category is marked and that the row lets only its counts
+  through when it has some, and only the three-star Boars are listed.
+- [ ] Settings file (copy `DoomMachine.MobTracker.cfg` aside first, put it back after): with the game closed, put a
+  `com.mobtracker.plugin.cfg` with `AlertVolume` changed in `BepInEx/config/` and move `DoomMachine.MobTracker.cfg`
+  away. At the start the log has one `Settings copied: ...` line; the new cfg has the changed `AlertVolume` and
+  `## Plugin GUID: DoomMachine.MobTracker` at its top; the older file keeps its time and contents. The next start has no
+  such line. With both files there, nothing is copied and nothing is said.
+- [ ] With `VerboseLog` on, walk away from a tracked tamed creature until it is no longer loaded: the `Track: lost` line
+  says `; a tamed one`.
+- [ ] In the whole log no exception names MobTracker, and `MobTracker.log` has no `[Error  : Unity Log]` line.
+- [ ] Last (copy `DoomMachine.MobTracker.cfg` aside first): with the game closed, put the 0.8.0 release's
+  `MobTracker.dll` in a subfolder of `BepInEx/plugins/`. At the start the log has `Loading [MobTracker 0.8.0]`,
+  `MobTracker 0.8.0 loaded`, `Loading [MobTracker 0.9.0]`, one warning
+  `An older MobTracker (0.8.0, plugin id com.mobtracker.plugin) is loaded beside this one, so this one stays off ...`,
+  and no `MobTracker 0.9.0 loaded`; F7 opens one window, 0.8.0's, without count fields. Then, with the game closed,
+  remove that DLL and the `com.mobtracker.plugin.cfg` it saved (left there, it is copied whenever
+  `DoomMachine.MobTracker.cfg` is missing), and put the cfg back.
 
 ### LT-20 0.8.0: the loss of any tracked creature, and a taming
 
@@ -343,8 +414,12 @@ The README's "roughly 130 to 290 m" comes from the game's code, not from measure
   yours); a dedicated server started without `-simulationdistance` uses the game's original range
   (`SimulationDistance.OriginalDistance`, level 2 in the code) - read from the code, not measured.
 - [ ] In a game you join, with the host's Draw distance at the default and yours one step up: the farthest creature the
-  list shows outside dungeons is under about 270 m. Read from the code, not measured; so is this: a host that raises its
-  Draw distance after you joined keeps capping you at its old value until you join again.
+  list shows outside dungeons is under about 270 m. Read from the code, not measured; so is this: a host that changes
+  its Draw distance after you joined sends your game the new value, which your game takes at once, up to your own Draw
+  distance; but for what it sends your game, the host still uses the value it worked out when your game last asked for
+  one - at the join, or when your graphics settings were applied while your own Draw distance differed from the one in
+  effect. So after the host raises its Draw distance, the list can stay within the old value until you join again or set
+  your own Draw distance to another value.
 
 ### LT-12 Layout and the window's mouse state
 
@@ -365,9 +440,9 @@ let go of it: the game reads that button there with no test the list can hold sh
 
 ### LT-19 0.7.1: a cfg that cannot be written
 
-Copy the cfg before these checks, and make it writable again (Properties, untick Read-only) afterwards. Up to the 0.8.0
-release it is `com.mobtracker.plugin.cfg`, after it `DoomMachine.MobTracker.cfg` (OI-7): the lines below name the newer
-file, and a release up to 0.8.0 names the older one.
+Copy the cfg before these checks, and make it writable again (Properties, untick Read-only) afterwards. Up to 0.8.0 it
+is `com.mobtracker.plugin.cfg`, from 0.9.0 `DoomMachine.MobTracker.cfg`: the lines below name the newer file, and a
+release up to 0.8.0 names the older one.
 
 - [ ] With the game closed, make the cfg read-only and start the game: `LogOutput.log` says
   `Settings could not be saved to DoomMachine.MobTracker.cfg at the game's start (UnauthorizedAccessException; ...` and
@@ -408,10 +483,10 @@ has happened in a log kept so far.
 MobTracker goes only into each player's game. A dedicated server needs nothing and can be vanilla: the game checks no
 mods when a player joins, and MobTracker sends nothing over the network. A client of a dedicated server builds its world
 generator from the seed the server sends at the join, so Find area works there as in single player, and the server's
-range caps the client's (LT-11). All of this is read from the code. Among the sessions read so far is a game joined to
-a dedicated server - one with BepInEx on it, not a vanilla one - in which 0.8.0 ran without errors, but its list,
-alerts, tracking and Find area were not used, so none of the checks below was run as written; LT-11's second check
-needs a server too, and LT-7 another player, there or in a game one of you hosts.
+range caps the client's (LT-11). All of this is read from the code. Among the sessions read so far is a game that joined
+a dedicated server running BepInEx, but not MobTracker, in which 0.8.0 ran without errors; its list, alerts, tracking
+and Find area were not used, so none of the checks below was run as written; LT-11's second check needs a server too,
+and LT-7 another player, there or in a game one of you hosts.
 
 - [ ] Join a vanilla dedicated server (no BepInEx on it) with MobTracker installed: the join works, F7 lists
   creatures, and the log has no exception naming MobTracker.
@@ -427,11 +502,11 @@ server's code (the Linux server's was not examined): BepInEx would load it there
 (OQ-14); the server never has a player of its own, so none of MobTracker's features that need a player starts; at each
 start it would write `MobTracker.log` and its cfg in the server's `BepInEx` folder, and, with TomTom or Wayfinder on the
 server, its line saying their keys work while the list is open. With a cfg copied from a player's game,
-`KeepBetweenSessions` off and a watchlist or star filter set, the server's world start would also set those back, with
-the `Game session changed` line, and save the cfg. Not known without a server start: whether the server's build of the
-game finds a shader for the arrow (if not, one `No usable shader found` error at each start), whether it can make the
-ding's sound (if not, expected: one error at the start, after which MobTracker does nothing more there), and whether
-`MobTracker.log` gets its closing line when the server is stopped with Ctrl+C.
+`KeepBetweenSessions` off and a watchlist, star filter or star count set, the server's world start would also set those
+back, with the `Game session changed` line, and save the cfg. Not known without a server start: whether the server's
+build of the game finds a shader for the arrow (if not, one `No usable shader found` error at each start), whether it
+can make the ding's sound (if not, expected: one error at the start, after which MobTracker does nothing more there),
+and whether `MobTracker.log` gets its closing line when the server is stopped with Ctrl+C.
 
 ### OI-3 Edge cases never seen
 
@@ -456,20 +531,6 @@ nearest watched ends its wait at a death by design.)
 Whether tracking should carry on after the respawn is open: the tracker would have to keep its target while there is
 no player, and say so.
 
-### OI-7 The settings file's new name
-
-Since 2026-10-12, on `main` after the 0.8.0 release, MobTracker's plugin id is `DoomMachine.MobTracker`, so the Valheim
-Configuration Manager heads MobTracker's settings in its Split View with
-"MobTracker <version> (DoomMachine.MobTracker)", as it does for the other DoomMachine plugins (read from its 1.1.25
-code; not yet seen in a game). BepInEx names the
-settings file after that id: it is now `BepInEx/config/DoomMachine.MobTracker.cfg`, and the old
-`com.mobtracker.plugin.cfg` is no longer read. A player who does not rename the old file starts with every setting at
-its default (the README, **Installing**). And BepInEx loads one plugin per id, so an older copy left anywhere in
-`BepInEx/plugins/` - under another file name or in a subfolder - would now load beside the new one. Open for the next
-release, which needs a new version number (0.8.0 is the release with the old id): move the old file's settings over
-at the first start, or say it in the release notes, and say what to do about a leftover copy. Either way, that
-release's History line names the change.
-
 ### OI-6 A log listener that throws at quit
 
 Since 0.7.1, `OnDestroy` first retries a save of the cfg that failed; when that retry works, its line goes through
@@ -493,9 +554,10 @@ skipping creatures once one is kept - are checked since 0.6.0.)
 Many checks match exact IL shapes, so a legitimate rewrite of the code they cover (the re-track, Auto-track's line, the
 star rows, the window clamp, the game session) fails them: re-read the IL and rewrite the check rather than loosen it.
 The unit tests link only `StarFilter.cs` and `Rules.cs`, and since 0.7.0 `LogRules.cs` and `EventLines.cs`; the rest is
-proved by preflight and planted defects (and `MobTracker.log`'s file handling, and since 0.7.1 the cfg's saving, by
-`tools/log-harness/`). So prove each new check with defects planted in how its answer is used, its true path, how two
-tested facts combine, its loop bounds and its operands - not only in its wiring.
+proved by preflight and planted defects (and `MobTracker.log`'s file handling, since 0.7.1 the cfg's saving and since
+0.9.0 the copy of the settings file of 0.8.0 and earlier, by `tools/log-harness/`). So prove each new check with defects
+planted in how its answer is used, its true path, how two tested facts combine, its loop bounds and its operands - not
+only in its wiring.
 
 ### SC-6 What the logging checks cannot see
 
@@ -506,13 +568,14 @@ reaches in `Awake`), `Dispose`, `Broke`, `Stop`, the stop notice said once, `Clo
 from repeating every frame, second, look or keystroke are held to their methods' exact shapes: a failure warned about
 once per site, the loss line only at a loss, the not-alerting line once per creature, the empty look's line only when it
 changes, the refused-key line only on a press, a setting's burst through the settler, the cleared alert memory only when
-it held some, and `LogObserver`'s and the ground path's lines only on a change; and four that sit in the caller - the
+it held some, and `LogObserver`'s and the ground path's lines only on a change; and five that sit in the caller - the
 list's close line only past `Close`'s `IsOpen` test (with no local player `Close` runs every frame), the reached line
-only inside the reached block, the alert memory's line only in the alert poll's no-player block, and the alert and
-Auto-track lines only after the poll's return when nothing alerted. The wording of every verbose line and of the file's
-own lines, and the decisions behind three of them - what Auto-track did, which test turned a watched creature away, why
-the list closed when no caller said - are in `EventLines` and unit-tested; the game side hands over only names and
-values (a button's name, a setting's key, a creature's label, the HUD's answer, a count).
+only inside the reached block, the alert memory's line only in the alert poll's no-player block, the alert and
+Auto-track lines only after the poll's return when nothing alerted, and since 0.9.0 the star-count field's line only
+when typing turns its text unreadable (`CountsField`, unit-tested; `ApplyCounts`' exact shape). The wording of every
+verbose line and of the file's own lines, and the decisions behind three of them - what Auto-track did, which test
+turned a watched creature away, why the list closed when no caller said - are in `EventLines` and unit-tested; the game
+side hands over only names and values (a button's name, a setting's key, a creature's label, the HUD's answer, a count).
 
 What they still do not see:
 - Where a site sits in its caller, beyond the places checked - the alert poll's lines after its once-a-second return,
@@ -551,7 +614,8 @@ states one, the item says so.
 | KL-2 | Multiplayer: another player's creatures | The game's own multiplayer behaviour: a creature's death and tamed state reach the other players' games later. |
 | KL-3 | A dungeon's creatures alert across its entrance | Auto-track and Always track nearest watched keep to your side since 0.3.1. Filtering the alerts by side as well would change what alerts, so it is left for players to ask for. |
 | KL-4 | Rows hold still under the pointer | How 0.3.1 stopped the rows re-sorting under the pointer. Updating the distances but not the order is the alternative, if players ask. |
-| KL-5 | An **Alerts:** change takes effect after 1.5 seconds | The rule since 0.4.1. LT-1 tests it in the game. |
+| KL-5 | An **Alerts:** change takes effect after 1.5 seconds | The rule since 0.4.1, for the row's counts too since 0.9.0, every keystroke that changes its field's text restarting the wait. LT-1 and LT-22 test it in the game. |
+| KL-30 | The star-count fields: up to 100 stars, no gamepad typing, long names | D-004 chose 0 to 100: a creature with more stars passes only *2+ stars* or *All*. MobTracker has no way to type with a gamepad: IMGUI's text field takes a keyboard's keys; the counts can also be set in ConfigurationManager or the cfg. One asterisk per star is how MobTracker names a creature wherever it does - the list, the "Tracking:" label, the watch alert and "Lost track of" (FW-12). |
 | KL-6 | Escape over a runestone's or readable item's text | The game closes that text on Escape or the Use key (E) with no test the list can hold shut. What would change it: refusing F7 while that text shows, as 0.4.1 does over the Barber Station; the game's public `TextViewer.instance.IsVisible()` and `TextViewer.IsShowingIntro()` tell it from the intro text. |
 | KL-7 | Two mod windows; F5 over the list | One Escape closing only one window would need each mod to know about the other's window; the game opens the console with no test a mod window can hold shut. |
 | KL-8 | A TomTom or Wayfinder key that types | Stopping it would take a second patch, on a private part of TomTom. Their default keys do not type. |
@@ -561,8 +625,9 @@ states one, the item says so.
 | FW-1, FW-2 | The window's place not kept; GUI scale | See FW-1 and FW-2. |
 | KL-11 | Find area's limits | Sub-biomes and the game's corner biome test: see FW-5 and FW-6. The rest is how Find area works: it tells the land from the world seed, not from the loaded ground, and the terrain it cannot check (slope, lava, player bases, water depth) is known only where the land is loaded. |
 | KL-12 | Always track nearest watched: its rules | Chosen when it was made (0.3.0), and each could change if players ask; the dungeon side (0.3.1) and the settled **Alerts:** stars (0.4.1) are fixes. Since 0.6.0 it takes the nearest creature of any watched type, not only of the lost one's (asked for after play); every watch alert during its wait leaves the choice to it, and unwatching the lost type no longer ends the wait (unwatching every type does). A setting for the lost type only would be a new feature; watching only that type does much the same for the re-track, at the cost of the other types' alerts. Taking a creature that alerted during the wait and then left the `AlertRadius` would need the wait to remember that creature. Since 0.8.0 the loss of any tracked creature starts the wait while something is watched - one of a type not watched, or a tamed one, too - and taming the tracked creature ends its tracking as a loss does (asked for after play; OQ-3 for the first). |
-| KL-26 | `MobTracker.log`'s reach | An error nobody caught comes through BepInEx's "Unity Log" source, so `UnityLogListening` must be on and only main-thread messages arrive; a Unity log callback of MobTracker's own would remove the setting's part, as a second capture route (FW-9). The 5 MB cap keeps the next start's copy to -prev small (OQ-9). A second copy of the game fails at the open and touches nothing (OQ-11). The folder scrub replaces full spellings only. |
+| KL-26 | `MobTracker.log`'s reach | An error nobody caught comes through BepInEx's "Unity Log" source, so `UnityLogListening` must be on and only main-thread messages arrive; a Unity log callback of MobTracker's own would remove the setting's part, as a second capture route (FW-9). The 5 MB cap keeps the next start's copy to -prev small (OQ-9). A second copy of the game fails at the open and touches nothing (OQ-11). The folder scrub replaces full spellings only. Beside an older MobTracker release (up to 0.8.0), 0.9.0 stays off and writes no `MobTracker.log`; such a release from 0.7.0 on writes its own (D-006, D-011). |
 | KL-28 | A cfg that cannot be written | MobTracker saves it itself since 0.7.1, after each change; while it cannot be written, changes take effect but wait for the next save that works (a later change, or quitting the game), and are lost if none does. BepInEx writes the file in place, emptying it as it opens it, so a save that fails part-way (a full disk, the game killed mid-save) can leave it cut short: while the game runs, the next save that works rewrites it from the settings in use; after the game was killed mid-save, the settings cut off are back at their defaults at the next start, and one cut part-way through its value keeps the part written when that still reads as a value. Since 0.7.1 the game's start writes it once, not at each setting read. Writing elsewhere (a second file, the registry) would leave two places a setting lives. |
+| KL-29 | A cfg BepInEx cannot read when the game starts | BepInEx reads the cfg while it creates the plugin, before any MobTracker code runs, and MobTracker cannot catch what that read throws (decompiled; BepInEx 5.4.23.3). Unverified: whether Unity then drops the plugin, as BepInEx expects, or keeps it without its settings; either way MobTracker does not start. |
 | KL-27 | What `VerboseLog` does not say yet | See FW-9; the README names each of its items but the last, which KL-26's limit covers. States it learns by watching are read once a frame, after the code that changes them (Tracker works the guide out in its `LateUpdate`), and taken as they are, without a line, when `VerboseLog` is turned on and in each tracking's first two frames. |
 | KL-24 | Tracking usually ends at a death | The game removes the body about 10 seconds after a death, and with it the local player the tracker follows (a respawn at once may carry it on: LT-9); OI-4 asks whether tracking should carry on after the respawn. |
 
@@ -573,18 +638,17 @@ gesture does not go through the pointer events the window blocks. And the large 
 open, which at a Barber Station brings the barber back under the list, where the Escape that closes the list also
 cancels the barber. Mouse, keyboard and gamepad players cannot meet either. Read from the code; not seen.
 
-### KL-14 Console key binds run while you type in the search
+### KL-14 Console key binds run while you type in the search or a star-count field
 
-Console key binds (made with the console's `bind` command) can still run when their key is typed in the list's search:
-the game checks them against its own chat field, not against the list, and no flag the list sets can stop them. This
-matters only with binds on keys you type. Server Devcommands' mouse-wheel binds are stopped since 0.3.1.
+Console key binds (made with the console's `bind` command) can still run when their key is typed in the list's search or
+a star-count field: the game checks them against its own chat field, not against the list, and no flag the list sets can
+stop them. This matters only with binds on keys you type. Server Devcommands' mouse-wheel binds are stopped since 0.3.1.
 
 ### KL-15 An auto-run already going keeps going
 
 An auto-run started before the list opens keeps the character running while the list is open, and a block toggled on
 (rather than held) stays up: the list stops new movement and look input, not a run already under way. A movement key
-pressed after the list closes stops the run. The README's "your character and camera stand still" does not mention
-this; its next release should.
+pressed after the list closes stops the run. The README's "your character and camera stand still" does not mention this.
 
 ### KL-16 Other mods' keys stand down while the list is open
 
@@ -636,31 +700,22 @@ the next world you enter empties the watchlist).
 
 ### KL-22 The cfg is read when the game starts
 
-A setting edited in the cfg while the game runs takes effect at the next start, and is lost if the
-file is written before then: any setting changed in the window or in ConfigurationManager writes the whole file back
-from the values in use, and so, with `KeepBetweenSessions` off, does entering a world or going back to the main menu
-while the watchlist or a star filter is away from its default, and so does quitting the game after a save that failed
-(0.7.1). The README says so for `Watchlist` and `AlertStarFilter`; it holds for every setting. With
-`KeepBetweenSessions` off, a hand edit of `Watchlist`, `ListStarFilter` or `AlertStarFilter` lasts only until the next
+A setting edited in the cfg while the game runs takes effect at the next start, and is lost if the file is written
+before then: any setting changed in the window or in ConfigurationManager writes the whole file back from the values in
+use, and so, with `KeepBetweenSessions` off, does entering a world or going back to the main menu while the watchlist, a
+star filter or a star count is away from its default, and so does quitting the game after a save that failed (0.7.1).
+The README says so for `Watchlist`, `AlertStarFilter`, `AlertStarCounts` and `VerboseLog`; it holds for every setting.
+With `KeepBetweenSessions` off, a hand edit of `Watchlist`, a star filter or a star count lasts only until the next
 world is entered, even one made with the game closed.
-
-### KL-29 A cfg BepInEx cannot read when the game starts
-
-BepInEx reads the cfg while it creates the plugin, before any MobTracker code runs. A file another
-program holds open for writing then, or without sharing, or one whose section name was edited by hand to start or end
-with a space or to hold `=`, or whose section or setting name holds a tab, `\`, `"`, `'`, `[` or `]`, makes that read
-throw, and MobTracker cannot catch it (decompiled; BepInEx 5.4.23.3). Unverified: whether Unity then drops the plugin,
-as BepInEx expects, or keeps it without its settings; either way MobTracker does not start. The README's Known limits
-say so.
 
 ### KL-23 Closing the game keeps the last session's choices until the next world
 
-With `KeepBetweenSessions` off, the watchlist and both star filters are set back when you enter a world or go back to
-the main menu, not when the game closes. Quitting from a world - from the game's menu, or by closing its window - ends
-the game without going back to the main menu, so the cfg keeps that session's watchlist and star
-filters through the next start and the main menu, where nothing is listed, alerted or tracked, until you enter a world.
-The README says so in the `KeepBetweenSessions` row of its settings table, not under Known limits. What would change
-it: setting them back when the game quits as well. LT-14 checks it in the game.
+With `KeepBetweenSessions` off, the watchlist, both star filters and both star counts are set back when you enter a
+world or go back to the main menu, not when the game closes. Quitting from a world - from the game's menu, or by closing
+its window - ends the game without going back to the main menu, so the cfg keeps that session's watchlist, star filters
+and star counts through the next start and the main menu, where nothing is listed, alerted or tracked, until you enter a
+world. The README says so in the `KeepBetweenSessions` row of its settings table, not under Known limits. What would
+change it: setting them back when the game quits as well. LT-14 checks it in the game.
 
 ### KL-25 The log's reason for a wait that took nothing
 
@@ -682,14 +737,17 @@ show which ran first.
 - **TomTom and Wayfinder:** their keys work over the list through a patch on their public `IsTypingElsewhere()`. For
   each TomTom or Wayfinder DLL it reads, preflight checks that this is still their only reader of the two flags the list
   sets (KL-8); since 0.5.1 `tools/mutants.ps1` names the DLLs a run was checked against.
-- **ConfigurationManager:** it applies MobTracker's two star filters, which are text settings, at every keystroke - one
-  reason an **Alerts:** change waits until it holds still (KL-5). While its window blocks input, F7 does not reach the
-  list (KL-17). It lists MobTracker's **Logging** section first: sections in the order they are bound, unless its
-  "Sort by name" is on (OQ-10).
+- **ConfigurationManager:** it applies MobTracker's two star filters and two star counts, which are text settings, at
+  every keystroke - one reason an **Alerts:** change waits until it holds still (KL-5). While its window blocks input,
+  F7 does not reach the list (KL-17). It lists MobTracker's **Logging** section first: sections in the order they are
+  bound, unless its "Sort by name" is on (OQ-10).
 - **BepInEx:** `MobTracker.log` hangs on BepInEx 5's log - its listeners, the `UnityLogListening` setting, the "Unity
   Log" source's `Stack trace:` text - and on its config's change events (BepInEx 5.4.23.3). A BepInEx update should be
-  checked against them; `tools/preflight.ps1` checks that the members it uses still exist and that its level values
-  are BepInEx's.
+  checked against them; `tools/preflight.ps1` checks that the members it uses still exist and that its level values are
+  BepInEx's. Since 0.9.0 MobTracker's assembly is named after its plugin id, `DoomMachine.MobTracker`: Unity tells
+  plugins' classes apart only by assembly name, namespace and class name, so with the name `MobTracker` of 0.8.0 and
+  earlier an older copy's classes would be made in this one's place (tried with the 0.8.0 release DLL in a Unity player
+  of the game's engine version, with BepInEx 5.4.23.3).
 - **Server mods:** a server that runs a mod checking joining players' mods may refuse a player with MobTracker; the game
   itself does not check (LT-21), and no such mod has been tried.
 
@@ -752,10 +810,11 @@ and the game's `Player.log` would still have them, and `LogOutput.log` would sta
 ### OQ-9 MobTracker.log's size and repeated errors
 
 Now: at most 5 MB per game start, then one last line and nothing more until the next start; one earlier start kept
-(`MobTracker-prev.log`); an error of MobTracker's code that repeats written at most once a minute, with a count of
-those left out. The other answers: a larger cap, starting a fresh file at the cap, keeping more than one earlier start,
-or another pace for repeats. MobTracker's own warnings are not thinned - one per ConfigurationManager keystroke in a
-star filter, as in `LogOutput.log` - except a failed save of the cfg (0.7.1), said once until a save works again.
+(`MobTracker-prev.log`); an error of MobTracker's code that repeats written at most once a minute, with a count of those
+left out. The other answers: a larger cap, starting a fresh file at the cap, keeping more than one earlier start, or
+another pace for repeats. MobTracker's own warnings are not thinned - one per ConfigurationManager keystroke in a star
+filter or a star count, as in `LogOutput.log` - except a failed save of the cfg (0.7.1), said once until a save works
+again.
 
 ### OQ-10 Where the Logging settings show
 
@@ -891,6 +950,12 @@ tracker, the window, the alerts) is internal, and it raises no events.
   decided in MobTracker's Harmony prefix, where the checks allow no verbose line. LT-6's last check would read it.
 - The map's delete gesture with no area pin in reach: every other use of the gesture, after which the game removes one
   of your own pins, or none, as before - a line at each would not say anything MobTracker did.
+- A star-count field's text it could not read, dropped when the list opens: `EntityListWindow.Open` shows each field's
+  setting afresh, an exact shape the checks hold; the line said when typing made the text unreadable stays the last word
+  on it.
+- A keystroke in the **Alerts:** field that writes nothing restarting that row's wait: counted in
+  `ModConfig.AlertRowChanged`, whose callers the checks hold; only the keystroke that turns the field unreadable has a
+  line.
 - An error nobody caught without BepInEx's `UnityLogListening`: a Unity log callback of MobTracker's own, kept to one
   capture route.
 - Not yet: each needs safety checks re-read from the compiled code for little gain, or it is rare.
@@ -907,34 +972,45 @@ it at most once a minute, with a count).
 - Would take: a once-only warning in the cutscene test, a per-session count for the alert check, and per-creature
   catches as the alert check has, with the checks re-derived.
 
-### FW-11 An exact star count, typed in
+### FW-12 Many stars as a number
 
-Requested 2026-10-12; not started. The List and Alerts star rows offer All, No star, 1 star, 2 stars and 2+
-stars; with mods that give creatures more stars, 2+ is too coarse. Wanted: a field where a star count is typed - a
-whole number, refused when it is not one - so that the list, the watch alerts, Auto-track and Always track nearest
-watched can pick exactly that many stars. Where the field sits is open.
+A creature with many stars shows one asterisk per star wherever MobTracker names it - the list, the "Tracking:" label,
+the watch alert and "Lost track of" - so one with 100 stars has 100 of them.
 
-- To settle first: whether a typed count joins a row's categories or replaces them, and whether more than one count can
-  be given; how the cfg keeps it - a number in `ListStarFilter` or `AlertStarFilter` is already a category code today
-  (3 means 2+ stars, 4 means All), so an exact count needs its own setting or spelling; what 2+ means beside it; the
-  largest count accepted.
-- Would take: a minor version - the window's field and its parsing, the star filters, preflight's checks with their
-  planted defects, the tests and the README. Every check runs before it ships, the full planted-defect run included.
+- Not yet: not met in play so far.
+- Would take: a number in place of the asterisks past a few stars, in `Creature.DisplayName`.
 
 ## Decided or not planned - reopen only with a new reason
 
-- **The list keeps the game out while it is open:** Tab, the mouse wheel and the keys typed in its search do not reach
-  the game, and a click, drag or scroll on the window never reaches the map or a game window under it. The exceptions
-  are under Known limits.
+- **The list keeps the game out while it is open:** Tab, the mouse wheel and the keys typed in its search and its
+  star-count fields do not reach the game, and a click, drag or scroll on the window never reaches the map or a game
+  window under it. The exceptions are under Known limits.
 - **Escape and the gamepad's B close the list.**
 - **F7 does not open the list** while you type in chat, a sign or a map pin's name, while the console is open, or over
   the pause menu, the build menu, the inventory or the Barber Station.
 - **The star rows are toggle buttons that combine categories**, and a click on *All* resets a row. There is no single
   button that cycles through the choices: the alerts check once a second and alert each creature once, so every choice
   passed on the way would alert for real.
+- **Each star row also has a field for exact star counts** (0.9.0; D-001 to D-004 in `decisions/`): whole numbers and
+  ranges from 0 to 100, added to the marked categories; with no category marked, only the counts pass. What cannot be
+  read is not applied and the counts read before it stay; a click on *All* empties the field (D-014). The field's label
+  is *Exactly:*, or *Invalid:* with red text while it cannot be read (D-012).
+- **How a star-count field reads its text** (0.9.0; D-002 left these cases to the design, D-004 set the range): entries
+  are separated by commas, and an empty entry (`3,,5`, `3,`, `,3`) is skipped, so a comma typed on the way to the next
+  number never shows as invalid; spaces and tabs around a number, the dash and the commas are ignored, so `3, 5` and
+  `3 - 5` read as typed; a range written high to low (`5-3`) reads as the same range, since it can mean nothing else;
+  repeated and overlapping entries (`3, 3-5`) add up, since each names counts to let through; leading zeros are part of
+  the number (`007` is 7). Not read: a range left open (`5-`, `-5`; D-013) - `5-` is the text on the way to a range, and
+  read it would apply counts up to 100 while the end is still being typed, and `-5` reads as a sign as much as a range;
+  a sign (`+3`); a number above 100, also as a range's end (`95-105`), as D-004 takes 0 to 100; a dash other than `-`, a
+  decimal point, a letter, a space other than a plain space or a tab (a non-breaking one pasted in, say: the warning
+  then names an entry that looks readable), and digits other than 0 to 9. One entry it cannot read leaves the whole text
+  unapplied (D-004), and the counts read before it stay: with no count instead, a row with no category marked would let
+  every star level through, and every watched creature in reach could alert (KL-5).
 - **A change on the Alerts: row takes effect once the row has held still for 1.5 seconds** (KL-5).
-- **What you watch and both star rows last one game session:** they go back to nothing watched and *All* whenever you
-  enter a world or go back to the main menu, unless `KeepBetweenSessions` is on. It is off by default.
+- **What you watch and both star rows, their counts too, last one game session:** they go back to nothing watched, *All*
+  and no count whenever you enter a world or go back to the main menu, unless `KeepBetweenSessions` is on. It is off by
+  default.
 - **Find area's pins are yours alone:** they are added with the game's save flag off and no owner, so they are never
   saved with your map or shared through a Cartography Table.
 - **Open items live in this file** rather than a GitHub wiki, so they are versioned with the code.
@@ -945,12 +1021,32 @@ watched can pick exactly that many stars. Where the field sits is open.
   OQ-3's other answer, asked for after play): one of a type not watched, or a tamed one, too - as one outside the
   **Alerts:** stars already did. Taming the tracked creature ends the tracking and starts the wait, as a loss does: one
   tracked wild and tamed now, by anyone. One already tamed when its tracking began is not lost by that: like any other,
-  it stays tracked until it is killed, no longer loaded, or you stop or replace the tracking. Stopping the tracking, or
-  tracking something else, never starts the wait, and the wait still takes only a creature a watch alert would take,
-  never a tamed one.
+  it stays tracked until it is killed or no longer loaded, until you stop or replace the tracking, or until you die (see
+  the README's Known limits) or leave the world. Stopping the tracking, or tracking something else, never starts the
+  wait, and the wait still takes only a creature a watch alert would take, never a tamed one.
+- **Beside an older MobTracker release, 0.9.0 stays off** (0.9.0; D-006, D-011): with both running, both would answer F7
+  and every watch alert would show and ding twice (read from the code, not seen); the older one runs with its own
+  settings file until its DLL is removed, and the next start that finds no `DoomMachine.MobTracker.cfg` then copies its
+  settings (D-015). The assembly is named after the plugin id, `DoomMachine.MobTracker`, so that 0.9.0 runs at all
+  beside one: with the name `MobTracker` of 0.8.0 and earlier, Unity would make the older copy's classes in its place.
 
 ## Done
 
+- 0.9.0: FW-11 - each star row has a field for exact star counts, whole numbers and ranges from 0 to 100 (`3-5, 8`;
+  D-001 to D-004 and D-012 to D-014, asked for in D-010): a creature with one of the counts passes as well as the marked
+  categories, and with no category marked only the counts pass; text that cannot be read is not applied - the field
+  shows it as invalid and the counts read before it stay; a click on *All* empties the field; the **Alerts:** row's
+  counts settle with its buttons, every keystroke that changes its text restarting the wait (KL-5); the counts follow
+  the session reset and `KeepBetweenSessions`. Settings `ListStarCounts` and `AlertStarCounts`. The unit tests hold the
+  field's reading and the rows' rules; preflight holds who reads and writes each part; planted defects prove each new
+  check.
+- 0.9.0: OI-7 - at a start with no `DoomMachine.MobTracker.cfg` yet and a `com.mobtracker.plugin.cfg`, MobTracker copies
+  the older file to the new name before the first setting is bound, never over a file, says so once in the log and
+  leaves the older file as it was (D-006, D-015); a copy that fails is said once and never stops MobTracker loading;
+  beside an older MobTracker release (the old id) it stays off and says so (D-006, D-011). The assembly is named after
+  the plugin id, so the two copies are told apart. The log harness holds the copy: the older file only, both files,
+  neither, a file another program holds, a folder where the new file goes, a config folder where no file can be made, a
+  read-only older file, a line BepInEx cannot read, the older file's logging switches, the older copy's id.
 - 0.8.0: OQ-3 - the loss of any tracked creature starts Always track nearest watched's wait while something is watched,
   whatever its type, stars or tameness, and taming the tracked creature - one tracked wild, tamed by anyone - ends its
   tracking as a loss does, "Lost track of" saying that it was tamed, and starts the wait too (both asked for after a

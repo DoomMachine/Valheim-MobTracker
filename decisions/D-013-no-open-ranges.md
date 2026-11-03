@@ -15,3 +15,4 @@
 - **Status:**
   - 2026-11-03: accepted; built in 0.9.0 (D-005). The implementation had been started with the recommended option
     before the answer came, so nothing changed with it.
+  - 2026-11-03: built in 0.9.0 (tag `v0.9.0`); in force.

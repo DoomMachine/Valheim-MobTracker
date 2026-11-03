@@ -408,7 +408,8 @@ namespace MobTracker
             "Also write a line for each of these MobTracker events - a tracking started, stopped, lost or reached and why, the " +
             "guide hidden or shown, the ground path found or not, each watch alert and what Auto-track did, a watched creature " +
             "that does not alert and why, what Always track nearest watched's looks found when they took nothing, the list " +
-            "opened and closed, its key and its buttons, Find area's steps, each setting changed, a world entered or left - to " +
+            "opened and closed, its key, its buttons and a star-count field turned to text it cannot read, Find area's " +
+            "steps, each setting changed, a world entered or left - to " +
             "MobTracker.log and to LogOutput.log, to see what happened and when; the README's Known limits name what it does " +
             "not say yet. On, MobTracker.log gets every MobTracker line, whatever ErrorLog says. Off, none of these lines is " +
             "even put together. Changed in ConfigurationManager, it takes effect at once, also while the game runs. Edited " +

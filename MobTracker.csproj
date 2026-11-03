@@ -10,9 +10,16 @@
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>MobTracker</AssemblyName>
+    <!-- The assembly is named after the plugin id (0.9.0): Unity tells two plugins' MonoBehaviours apart only by
+         assembly name, namespace and class name, so with the name of MobTracker 0.8.0 and earlier ("MobTracker") an
+         older copy left in BepInEx\plugins would have its classes made in this one's place, and this one's code would
+         never run. The file players install keeps its name (KeepFileName below); its file description and product
+         name say MobTracker, while Windows still shows the original file name DoomMachine.MobTracker.dll. -->
+    <AssemblyName>DoomMachine.MobTracker</AssemblyName>
+    <AssemblyTitle>MobTracker</AssemblyTitle>
+    <Product>MobTracker</Product>
     <RootNamespace>MobTracker</RootNamespace>
-    <Version>0.8.0</Version>
+    <Version>0.9.0</Version>
     <!-- The file properties' copyright, as in LICENSE; the README's Credits say who made what. -->
     <Copyright>Copyright (c) 2026 DoomMachine</Copyright>
     <!-- Emits SecurityPermission(SkipVerification) and UnverifiableCode, as the publicizer package did: part of
@@ -62,6 +69,17 @@
   <!-- Make (or refresh, after a game update) the publicized assemblies before references resolve. -->
   <Target Name="PublicizeGameAssemblies" BeforeTargets="ResolveAssemblyReferences">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)tools\publicize.ps1&quot; -ValheimDir &quot;$(ValheimDir.TrimEnd('\'))&quot;" />
+  </Target>
+
+  <!-- build\MobTracker.dll: the file players install and the tools read (package, deploy, preflight, mutants). Guarded,
+       so a build whose assembly is named MobTracker again builds MobTracker.dll as before (and fails preflight). The
+       copy is one of the build's own files (FileWrites): IncrementalClean, which runs after this, would otherwise delete
+       it as left over from an earlier build that named the assembly MobTracker. -->
+  <Target Name="KeepFileName" AfterTargets="CopyFilesToOutputDirectory" Condition="'$(TargetFileName)' != 'MobTracker.dll'">
+    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(OutDir)MobTracker.dll">
+      <Output TaskParameter="DestinationFiles" ItemName="FileWrites" />
+    </Copy>
+    <Delete Files="$(TargetPath)" />
   </Target>
 
 </Project>

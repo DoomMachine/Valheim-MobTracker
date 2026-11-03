@@ -4,10 +4,11 @@ using BepInEx.Configuration;
 namespace MobTracker
 {
     /// <summary>
-    /// Saves DoomMachine.MobTracker.cfg (0.7.1); BepInEx no longer does. BepInEx saves a changed setting before it tells
-    /// anyone of the change, and nothing catches a save that throws - the file read-only, or held by another program: the
-    /// setting kept its new value, but no change handler ran (the parsed watchlist and star filters, the verbose flag, the
-    /// refused keys stayed as they were), and the exception left the window's click, ConfigurationManager's control or -
+    /// Saves MobTracker's cfg (since 0.7.1; DoomMachine.MobTracker.cfg since 0.9.0); BepInEx no longer does. BepInEx saves
+    /// a changed setting before it tells anyone of the change, and nothing catches a save that throws - the file read-only,
+    /// or held by another program: the setting kept its new value, but no change handler ran (the parsed watchlist and star
+    /// filters, the verbose flag, the refused keys stayed as they were), and the exception left the window's click,
+    /// ConfigurationManager's control or -
     /// at the game's start - Awake, so MobTracker did not load. So the cfg's SaveOnConfigSet is off from before the first
     /// setting is bound, for the plugin's whole life (BepInEx reads it only in that ConfigFile's Bind and change event),
     /// and the file is saved here instead: once when every setting is bound, then after each change - whoever makes it:
@@ -22,7 +23,7 @@ namespace MobTracker
         private static bool _failing;
 
         /// <summary>
-        /// Whether a change is saved as it happens: ModConfig.ResetSession sets it false while it writes its three
+        /// Whether a change is saved as it happens: ModConfig.ResetSession sets it false while it writes its five
         /// settings, and saves once after them.
         /// </summary>
         public static bool Each = true;

@@ -14,3 +14,5 @@
 - **Status:**
   - 2026-11-02: accepted. The plugin-id change is D-009; the field is D-001 to D-004 and D-010; the old settings file is
     D-006.
+  - 2026-11-03: completed: 0.9.0 (tag `v0.9.0`) holds the plugin id (D-009), the star-count fields (D-001 to D-004,
+    D-010, D-012 to D-014) and the old settings file's handling (D-006, D-011, D-015).

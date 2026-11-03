@@ -43,7 +43,7 @@ namespace MobTracker
     internal static class MobTrackerPlugin
     {
         internal static ManualLogSource Log;
-        public const string Version = "0.8.0";
+        public const string Version = "0.9.0";
     }
 
     internal static class LogHost
@@ -94,7 +94,9 @@ namespace MobTracker
             "log-read-only", "retry-on-only", "cap", "write-fails", "bound-fails", "header-write-fails", "stop", "stop-write-fails",
             "scrub", "verbose-off",
             "cfg-read-only-start", "cfg-read-only-changes", "cfg-reset-once", "cfg-quit-retry", "cfg-start-file",
-            "cfg-storm", "cfg-start-locked", "cfg-held-for-writing", "cfg-cut-short", "cfg-read-only-unwatch", "cfg-recovery-twice"
+            "cfg-storm", "cfg-start-locked", "cfg-held-for-writing", "cfg-cut-short", "cfg-read-only-unwatch", "cfg-recovery-twice",
+            "cfg-counts", "cfg-old-only", "cfg-old-and-new", "cfg-old-none", "cfg-old-blocked", "cfg-old-locked", "cfg-old-unreadable-line",
+            "cfg-old-folder-read-only", "cfg-old-read-only", "cfg-old-switches", "cfg-older-copy"
         };
 
         public static int Main(string[] args)
@@ -213,17 +215,37 @@ namespace MobTracker
 
         private static string CfgPath { get { return Path.Combine(_dir, "DoomMachine.MobTracker.cfg"); } }
 
-        /// <summary>
-        /// MobTrackerPlugin.Awake's order with the real settings (0.7.1): ConfigSaver.Take, LogFile.Start, ModConfig.Bind,
-        /// LogFile.Bound, ConfigSaver.Watch, on a ConfigFile made as BaseUnityPlugin makes it (saveOnInit false, the plugin's
-        /// metadata). With <paramref name="takeFirst"/> false, 0.7.0's order: no Take, no Watch - BepInEx saves at each Bind.
-        /// </summary>
-        private static ConfigFile StartPlugin(string path, bool takeFirst = true)
+        /// <summary>The plugin's metadata, as BepInEx hands it to the ConfigFile it makes for the plugin.</summary>
+        private static BepInPlugin Metadata()
         {
-            var cfg = new ConfigFile(path, false, new BepInPlugin("DoomMachine.MobTracker", "MobTracker", MobTrackerPlugin.Version));
+            return new BepInPlugin("DoomMachine.MobTracker", "MobTracker", MobTrackerPlugin.Version);
+        }
+
+        /// <summary>
+        /// MobTrackerPlugin.Awake's order with the real settings (0.9.0): ConfigSaver.Take; OldSettings.OlderVersion, which
+        /// with an older MobTracker in <paramref name="loaded"/> - Chainloader.PluginInfos' stand-in, whose own type cannot
+        /// load here without Unity; empty by default - warns and returns before anything else; OldSettings.Copy;
+        /// LogFile.Start; OldSettings.Report; ModConfig.Bind; LogFile.Bound; ConfigSaver.Watch - on a ConfigFile made as
+        /// BaseUnityPlugin makes it (saveOnInit false, the plugin's metadata). With <paramref name="takeFirst"/> false, 0.7.0's
+        /// order: no Take, no Watch, nothing of OldSettings - BepInEx saves at each Bind.
+        /// </summary>
+        private static ConfigFile StartPlugin(string path, bool takeFirst = true, IDictionary<string, PluginInfo> loaded = null)
+        {
+            var cfg = new ConfigFile(path, false, Metadata());
             if (takeFirst)
+            {
                 ConfigSaver.Take(cfg);
+                string older = OldSettings.OlderVersion(loaded ?? new Dictionary<string, PluginInfo>());
+                if (older != null)
+                {
+                    MobTrackerPlugin.Log.LogWarning(EventLines.OlderCopyLoaded(older));
+                    return cfg;
+                }
+                OldSettings.Copy(cfg);
+            }
             LogFile.Start(cfg, _dir, Path.Combine(_dir, "game"));
+            if (takeFirst)
+                OldSettings.Report();
             ModConfig.Bind(cfg);
             LogFile.Bound(cfg);
             if (takeFirst)
@@ -271,7 +293,7 @@ namespace MobTracker
         private static void FirstStart()
         {
             StartGame(null, () => MobTrackerPlugin.Log.LogWarning("General.ListStarFilter is 'x': x ignored: not a star category."));
-            MobTrackerPlugin.Log.LogInfo("MobTracker 0.8.0 loaded");
+            MobTrackerPlugin.Log.LogInfo("MobTracker 0.9.0 loaded");
             MobTrackerPlugin.Log.LogError("an error");
             ModLog.Event("Track: not written - VerboseLog is off");
             string[] raw = Read(LogPath);
@@ -282,14 +304,14 @@ namespace MobTracker
             Check("the header, the switches, the warning ModConfig.Bind gave before the file had its settings line, the settings, the error - no Info line",
                 lines != null && lines.SequenceEqual(new[]
                 {
-                    "[File   :MobTracker] MobTracker 0.8.0 - MobTracker.log opened at the game's start; Valheim test; BepInEx 5.4.23.3",
+                    "[File   :MobTracker] MobTracker 0.9.0 - MobTracker.log opened at the game's start; Valheim test; BepInEx 5.4.23.3",
                     "[File   :MobTracker] Logging: ErrorLog on, VerboseLog off - MobTracker.log gets MobTracker's warnings and errors; LogOutput.log gets every MobTracker line as before",
                     "[Warning:MobTracker] General.ListStarFilter is 'x': x ignored: not a star category.",
                     "[File   :MobTracker] Settings: Logging.ErrorLog = 'true', Logging.VerboseLog = 'false', General.ListKey = 'F7'",
                     "[Error  :MobTracker] an error"
                 }), Show(lines));
             Check("LogOutput.log's side gets every MobTracker line, the Info one too, and no verbose line",
-                _capture.Lines.SequenceEqual(new[] { "Warning: General.ListStarFilter is 'x': x ignored: not a star category.", "Info: MobTracker 0.8.0 loaded", "Error: an error" }),
+                _capture.Lines.SequenceEqual(new[] { "Warning: General.ListStarFilter is 'x': x ignored: not a star category.", "Info: MobTracker 0.9.0 loaded", "Error: an error" }),
                 string.Join(" | ", _capture.Lines));
             var head = new byte[3];
             using (var fs = new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
@@ -653,7 +675,7 @@ namespace MobTracker
                 thrown = Try(() => cfg = StartPlugin(CfgPath));
                 Check("a read-only cfg at the start: nothing throws out of Awake's order", thrown == null, thrown);
                 Check("every setting is bound, the stored values read and an out-of-range one moved into its range",
-                    cfg != null && cfg.Count == 14 && ModConfig.Watchlist.Contains("Troll") && ModConfig.ArrowSize.Value == 3f, cfg == null ? "" : cfg.Count + " bound");
+                    cfg != null && cfg.Count == 16 && ModConfig.Watchlist.Contains("Troll") && ModConfig.ArrowSize.Value == 3f, cfg == null ? "" : cfg.Count + " bound");
                 Check("the cfg is not touched", File.ReadAllText(CfgPath) == text, File.ReadAllText(CfgPath));
                 Check("one warning, at the game's start, naming the exception's type only",
                     Count("Warning: Settings could not be saved") == 1 && _capture.Lines.Contains("Warning: " + EventLines.CfgNotSaved("at the game's start", "UnauthorizedAccessException")),
@@ -712,15 +734,23 @@ namespace MobTracker
             ConfigFile cfg = StartPlugin(CfgPath);
             ModConfig.ToggleWatch("Troll");
             ModConfig.ListStarsText.Value = "OneStar";
+            ModConfig.ListCountsText.Value = "3";
             ModConfig.AlertStarsText.Value = "TwoStars";
+            ModConfig.AlertCountsText.Value = "4-5";
+            int revision = ModConfig.AlertStarsRevision;
             // Added after ConfigSaver's handler, so it reads the file after the saver had its turn at each of the reset's writes.
             var seen = new List<string>();
             cfg.SettingChanged += (sender, args) => seen.Add(CfgValue("Watchlist"));
             ModConfig.ResetSession();
-            Check("the session reset's writes are not saved one by one", seen.Count == 3 && seen.All(v => v == "Troll"), string.Join(",", seen));
-            Check("it saves once after them", CfgValue("Watchlist") == "" && CfgValue("ListStarFilter") == "All" && CfgValue("AlertStarFilter") == "All", File.ReadAllText(CfgPath));
-            Check("the views follow, and a change is saved as it happens again after it", ModConfig.Watchlist.Count == 0 && ModConfig.ListStars == StarSet.All
-                && ModConfig.AlertStars == StarSet.All && ConfigSaver.Each, ConfigSaver.Each.ToString());
+            Check("the session reset's five writes are not saved one by one", seen.Count == 5 && seen.All(v => v == "Troll"), string.Join(",", seen));
+            Check("it saves once after them", CfgValue("Watchlist") == "" && CfgValue("ListStarFilter") == "All" && CfgValue("ListStarCounts") == ""
+                && CfgValue("AlertStarFilter") == "All" && CfgValue("AlertStarCounts") == "", File.ReadAllText(CfgPath));
+            Check("the views follow - the counts too, the Alerts: row's two writes each counted for its wait - and a change is saved as it happens again after it",
+                ModConfig.Watchlist.Count == 0 && ModConfig.ListStars == StarSet.All && ModConfig.AlertStars == StarSet.All
+                && ModConfig.AlertStarsRevision == revision + 2 && ConfigSaver.Each, ConfigSaver.Each + " " + (ModConfig.AlertStarsRevision - revision));
+            Check("the reset's line names the five settings it set back", Count("Info: Game session changed and KeepBetweenSessions is off, so these are back to "
+                + "their defaults: Alerts.Watchlist was 'Troll'. General.ListStarFilter was 'OneStar'. General.ListStarCounts was '3'. Alerts.AlertStarFilter was "
+                + "'TwoStars'. Alerts.AlertStarCounts was '4-5'.") == 1, string.Join(" | ", _capture.Lines));
             ModConfig.ToggleWatch("Boar");
             File.SetAttributes(CfgPath, FileAttributes.ReadOnly);
             try
@@ -824,7 +854,7 @@ namespace MobTracker
             using (new FileStream(CfgPath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 thrown = Try(() => cfg = StartPlugin(CfgPath));
             Check("a cfg another program reads, sharing reading only, at the start: nothing throws, every setting is bound and read",
-                thrown == null && cfg != null && cfg.Count == 14 && ModConfig.Watchlist.Contains("Troll"), thrown ?? (cfg == null ? "" : cfg.Count + " bound"));
+                thrown == null && cfg != null && cfg.Count == 16 && ModConfig.Watchlist.Contains("Troll"), thrown ?? (cfg == null ? "" : cfg.Count + " bound"));
             string[] warnings = _capture.Lines.Where(l => l.StartsWith("Warning: Settings could not be saved", StringComparison.Ordinal)).ToArray();
             Check("one warning, an IOException, by type only - no path", warnings.Length == 1
                 && warnings[0] == "Warning: " + EventLines.CfgNotSaved("at the game's start", "IOException") && !warnings[0].Contains(_dir), Show(warnings));
@@ -941,6 +971,335 @@ namespace MobTracker
                 && Count("Info: Settings saved to DoomMachine.MobTracker.cfg again") == 1 && CfgValue("GuideMode") == "Arrow", string.Join(" | ", _capture.Lines));
             ConfigSaver.Stop();
             Check("and no retry line at quit after a recovery", Count("Info: Settings saved to DoomMachine.MobTracker.cfg again") == 1, string.Join(" | ", _capture.Lines));
+        }
+
+        // ---- the star counts (0.9.0) ----
+
+        /// <summary>
+        /// The two star-count settings with the real ModConfig: read at the start (a text that does not read is warned about
+        /// once and not applied), then written as ConfigurationManager writes them, key by key - each write of the Alerts:
+        /// row's counts counted for its wait, a text that does not read keeping the counts read before it - and on a
+        /// read-only cfg.
+        /// </summary>
+        private static void CfgCounts()
+        {
+            File.WriteAllText(CfgPath, "[Alerts]\r\n\r\nAlertStarCounts = abc\r\n\r\n[General]\r\n\r\nListStarCounts = 3-5, 8\r\n");
+            StartPlugin(CfgPath);
+            Check("at the start: a count text that reads is applied; one that does not is not, with one warning naming the entry",
+                ModConfig.ListStars.Counts.Label() == "3-5, 8" && ModConfig.AlertStars.Counts.IsEmpty
+                && Count("Warning: Alerts.AlertStarCounts is 'abc': " + StarCounts.Problem("abc", default(StarCounts))) == 1
+                && Count("Warning: Alerts.AlertStarCounts") == 1 && Count("Warning: General.ListStarCounts") == 0, string.Join(" | ", _capture.Lines));
+            Check("... and in MobTracker.log (ErrorLog on by default)",
+                Bodies(LogPath).Count(l => l.StartsWith("[Warning:MobTracker] Alerts.AlertStarCounts is 'abc'", StringComparison.Ordinal)) == 1, Show(Bodies(LogPath)));
+            int revision = ModConfig.AlertStarsRevision;
+            ModConfig.AlertCountsText.BoxedValue = "3";
+            bool three = ModConfig.AlertStars.Counts.Label() == "3" && ModConfig.AlertStarsRevision == revision + 1;
+            StarCounts kept;
+            StarCounts.TryParse("3", out kept);
+            ModConfig.AlertCountsText.BoxedValue = "abc";
+            bool stillThree = ModConfig.AlertStars.Counts.Label() == "3" && ModConfig.AlertStarsRevision == revision + 2
+                && Count("Warning: Alerts.AlertStarCounts is 'abc': " + StarCounts.Problem("abc", kept)) == 1;
+            ModConfig.AlertCountsText.BoxedValue = "3-5";
+            Check("written key by key: '3' applies; 'abc' keeps '3', warned about once; '3-5' applies; each write counted for the Alerts: wait",
+                three && stillThree && ModConfig.AlertStars.Counts.Label() == "3-5" && ModConfig.AlertStarsRevision == revision + 3,
+                three + " " + stillThree + " " + ModConfig.AlertStars.Counts.Label() + " " + (ModConfig.AlertStarsRevision - revision) + " | " + string.Join(" | ", _capture.Lines));
+            Check("the file holds the last text, saved at the change", CfgValue("AlertStarCounts") == "3-5" && CfgValue("ListStarCounts") == "3-5, 8", File.ReadAllText(CfgPath));
+            Check("the rows: each its own categories and counts", StarSets.Label(ModConfig.ListStars) == "stars 3-5, 8" && StarSets.Label(ModConfig.AlertStars) == "stars 3-5",
+                StarSets.Label(ModConfig.ListStars) + " / " + StarSets.Label(ModConfig.AlertStars));
+            int r2 = ModConfig.AlertStarsRevision;
+            ModConfig.ListCountsText.Value = "4";
+            ModConfig.ListCountsText.Value = "x";
+            Check("the List: row's counts move no Alerts: revision; a List: text that does not read keeps its counts",
+                ModConfig.AlertStarsRevision == r2 && ModConfig.ListStars.Counts.Label() == "4" && Count("Warning: General.ListStarCounts is 'x'") == 1,
+                (ModConfig.AlertStarsRevision - r2) + " " + ModConfig.ListStars.Counts.Label());
+            // A write that leaves the Alerts: row as it was restarts its wait too: ConfigurationManager writes at every
+            // keystroke, and a word half typed, or the same counts spelt anew, leaves the row as it was.
+            int r3 = ModConfig.AlertStarsRevision;
+            ModConfig.AlertStarsText.BoxedValue = "TwoStars";
+            ModConfig.AlertStarsText.BoxedValue = "twostars";
+            ModConfig.AlertCountsText.BoxedValue = "5-3";
+            Check("a write that leaves the Alerts: row as it was is counted for its wait too - the filter or the counts written anew",
+                ModConfig.AlertStars.Set == StarSet.TwoStars && ModConfig.AlertStars.Counts.Label() == "3-5" && ModConfig.AlertStarsRevision == r3 + 3,
+                (ModConfig.AlertStarsRevision - r3) + " " + StarSets.Label(ModConfig.AlertStars));
+            File.SetAttributes(CfgPath, FileAttributes.ReadOnly);
+            try
+            {
+                string thrown = Try(() => ModConfig.AlertCountsText.BoxedValue = "7");
+                Check("a read-only cfg: a count written takes effect and nothing throws", thrown == null && ModConfig.AlertStars.Counts.Label() == "7", thrown);
+            }
+            finally
+            {
+                File.SetAttributes(CfgPath, FileAttributes.Normal);
+            }
+        }
+
+        // ---- the settings file of 0.8.0 and earlier, and an older copy (0.9.0, OldSettings) ----
+
+        private static string OldPath { get { return Path.Combine(_dir, OldSettings.OldId + ".cfg"); } }
+
+        // A cfg as 0.8.0 saved it: its header, and values away from their defaults (the log switches at theirs).
+        private const string OldText = "## Settings file was created by plugin MobTracker v0.8.0\r\n## Plugin GUID: com.mobtracker.plugin\r\n\r\n"
+            + "[Alerts]\r\n\r\nWatchlist = Troll\r\nAlertVolume = 0.5\r\nAlertStarFilter = TwoStars\r\n\r\n[General]\r\n\r\nListKey = F8\r\n";
+
+        /// <summary>
+        /// Only the older file: it is copied before the first Bind, so its values are the ones in use; said once at Info - in
+        /// LogOutput.log, not in MobTracker.log with ErrorLog alone; the older file's bytes and time unchanged; the new file's
+        /// header names the new id and version. A second start copies nothing and says nothing.
+        /// </summary>
+        private static void CfgOldOnly()
+        {
+            File.WriteAllText(OldPath, OldText);
+            byte[] oldBytes = File.ReadAllBytes(OldPath);
+            DateTime oldTime = File.GetLastWriteTimeUtc(OldPath);
+            StartPlugin(CfgPath);
+            Check("only com.mobtracker.plugin.cfg: its settings are the ones in use",
+                ModConfig.ListKey.Value == UnityEngine.KeyCode.F8 && ModConfig.Watchlist.Contains("Troll") && ModConfig.AlertVolume.Value == 0.5f
+                && ModConfig.AlertStars == StarSet.TwoStars, ModConfig.ListKey.Value + " " + ModConfig.AlertVolume.Value + " " + StarSets.Label(ModConfig.AlertStars));
+            Check("said once, at Info, and nothing warned about", Count("Info: " + EventLines.SettingsCopied()) == 1 && Count("Warning:") == 0,
+                string.Join(" | ", _capture.Lines));
+            Check("not in MobTracker.log with ErrorLog alone (an Info line)", Bodies(LogPath) != null && !Bodies(LogPath).Any(l => l.Contains("Settings copied")),
+                Show(Bodies(LogPath)));
+            Check("the older file's bytes and time are as they were", File.Exists(OldPath) && File.ReadAllBytes(OldPath).SequenceEqual(oldBytes) && File.GetLastWriteTimeUtc(OldPath) == oldTime, "");
+            string mine = File.ReadAllText(CfgPath);
+            Check("the new file, saved at the start, names the new id and version in its header and keeps the values",
+                mine.Contains("## Plugin GUID: DoomMachine.MobTracker") && mine.Contains("## Settings file was created by plugin MobTracker v" + MobTrackerPlugin.Version)
+                && !mine.Contains("com.mobtracker.plugin") && CfgValue("ListKey") == "F8" && CfgValue("Watchlist") == "Troll", mine);
+            int lines = _capture.Lines.Count;
+            string thrown = Try(() =>
+            {
+                var again = new ConfigFile(CfgPath, false, Metadata());
+                OldSettings.Copy(again);
+                OldSettings.Report();
+            });
+            Check("a second start copies nothing and says nothing", thrown == null && _capture.Lines.Count == lines && File.Exists(OldPath) && File.ReadAllBytes(OldPath).SequenceEqual(oldBytes),
+                thrown ?? string.Join(" | ", _capture.Lines.Skip(lines)));
+        }
+
+        /// <summary>Both files: nothing is copied over the new one and nothing is said; the new file's settings are read.</summary>
+        private static void CfgOldAndNew()
+        {
+            File.WriteAllText(OldPath, OldText);
+            File.WriteAllText(CfgPath, "[Alerts]\r\n\r\nWatchlist = Boar\r\n");
+            StartPlugin(CfgPath);
+            Check("both files: the new one's settings are read, nothing is copied over it, nothing is said",
+                ModConfig.Watchlist.Contains("Boar") && !ModConfig.Watchlist.Contains("Troll") && ModConfig.ListKey.Value == UnityEngine.KeyCode.F7
+                && !_capture.Lines.Any(l => l.Contains("com.mobtracker.plugin")) && Count("Warning:") == 0, string.Join(" | ", _capture.Lines));
+            Check("the older file is left as it was", (File.Exists(OldPath) && File.ReadAllText(OldPath) == OldText), "");
+        }
+
+        /// <summary>Neither file: the defaults, the new file made by the start's save, nothing said about an older file.</summary>
+        private static void CfgOldNone()
+        {
+            StartPlugin(CfgPath);
+            Check("neither file: the defaults, the new file made at the start, nothing said about an older one, no older file made",
+                File.Exists(CfgPath) && !File.Exists(OldPath) && ModConfig.Watchlist.Count == 0 && ModConfig.AlertVolume.Value == 0.8f
+                && !_capture.Lines.Any(l => l.Contains("com.mobtracker.plugin")) && Count("Warning:") == 0, string.Join(" | ", _capture.Lines));
+        }
+
+        /// <summary>
+        /// A folder where the new file goes: the copy fails, said once by type only; every setting at its default; nothing
+        /// thrown - and the start's save fails too, with its own warning, as for a cfg that cannot be written.
+        /// </summary>
+        private static void CfgOldBlocked()
+        {
+            File.WriteAllText(OldPath, OldText);
+            Directory.CreateDirectory(CfgPath);
+            ConfigFile cfg = null;
+            string thrown = Try(() => cfg = StartPlugin(CfgPath));
+            string[] warnings = _capture.Lines.Where(l => l.StartsWith("Warning:", StringComparison.Ordinal)).ToArray();
+            Check("a folder where the new file goes: nothing throws, every setting is bound at its default", thrown == null && cfg != null && cfg.Count == 16
+                && ModConfig.Watchlist.Count == 0 && ModConfig.ListKey.Value == UnityEngine.KeyCode.F7, thrown ?? (cfg == null ? "" : cfg.Count + " bound"));
+            Check("the copy's warning first, by type only, then the start's save's", warnings.Length == 2
+                && warnings[0].StartsWith("Warning: The settings of com.mobtracker.plugin.cfg (MobTracker 0.8.0 and earlier) could not be copied", StringComparison.Ordinal)
+                && warnings[1].StartsWith("Warning: Settings could not be saved to DoomMachine.MobTracker.cfg at the game's start", StringComparison.Ordinal)
+                && !warnings[0].Contains(_dir), Show(warnings));
+            Check("the older file is left as it was", (File.Exists(OldPath) && File.ReadAllText(OldPath) == OldText), "");
+        }
+
+        /// <summary>
+        /// The older file held by another program, sharing nothing: the copy fails, said once by type only, in both logs; the
+        /// defaults; nothing thrown. The start's save makes the new file with them, so a later start copies nothing - the
+        /// warning says how to take the older settings.
+        /// </summary>
+        private static void CfgOldLocked()
+        {
+            File.WriteAllText(OldPath, OldText);
+            string thrown;
+            using (new FileStream(OldPath, FileMode.Open, FileAccess.Read, FileShare.None))
+                thrown = Try(() => StartPlugin(CfgPath));
+            string warning = "Warning: " + EventLines.SettingsNotCopied("IOException");
+            Check("an older file another program holds: nothing throws, the defaults, one warning by type only (IOException), no path",
+                thrown == null && ModConfig.Watchlist.Count == 0 && ModConfig.AlertVolume.Value == 0.8f && Count(warning) == 1 && Count("Warning:") == 1
+                && !_capture.Lines.Any(l => l.Contains(_dir)), thrown ?? string.Join(" | ", _capture.Lines));
+            Check("the warning is in MobTracker.log too (ErrorLog on): said once the file is open",
+                Bodies(LogPath) != null && Bodies(LogPath).Contains("[Warning:MobTracker] " + EventLines.SettingsNotCopied("IOException")), Show(Bodies(LogPath)));
+            Check("the older file is left as it was; the start's save made the new file with the defaults",
+                (File.Exists(OldPath) && File.ReadAllText(OldPath) == OldText) && CfgValue("AlertVolume") == "0.8", File.Exists(CfgPath) ? File.ReadAllText(CfgPath) : "(no new file)");
+        }
+
+        /// <summary>
+        /// An older file with a line BepInEx cannot read (a '[' in a key): the copy is made, its reading stops at that line -
+        /// what came before it is in use, the rest is default - said once; the start's save leaves a file BepInEx reads. MobTracker
+        /// 0.8.0 could not have read that file either.
+        /// </summary>
+        private static void CfgOldUnreadableLine()
+        {
+            const string text = "[Alerts]\r\n\r\nAlertVolume = 0.3\r\nBad[Key = 1\r\nWatchlist = Troll\r\n";
+            File.WriteAllText(OldPath, text);
+            string thrown = Try(() => StartPlugin(CfgPath));
+            Check("an older file with a line BepInEx cannot read: nothing throws, one warning by type only (ArgumentException)",
+                thrown == null && Count("Warning: " + EventLines.SettingsNotAllRead("ArgumentException")) == 1 && Count("Warning:") == 1,
+                thrown ?? string.Join(" | ", _capture.Lines));
+            Check("what came before that line is in use, the rest is default", ModConfig.AlertVolume.Value == 0.3f && ModConfig.Watchlist.Count == 0,
+                ModConfig.AlertVolume.Value + " " + ModConfig.WatchlistEntry.Value);
+            string reread = Try(() => new ConfigFile(CfgPath, false));
+            Check("the start's save leaves a file BepInEx reads; the older file is left as it was",
+                reread == null && !File.ReadAllText(CfgPath).Contains("Bad[") && (File.Exists(OldPath) && File.ReadAllText(OldPath) == text), reread ?? File.ReadAllText(CfgPath));
+        }
+
+        /// <summary>
+        /// icacls, hidden: a rule on <paramref name="folder"/> that denies everyone the making of a file in it, or that rule's
+        /// removal. Through icacls rather than .NET's access-rule classes so that it runs on the game's Mono too, which does
+        /// not have them (WindowsIdentity.User throws NotImplementedException there). Null, or why it failed.
+        /// </summary>
+        private static string Icacls(string folder, bool deny)
+        {
+            // *S-1-1-0 is Everyone; (WD) is "write data / add file", the right a new file in the folder needs.
+            string arguments = "\"" + folder + "\" " + (deny ? "/deny *S-1-1-0:(WD)" : "/remove:d *S-1-1-0");
+            var info = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "icacls.exe"), arguments)
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true
+            };
+            using (Process p = Process.Start(info))
+            {
+                p.StandardOutput.ReadToEnd();
+                p.StandardError.ReadToEnd();
+                p.WaitForExit();
+                return p.ExitCode == 0 ? null : "icacls exited with " + p.ExitCode;
+            }
+        }
+
+        /// <summary>
+        /// A config folder in which no file can be made (an install where the player may not write there): the copy fails,
+        /// said once (UnauthorizedAccessException); the defaults; the start's save fails too. Once the folder can be written,
+        /// the next start copies the older file. The rule is set with icacls, so this runs on .NET Framework and on Mono.
+        /// </summary>
+        private static void CfgOldFolderReadOnly()
+        {
+            string folder = Path.Combine(_dir, "config");
+            Directory.CreateDirectory(folder);
+            string oldPath = Path.Combine(folder, OldSettings.OldId + ".cfg"), newPath = Path.Combine(folder, "DoomMachine.MobTracker.cfg");
+            File.WriteAllText(oldPath, OldText);
+            string denied = Try(() =>
+            {
+                string why = Icacls(folder, true);
+                if (why != null)
+                    throw new InvalidOperationException(why);
+            });
+            Check("the config folder is made one where no file can be made (icacls)", denied == null, denied);
+            if (denied != null)
+                return;
+            try
+            {
+                Check("the rule holds on this runtime: a new file in the folder is refused",
+                    Try(() => File.WriteAllText(Path.Combine(folder, "new-file.txt"), "x")) != null && !File.Exists(Path.Combine(folder, "new-file.txt")), "");
+                string thrown = Try(() => StartPlugin(newPath));
+                Check("a config folder where no file can be made: nothing throws", thrown == null, thrown);
+                Check("one copy warning (UnauthorizedAccessException), the defaults, no new file, the older file untouched",
+                    Count("Warning: " + EventLines.SettingsNotCopied("UnauthorizedAccessException")) == 1 && ModConfig.AlertVolume.Value == 0.8f
+                    && !File.Exists(newPath) && (File.Exists(oldPath) && File.ReadAllText(oldPath) == OldText), string.Join(" | ", _capture.Lines));
+                Check("the start's save fails and says so once",
+                    Count("Warning: Settings could not be saved to DoomMachine.MobTracker.cfg at the game's start (UnauthorizedAccessException") == 1,
+                    string.Join(" | ", _capture.Lines));
+            }
+            finally
+            {
+                string removed = Icacls(folder, false);
+                Check("the rule is removed again", removed == null, removed);
+            }
+            var later = new ConfigFile(newPath, false, Metadata());
+            OldSettings.Copy(later);
+            OldSettings.Report();
+            Check("once the folder can be written, the next start copies it and says so", File.Exists(newPath) && Count("Info: " + EventLines.SettingsCopied()) == 1,
+                string.Join(" | ", _capture.Lines));
+        }
+
+        /// <summary>
+        /// The older file read-only, as LT-19's checks leave a cfg: File.Copy gives the copy the same attribute, so Copy makes
+        /// the copy writable - the start's save and every later one work - and leaves the older file read-only.
+        /// </summary>
+        private static void CfgOldReadOnly()
+        {
+            File.WriteAllText(OldPath, OldText);
+            File.SetAttributes(OldPath, File.GetAttributes(OldPath) | FileAttributes.ReadOnly);
+            try
+            {
+                string thrown = Try(() => StartPlugin(CfgPath));
+                Check("a read-only older file: nothing throws, its settings are in use, said once at Info, no warning",
+                    thrown == null && ModConfig.Watchlist.Contains("Troll") && Count("Info: " + EventLines.SettingsCopied()) == 1 && Count("Warning:") == 0,
+                    thrown ?? string.Join(" | ", _capture.Lines));
+                Check("the copy is not read-only; the older file still is", (File.GetAttributes(CfgPath) & FileAttributes.ReadOnly) == 0
+                    && (File.GetAttributes(OldPath) & FileAttributes.ReadOnly) != 0, File.GetAttributes(CfgPath) + " / " + File.GetAttributes(OldPath));
+                ModConfig.AlertVolume.Value = 0.25f;
+                Check("a change is saved to the copy", CfgValue("AlertVolume") == "0.25" && Count("Warning:") == 0, File.ReadAllText(CfgPath));
+                Check("the older file is left as it was", (File.Exists(OldPath) && File.ReadAllText(OldPath) == OldText), "");
+            }
+            finally
+            {
+                File.SetAttributes(OldPath, FileAttributes.Normal);
+            }
+        }
+
+        /// <summary>
+        /// The older file's logging switches (ErrorLog off, VerboseLog on) are the ones LogFile.Start reads - the copy comes
+        /// before any setting is bound - and the copy's line, said after the file opened, reaches MobTracker.log.
+        /// </summary>
+        private static void CfgOldSwitches()
+        {
+            File.WriteAllText(OldPath, OldText + "\r\n[Logging]\r\n\r\nErrorLog = false\r\nVerboseLog = true\r\n");
+            StartPlugin(CfgPath);
+            Check("the older file's switches apply from the start: ErrorLog off, VerboseLog on", !LogFile.ErrorLog.Value && LogFile.VerboseLog.Value && ModLog.Verbose,
+                LogFile.ErrorLog.Value + " " + LogFile.VerboseLog.Value + " " + ModLog.Verbose);
+            string[] bodies = Bodies(LogPath);
+            Check("MobTracker.log opened at the start with the switches the copy holds, and the copy's line in it once",
+                bodies != null && bodies.Contains("[File   :MobTracker] " + EventLines.HeaderSwitches(false, true))
+                && bodies.Count(l => l == "[Info   :MobTracker] " + EventLines.SettingsCopied()) == 1, Show(bodies));
+            Check("no Logging line for a switch turned on or off - they were read, not changed", Count("Message: Logging:") == 0, string.Join(" | ", _capture.Lines));
+        }
+
+        /// <summary>
+        /// An older MobTracker, under the plugin id up to 0.8.0, in BepInEx's list of loaded plugins: OlderVersion names its
+        /// version, and finds nothing for this one's id, the old id in other case, a null entry or no list. With it in the
+        /// list, the start stays off: one warning, nothing bound, no file, no MobTracker.log, no copy.
+        /// </summary>
+        private static void CfgOlderCopy()
+        {
+            // Chainloader.PluginInfos as BepInEx fills it (a plain dictionary, ordinal keys); its own type cannot load here
+            // without Unity, so a dictionary of the same kind stands in.
+            var loaded = new Dictionary<string, PluginInfo>();
+            Check("no older copy loaded, or no list: nothing found", OldSettings.OlderVersion(loaded) == null && OldSettings.OlderVersion(null) == null, "");
+            var info = new PluginInfo();
+            typeof(PluginInfo).GetProperty("Metadata").GetSetMethod(true).Invoke(info, new object[] { new BepInPlugin("com.mobtracker.plugin", "MobTracker", "0.8.0") });
+            loaded["com.mobtracker.plugin"] = info;
+            Check("an older copy loaded under the old id: its version", OldSettings.OlderVersion(loaded) == "0.8.0", OldSettings.OlderVersion(loaded));
+            loaded["com.mobtracker.plugin"] = new PluginInfo();
+            Check("an older copy whose metadata BepInEx did not fill: 'version unknown'", OldSettings.OlderVersion(loaded) == "version unknown",
+                OldSettings.OlderVersion(loaded));
+            loaded["com.mobtracker.plugin"] = null;
+            Check("a null entry: nothing found", OldSettings.OlderVersion(loaded) == null, "");
+            loaded.Remove("com.mobtracker.plugin");
+            loaded["DoomMachine.MobTracker"] = info;
+            loaded["COM.MOBTRACKER.PLUGIN"] = info;
+            Check("only the old id, as BepInEx keys it, counts: this one's id, or the old one in other case, does not", OldSettings.OlderVersion(loaded) == null,
+                OldSettings.OlderVersion(loaded));
+
+            loaded["com.mobtracker.plugin"] = info;
+            File.WriteAllText(OldPath, OldText);
+            ConfigFile cfg = null;
+            string thrown = Try(() => cfg = StartPlugin(CfgPath, true, loaded));
+            Check("the start beside an older copy stays off: one warning naming its version, nothing bound, no cfg written, no MobTracker.log, no copy",
+                thrown == null && cfg != null && cfg.Count == 0 && Count("Warning: " + EventLines.OlderCopyLoaded("0.8.0")) == 1 && Count("Warning:") == 1
+                && !File.Exists(CfgPath) && !File.Exists(LogPath) && (File.Exists(OldPath) && File.ReadAllText(OldPath) == OldText), thrown ?? string.Join(" | ", _capture.Lines));
         }
 
         private static bool LogFileIsOpen()

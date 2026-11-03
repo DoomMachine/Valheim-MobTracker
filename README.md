@@ -12,37 +12,44 @@ https://github.com/DoomMachine/Valheim-MobTracker
   are measured in 3D. They alert like any other watched creature, but Auto-track and Always track nearest watched
   only ever take a creature on your side of the dungeon's entrance; a row's Track button still takes any. Type to
   search by name or prefab name. **Esc** or F7 closes it (the gamepad's B too).
-- **While the list is open** your character and camera stand still: Tab does not open the inventory, the
-  mouse wheel does not zoom, and the keys you type in the search do not reach a trader or the build
-  controls (a few exceptions are under Known limits). A click, drag or scroll on the window never reaches
-  the map, a trader or another game window under it; the map still takes clicks and drags beside the
-  window. The rows hold still while the pointer is on the window, so Track and Watch act on the row you
-  aimed at; they catch up as soon as it leaves. F7 does not open the list while you type in chat, a sign or a
-  map pin's name, while the console is open, or over the pause menu, the build menu, the inventory or the Barber
-  Station.
+- **While the list is open** your character and camera stand still: Tab does not open the inventory, the mouse wheel
+  does not zoom, and the keys you type in the search or in a star-count field do not reach a trader or the build
+  controls (a few exceptions are under Known limits). A click, drag or scroll on the window never reaches the map, a
+  trader or another game window under it; the map still takes clicks and drags beside the window. The rows hold still
+  while the pointer is on the window, so Track and Watch act on the row you aimed at; they catch up as soon as it
+  leaves. F7 does not open the list while you type in chat, a sign or a map pin's name, while the console is open, or
+  over the pause menu, the build menu, the inventory or the Barber Station.
 - **With TomTom or Wayfinder** installed, their window key (F11 by default) and skip key (if you bound one) keep
   working while the list is open, and F7 opens the list over TomTom's window.
-- **Star filters**: two rows of toggle buttons in the window, *All*, *No star*, *1 star*, *2 stars* and
-  *2+ stars* (two stars and above - natural spawns stop at two; the spawn command and mods can go higher).
-  **List:** filters the nearby list (greyed out in the all-types view: a creature type has no stars); **Alerts:**
-  filters which watched creatures alert, are auto-tracked and are picked by Always track nearest watched.
-  The categories you mark combine: mark *No star* and *1 star* to list, or be alerted for, both, or *1 star*
-  and *2 stars* for only those two. The marked buttons show as selected. With *All* marked, a click on a
-  category marks it alone; a click on a marked category takes it off, and taking off the last one returns
-  the row to *All*; a click on *All* resets the row. A change on the **Alerts:** row takes effect once the row
-  has stayed the same for 1.5 seconds (see Known limits). With categories marked on the **List:** row, the nearby
-  view's title names them ("MobTracker - 12 creatures, No star + 1 star"). The two rows are independent, so
-  you can browse every star level while being alerted only for, say, two-star Trolls. Stars are shown as
+- **Star filters**: two rows in the window, **List:** and **Alerts:**, each with five toggle buttons - *All*, *No star*,
+  *1 star*, *2 stars* and *2+ stars* (two stars and above - natural spawns stop at two; the spawn command and mods can
+  go higher) - and, after *Exactly:*, a field for exact star counts. **List:** filters the nearby list (greyed out in
+  the all-types view: a creature type has no stars); **Alerts:** filters which watched creatures alert, are auto-tracked
+  and are picked by Always track nearest watched. The categories you mark combine: mark *No star* and *1 star* to list,
+  or be alerted for, both, or *1 star* and *2 stars* for only those two. The marked buttons show as selected. With *All*
+  marked, a click on a category marks it alone; a click on a marked category takes it off, and taking off the last one
+  leaves no category marked: the row is back to *All* when it has no star count, and lets only its counts through when
+  it has some; a click on *All* resets the row, its field too (D-014 in the repository's `decisions/`). In the field,
+  type star counts for mods that give creatures more stars: whole numbers from 0 to 100, single or as ranges, separated
+  by commas, such as `3-5, 8` (0 is no star, as *No star*). A creature with one of those counts passes as well as the
+  marked categories; with no category marked only the counts pass, and *All* does not show as selected (D-001 to D-004).
+  *2+ stars* already passes every count from 2 up. A range written high to low (`5-3`) reads as the same range. Text the
+  field cannot read - a number above 100, a range left open (`5-`; D-013), a sign, a letter - turns its label to
+  *Invalid:* and its text red (D-012), and is not applied: the counts in use stay, and the field shows them again the
+  next time the list opens. A change on the **Alerts:** row takes effect once the row has stayed the same for 1.5
+  seconds (see Known limits). With categories marked or counts typed on the **List:** row, the nearby view's title names
+  them ("MobTracker - 12 creatures, No star + 1 star", "MobTracker - 3 creatures, stars 3-5, 8"). The two rows are
+  independent, so you can browse every star level while being alerted only for, say, two-star Trolls. Stars are shown as
   asterisks: `Deer` has none, `Deer *` one.
-- **Track** follows that one creature: a 3D arrow over your head, or with `GuideMode = GroundPath`
-  a walkable line on the ground. The path builds over a few seconds on long distances; while it
-  is missing or incomplete (flying/swimming targets, cliffs) the arrow shows as well. Beyond 250 m
-  only the arrow shows. The arrow, the line and the "Tracking:" label hide while you hide the HUD (Ctrl+F3),
-  during a cutscene (sleeping in a bed is one), while you are dead and during a teleport, and come back after it (after a
-  death, see Known limits; a creature a portal leaves far behind is lost on the way). Taming the creature you track - by
-  you or another player - ends its tracking as a loss does, and "Lost track of" says that it was tamed. One already
-  tamed when you began tracking it is not lost by that: like any other, it stays tracked until it is killed, no longer
-  loaded, or you stop or replace the tracking.
+- **Track** follows that one creature: a 3D arrow over your head, or with `GuideMode = GroundPath` a walkable line on
+  the ground. The path builds over a few seconds on long distances; while it is missing or incomplete (flying/swimming
+  targets, cliffs) the arrow shows as well. Beyond 250 m only the arrow shows. The arrow, the line and the "Tracking:"
+  label hide while you hide the HUD (Ctrl+F3), during a cutscene (sleeping in a bed is one), while you are dead and
+  during a teleport, and come back after it (after a death, see Known limits; a creature a portal leaves far behind is
+  lost on the way). Taming the creature you track - by you or another player - ends its tracking as a loss does, and
+  "Lost track of" says that it was tamed. One already tamed when you began tracking it is not lost by that: like any
+  other, it stays tracked until it is killed or no longer loaded, until you stop or replace the tracking, or until you
+  die (see Known limits) or leave the world.
 - **View: nearby / all types** switches the list to every creature type the game has (including
   other mods' creatures), so you can Watch something that is not around. Search works there too.
 - **Find area** (in the all-types view) works out where that creature's world-spawn rule can be met -
@@ -75,9 +82,9 @@ https://github.com/DoomMachine/Valheim-MobTracker
   game's Volume and Effect volume settings) whenever one
   starts existing near you (spawned or walked into range - the same thing to a client). Tamed
   creatures never alert. Watched types are listed at the bottom of the window; click one to remove it.
-- **One game session**: what you watch and both star rows go back to nothing watched and *All* whenever you
-  enter a world or go back to the main menu, so logging out and in again, or restarting the game, starts
-  afresh, whichever character you play; dying does not. Turn on `KeepBetweenSessions` to keep them from one
+- **One game session**: what you watch and both star rows, their counts too, go back to nothing watched, *All* and no
+  count whenever you enter a world or go back to the main menu, so logging out and in again, or restarting the game,
+  starts afresh, whichever character you play; dying does not. Turn on `KeepBetweenSessions` to keep them from one
   session to the next.
 - **Always track nearest watched** (a checkbox in the window, off by default) keeps you on the creatures you watch, for
   their drops. When the creature you are tracking is lost - killed, no longer loaded on your client (out of range,
@@ -117,42 +124,48 @@ https://github.com/DoomMachine/Valheim-MobTracker
   tracking started, stopped, lost or reached and why, the guide hidden or shown, the ground path found or not, each
   watch alert and what Auto-track did with it, a watched creature that does not alert and why (once per creature), what
   Always track nearest watched's looks found when they took nothing, the list opened and closed and why, a press of
-  `ListKey` the list did not act on and why, the window's buttons, Find area's steps, each setting changed, a world
-  entered or left (Known limits says what it does not say yet). A line in LogOutput.log - and in MobTracker.log while it
-  is open - says when either setting changes in the game. `LogOutput.log` and the game's `Player.log` get every line
-  they got before, whatever the two settings say; "the log" elsewhere in this README is `LogOutput.log`. In
-  `MobTracker.log` the game's folder and your Windows user folder are written as `<game>` and `<user>` where they appear
-  in full, and MobTracker's own lines name creature types and distances - and, with `VerboseLog` on, the map positions
-  of the areas Find area finds, as `LogOutput.log` has them - never a player, character or world. With both settings off
-  from the start of the game, neither file is touched. The game keeps the file open while it runs, as it does
-  `LogOutput.log`, so a program that reads it then must let the game go on writing to it.
+  `ListKey` the list did not act on and why, the window's buttons, a star-count field turned to text it cannot read,
+  Find area's steps, each setting changed, a world entered or left (Known limits says what it does not say yet). A line
+  in LogOutput.log - and in MobTracker.log while it is open - says when either setting changes in the game.
+  `LogOutput.log` and the game's `Player.log` get every line they got before, whatever the two settings say; "the log"
+  elsewhere in this README is `LogOutput.log`. In `MobTracker.log` the game's folder and your Windows user folder are
+  written as `<game>` and `<user>` where they appear in full, and MobTracker's own lines name creature types and
+  distances - and, with `VerboseLog` on, the map positions of the areas Find area finds, as `LogOutput.log` has them -
+  never a player, character or world. With both settings off from the start of the game, neither file is touched. The
+  game keeps the file open while it runs, as it does `LogOutput.log`, so a program that reads it then must let the game
+  go on writing to it.
 
 ## Installing
 
-MobTracker needs BepInEx 5 for Valheim (the BepInExPack for Valheim, for example). Download
-`MobTracker-<version>.zip` from this repository's Releases, remove any older `MobTracker.dll` from
-`BepInEx/plugins/`, and put the `MobTracker.dll` from the zip there; the zip also holds this README and the
-licence. The settings are kept from one version to the next - since 0.5.0 the watchlist and the two star filters only
-with `KeepBetweenSessions` on - and a new version adds its own with their defaults. The releases up to 0.8.0 keep them
-in `BepInEx/config/com.mobtracker.plugin.cfg`; versions after 0.8.0 use `BepInEx/config/DoomMachine.MobTracker.cfg`
-(see **Unreleased** under History) - when you move to one, rename the old file to `DoomMachine.MobTracker.cfg` with the
-game closed to keep your settings (if the new version has already started once, delete the
-`DoomMachine.MobTracker.cfg` it made first). When the game starts, `BepInEx/LogOutput.log` says
-`MobTracker <version> loaded`, and, with the default settings, `BepInEx/MobTracker.log` has a line that reads
+MobTracker needs BepInEx 5 for Valheim (the BepInExPack for Valheim, for example). Download `MobTracker-<version>.zip`
+from this repository's Releases, remove any older `MobTracker.dll` from `BepInEx/plugins/`, and put the `MobTracker.dll`
+from the zip there; the zip also holds this README and the licence. The settings are kept from one version to the next -
+since 0.5.0 the watchlist and the two star rows only with `KeepBetweenSessions` on - and a new version adds its own with
+their defaults. Since 0.9.0 they are in `BepInEx/config/DoomMachine.MobTracker.cfg`; up to 0.8.0 they were in
+`com.mobtracker.plugin.cfg`. At a start that finds no `DoomMachine.MobTracker.cfg` and a `com.mobtracker.plugin.cfg`,
+MobTracker copies the older file's settings into the new one, says so once in `BepInEx/LogOutput.log`, and leaves the
+older file as it was (D-006, D-015). An older `MobTracker.dll` from a release up to 0.8.0 (plugin id
+`com.mobtracker.plugin`) left anywhere in `BepInEx/plugins/` - under another name or in a subfolder - still loads: 0.9.0
+then stays off and says so in `LogOutput.log`, and the older one runs as before until its DLL is removed (D-006, D-011).
+A build of `main` from between 0.8.0 and 0.9.0 already has 0.9.0's id: BepInEx then loads only 0.9.0 and says so in
+`LogOutput.log`. When the game starts, `BepInEx/LogOutput.log` says `MobTracker <version> loaded`, and, with the default
+settings, `BepInEx/MobTracker.log` has a line that reads
 `MobTracker <version> - MobTracker.log opened at the game's start; ...` after its date, time, frame and
-`[File   :MobTracker]`. To remove it, delete `MobTracker.dll`, the .cfg too to forget the settings, and
-`BepInEx/MobTracker.log` and `MobTracker-prev.log` if you like.
+`[File   :MobTracker]`. To remove it, delete `MobTracker.dll`; to forget the settings, delete
+`DoomMachine.MobTracker.cfg` and any `com.mobtracker.plugin.cfg` with the game closed - left in place, the older file
+is copied again at the next start that finds no `DoomMachine.MobTracker.cfg` - and `BepInEx/MobTracker.log` and
+`MobTracker-prev.log` if you like.
 
 **Multiplayer and dedicated servers:** there is nothing to set up on a server. MobTracker goes only into each player's
 own game, as above. The server can be vanilla, without BepInEx: the game never checks a joining player's mods, and
 MobTracker sends nothing over the network. A copy in a dedicated server's own `BepInEx/plugins/` is not needed - a
 dedicated server has no player of its own for MobTracker to work for - so leave it out. A server's range caps how far
 the list reaches (see **F7**), and losing the connection to the server takes you back to the main menu, which sets back
-what you watch and both star rows unless `KeepBetweenSessions` is on (see **One game session**). Among the sessions
-read so far is a game joined to a dedicated server - one with BepInEx on it, not a vanilla one - in which 0.8.0 ran
-without errors, but its list, alerts, tracking and Find area were not used.
+what you watch and both star rows, their counts too, unless `KeepBetweenSessions` is on (see **One game session**).
+Among the sessions read so far is a game that joined a dedicated server running BepInEx, but not MobTracker, in which
+0.8.0 ran without errors; its list, alerts, tracking and Find area were not used.
 
-## Configuration (`BepInEx/config/com.mobtracker.plugin.cfg`; after 0.8.0 `DoomMachine.MobTracker.cfg`)
+## Configuration (`BepInEx/config/DoomMachine.MobTracker.cfg`; up to 0.8.0 `com.mobtracker.plugin.cfg`)
 
 ConfigurationManager lists MobTracker's **Logging** section first (unless its own "Sort by name" setting is on); the
 file lists its sections by name.
@@ -160,15 +173,17 @@ file lists its sections by name.
 | Setting | Default | |
 |---|---|---|
 | `General.ListKey` | `F7` | Toggle the list (Escape or the gamepad's B also close it). A key the game cannot read (WheelUp, F13, Plus...), or the left, right or middle mouse button, does nothing and says so once in the log; keys the game ignores outright - Mouse5, Mouse6, F16 to F24 and the numbered-joystick buttons - never fire, with no warning |
-| `General.KeepBetweenSessions` | `false` | Keep `Watchlist`, `ListStarFilter` and `AlertStarFilter` - the Watch buttons and the **List:** and **Alerts:** rows - from one game session to the next. Off, they are set back to nothing watched and `All` whenever you enter a world or go back to the main menu (see **One game session**); closing the game leaves the last ones in this file until you next enter a world |
-| `General.ListStarFilter` | `All` | The list's star filter (also the **List:** row): `All`, or one or more of `NoStars`, `OneStar`, `TwoStars` and `TwoOrMoreStars` separated by commas, e.g. `NoStars, OneStar` for both. Any case; the window's labels (`No star`, `1 star`, `2 stars`, `2+ stars`) work too, and a number counts stars: 0-3, 3 = two or more, 4 = All. `All` anywhere in the list means All; anything else is ignored with a warning in the log, and with nothing valid the filter works as All. A text setting since 0.4.0 (a single name or number from a 0.3.x file reads as before), so ConfigurationManager shows a text box for it rather than a list, and applies it at every keystroke. Back to `All` at every session unless `KeepBetweenSessions` is on |
+| `General.KeepBetweenSessions` | `false` | Keep `Watchlist`, `ListStarFilter`, `ListStarCounts`, `AlertStarFilter` and `AlertStarCounts` - the Watch buttons and the **List:** and **Alerts:** rows with their fields - from one game session to the next. Off, they are set back to nothing watched, `All` and no count whenever you enter a world or go back to the main menu (see **One game session**); closing the game leaves the last ones in this file until you next enter a world |
+| `General.ListStarFilter` | `All` | The list's star filter (also the **List:** row): `All`, or one or more of `NoStars`, `OneStar`, `TwoStars` and `TwoOrMoreStars` separated by commas, e.g. `NoStars, OneStar` for both. Any case; the window's labels (`No star`, `1 star`, `2 stars`, `2+ stars`) work too, and so do category numbers: 0-3, 3 = two or more, 4 = All - a number here is a category, not a count of stars (that is `ListStarCounts`). `All` anywhere in the list means All; anything else is ignored with a warning in the log, and with nothing valid no category is marked. With no category marked, every star level is listed, unless `ListStarCounts` holds a count. A text setting since 0.4.0 (a single name or number from a 0.3.x file reads as before), so ConfigurationManager shows a text box for it rather than a list, and applies it at every keystroke. Back to `All` at every session unless `KeepBetweenSessions` is on |
+| `General.ListStarCounts` | empty | Exact star counts the list shows as well (also the field in the **List:** row): whole numbers from 0 to 100, single or as ranges, separated by commas, e.g. `3-5, 8`; 0 is no star. A creature with one of these counts is listed as well as the categories marked in `ListStarFilter`; with none marked, only these counts are, and with no count either, every star level is. A range written high to low reads as the same range. A value that cannot be read is not applied - the counts read before it stay, none at the game's start - and the log warns about it; the field shows it as invalid. Back to empty at every session unless `KeepBetweenSessions` is on |
 | `Tracking.GuideMode` | `Arrow` | `Arrow` or `GroundPath` |
 | `Tracking.ArrowSize` / `ArrowHeight` | `0.6` / `2.6` | Metres: the arrow's length, from 0.1 to 3, and the height of its middle above your feet, from 0 to 5. A value outside the range is set to the nearest end, also one written in this file, when the game starts |
-| `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Emptied at every session unless `KeepBetweenSessions` is on. With it on, edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows, Guide, the two tracking checkboxes) rewrites the file |
+| `Alerts.Watchlist` | empty | Prefab names, e.g. `Troll,Serpent`. The all-types view's Watch button adds any type. Emptied at every session unless `KeepBetweenSessions` is on. With it on, edit the file by hand with the game closed: it takes effect at the next start, and while the game runs a setting changed in the window (Watch or Unwatch, the star rows and their fields, Guide, the two tracking checkboxes) rewrites the file |
 | `Alerts.AlertRadius` | `0` | Only alert (or re-track, below) within this many metres; 0 = anywhere loaded |
 | `Alerts.AlertVolume` | `0.8` | Ding volume; the game's Volume and Effect volume settings apply on top of it |
 | `Alerts.AutoTrack` | `true` | Start tracking a watched creature when it alerts (also a checkbox in the window). Never replaces a creature you are already tracking, nor takes a creature on the other side of a dungeon entrance, nor acts while Always track nearest watched waits after a loss - that wait chooses instead |
-| `Alerts.AlertStarFilter` | `All` | The alerts' star filter (also the **Alerts:** row), written the same way: e.g. `OneStar, TwoStars` alerts only for one- and two-star creatures. A text setting since 0.4.0, like `ListStarFilter`, except that a change in the window or in ConfigurationManager takes effect only once the filter has stayed the same for 1.5 seconds (see Known limits). Back to `All` at every session unless `KeepBetweenSessions` is on; with it on, edit the file by hand with the game closed, as for `Watchlist` |
+| `Alerts.AlertStarFilter` | `All` | The alerts' star filter (also the **Alerts:** row), written the same way: e.g. `OneStar, TwoStars` alerts only for one- and two-star creatures while `AlertStarCounts` holds no count. A text setting since 0.4.0, like `ListStarFilter`, except that a change in the window or in ConfigurationManager takes effect only once the **Alerts:** row - this filter and `AlertStarCounts` - has stayed the same for 1.5 seconds (see Known limits). Back to `All` at every session unless `KeepBetweenSessions` is on; with it on, edit the file by hand with the game closed, as for `Watchlist` |
+| `Alerts.AlertStarCounts` | empty | The same for the alerts (also the field in the **Alerts:** row): with no category marked on **Alerts:**, `3` alerts, auto-tracks and re-tracks only three-star creatures of the watched types. A change in the window or in ConfigurationManager takes effect once the row has stayed the same for 1.5 seconds, as for `AlertStarFilter` (see Known limits). Back to empty at every session unless `KeepBetweenSessions` is on; with it on, edit the file by hand with the game closed, as for `Watchlist` |
 | `Alerts.AlwaysTrackNearestWatched` | `false` | When a tracked creature is lost while something is watched - any creature, also one of a type you do not watch or a tamed one, or one tamed while you track it - track the nearest creature of any watched type that passes the watch alert's filters (never a tamed one) and is on your side of a dungeon entrance: 5 seconds later, or, if there is none then, at the first once-a-second look that finds one (also a checkbox in the window). Stop tracking, or tracking something else, never starts it. With it on, the log says what each loss and each wait did |
 | `Logging.ErrorLog` | `true` | Copy MobTracker's warnings and errors, an error of its code that the game or BepInEx reports and a value in this file BepInEx could not read, to `BepInEx/MobTracker.log`, with the date, time and frame of each; the game start before is kept as `MobTracker-prev.log` (see **Logs**). `LogOutput.log` gets MobTracker's lines either way. With this and `VerboseLog` off from the start of the game, neither file is touched |
 | `Logging.VerboseLog` | `false` | Also write a line for each event listed under **Logs** to `MobTracker.log` and `LogOutput.log`; on, `MobTracker.log` gets every MobTracker line, whatever `ErrorLog` says. Changed in ConfigurationManager, it takes effect at once, also while the game runs. Edited in this file by hand, it is read only at the next start of the game - edit with the game closed: while it runs, any setting the game saves writes its own values back over the file. A setting dragged or typed in ConfigurationManager writes one line at once and one more when it holds still |
@@ -188,25 +203,34 @@ file lists its sections by name.
   you respawn. After a respawn at once - no bed, close to the start - it may carry on (not yet confirmed).
 - While the pointer rests on the window its rows do not update: a creature killed meanwhile keeps its row, and
   its Track button does nothing, until the pointer leaves the window.
-- A change on the **Alerts:** row reaches the alerts, Auto-track and Always track nearest watched once the row
-  has stayed the same for 1.5 seconds - 1.5 seconds after your last click that changed it (seconds of game time,
-  which stands still while the game is paused); the buttons and the setting change at once, and watched creatures
-  are checked every second. So what the row passes through while you click is not seen, as long as each click
-  comes within 1.5 seconds of the one before: taking off the only marked category, which returns the row to
-  *All*, no longer lets every watched creature alert before your next click. Pause for 1.5 seconds or more
-  between two clicks, though, and the row as it stands then applies: a creature it lets through can alert, and
-  has then had its alert. Marking the new category before taking the old one off never passes through *All*.
-  Typed in ConfigurationManager, which changes the setting at every keystroke, `AlertStarFilter` works the same
-  way: the text applies 1.5 seconds after it last changed, so a half-typed value (a text with no word it knows
-  yet reads as *All*) is not seen as long as each keystroke comes within 1.5 seconds of the one before. Pause that
-  long while typing, though, and what is typed so far applies (*All*, for text it cannot read). Each value it
-  cannot read logs a warning.
-- Over a runestone's or a readable item's text, Escape closes the list and the text together, and typing `e` in
-  the search closes the text.
+- A change on the **Alerts:** row - a click on a button, or a keystroke that changes its field - reaches the alerts,
+  Auto-track and Always track nearest watched once the row has stayed the same for 1.5 seconds - 1.5 seconds after your
+  last click or keystroke that changed it (seconds of game time, which stands still while the game is paused); the
+  buttons and the field change at once, and so does the setting for text the field can read, and watched creatures are
+  checked every second. So what the row passes through while you click or type is not seen, as long as each click or
+  keystroke that changes the row comes within 1.5 seconds of the one before: taking off the only marked category, which
+  returns the row to *All* when it has no star count, no longer lets every watched creature alert before your next
+  click, and `3` on the way to `3-5` is not applied. Pause for 1.5 seconds or more between two clicks or keystrokes,
+  though, and the row as it stands then applies: a creature it lets through can alert, and has then had its alert - text
+  the field cannot read yet (`3-`) leaves the counts as they were, so a pause there applies the `3` typed before it.
+  Marking the new category before taking the old one off never passes through *All*. Typed in ConfigurationManager,
+  which changes a setting at every keystroke, `AlertStarFilter` and `AlertStarCounts` work the same way: the text
+  applies 1.5 seconds after it last changed, so a half-typed value (a filter text with no word it knows yet marks no
+  category, as *All* does; a count text it cannot read yet leaves the counts as they were) is not seen as long as each
+  keystroke comes within 1.5 seconds of the one before. Pause that long while typing, though, and what is typed so far
+  applies (for a filter text it cannot read: no category, so every star level, or only the row's counts when it has
+  some). Each value it cannot read logs a warning.
+- The star-count fields take counts from 0 to 100: a creature with more stars passes only *2+ stars* or *All* (D-004).
+  MobTracker has no way to type with a gamepad: typing in the fields takes a keyboard (the counts can also be set in
+  ConfigurationManager or the cfg); the gamepad's buttons work as before. Each star is an asterisk wherever MobTracker
+  names a creature - the list, the "Tracking:" label, the watch alert and "Lost track of" - so a creature with many
+  stars has a long name there.
+- Over a runestone's or a readable item's text, Escape closes the list and the text together, and typing `e` in the
+  search or a star-count field closes the text.
 - With TomTom's, Wayfinder's or MeasurementTracker's window open as well, one Escape closes both windows. F5
   opens the console over the list; the first Escape then closes the console, the next one the list.
-- A TomTom or Wayfinder key bound to a letter, a digit or another key that types also acts while you type that
-  character in the list's search (their default keys - F11, and no skip key - are not such keys).
+- A TomTom or Wayfinder key bound to a letter, a digit or another key that types also acts while you type that character
+  in the list's search or a star-count field (their default keys - F11, and no skip key - are not such keys).
 - A drag begun on the map beside the window and let go over it at once counts as a click on the map where you
   let go.
 - With a gamepad, the left stick still pans an open map under the list, and the alternative layouts' alternate
@@ -221,18 +245,22 @@ file lists its sections by name.
   MobTracker's code - an error inside game code MobTracker changes, with no MobTracker line in its stack, is not taken.
   A value BepInEx cannot read in the two `Logging` settings themselves is warned about in `LogOutput.log` only. The file
   holds at most 5 MB per game start, then says so and stops until the next start. A second copy of the game running at
-  the same time writes none, and says so in its own `LogOutput.log`. A folder written in another spelling - shortened,
-  or with `/` in place of `\` - is not replaced by `<game>` or `<user>`: look before you share the file.
+  the same time writes none, and says so in its own `LogOutput.log`. Beside an older MobTracker release (up to 0.8.0),
+  0.9.0 stays off and writes no `MobTracker.log`; such a release from 0.7.0 on writes its own there while its logging is
+  on (see **Installing**). A folder written in another spelling - shortened, or with `/` in place of `\` - is not
+  replaced by `<game>` or `<user>`: look before you share the file.
 - `VerboseLog` does not say why a Watch or Find area click was dropped when the list closed in the same frame, nor why
   the guide stayed up when the game's cutscene test fails, nor which of Escape and the gamepad's B closed the list, nor
   why a watched creature did not alert for a reason other than the four its line names (not on the network yet, tamed,
   its stars, outside `AlertRadius`). It writes nothing when the search changes the list's rows (the search text is never
   written), when the once-a-second alert check finds nothing watched, when another mod (TomTom, say) takes the map's
-  delete before MobTracker does, or when that delete finds no area pin in reach. What it learns by watching - the guide
-  hidden or shown, the local player there or not, the **Alerts:** stars in effect - it writes up to a frame after it
-  happened, except the state it finds when `VerboseLog` is turned on and the guide's state in a tracking's first two
-  frames, which it takes as it is without a line: a guide already hidden when you start tracking (the HUD hidden with
-  Ctrl+F3, say) gets no `Guide: hidden` line. The ground path's lines come only within 250 m, where the line is built.
+  delete before MobTracker does, when that delete finds no area pin in reach, or when opening the list drops a
+  star-count field's text it could not read, and no line says that a keystroke in the **Alerts:** field that left its
+  setting as it was restarted that row's wait. What it learns by watching - the guide hidden or shown, the local player
+  there or not, the **Alerts:** stars in effect - it writes up to a frame after it happened, except the state it finds
+  when `VerboseLog` is turned on and the guide's state in a tracking's first two frames, which it takes as it is without
+  a line: a guide already hidden when you start tracking (the HUD hidden with Ctrl+F3, say) gets no `Guide: hidden`
+  line. The ground path's lines come only within 250 m, where the line is built.
 - While the cfg cannot be written (read-only, or held by another program), a setting changed in the
   window or in ConfigurationManager takes effect but is not in the file: the log says so once, as a warning, and says
   when a later change saves it again - the reset of **One game session** counts as a change. The next save that works -
@@ -249,20 +277,21 @@ Open issues, what has not yet been confirmed in the game, and ideas for later ar
 ## Building
 
 `dotnet build MobTracker.csproj -c Release` (needs the game with BepInEx; see the comment at the top of
-`MobTracker.csproj`). `tools/preflight.ps1` checks a build against the installed game - run it after every
-Valheim update - and `tools/deploy.ps1` installs one, moving the DLL it replaces into `retired/` in this folder
-(`-KeepDir` to choose another). The tools find the game the way the build does: `-ValheimDir`, else the
-`VALHEIM` environment variable; they take named arguments only, and reject a misspelt one. When a tool is
-started with `powershell -File ...`, write a quoted game path without a trailing backslash: `"...\Valheim\"`
-can end in an escaped quote there (always from `cmd.exe` or a shortcut; from Windows PowerShell when the path
-has a space). `tools/mutants.ps1` plants the defects preflight is there to catch, one at a time in a copy under
-`build/`, and checks that each one fails it. `tools/package.ps1` makes a release's zip from a clean checkout.
-Run in Windows PowerShell 5.1, in a plain shell, with the same .NET SDK and against the same Valheim and
-BepInEx files, the same commit gives the same bytes, so a downloaded zip can be checked against its tag; each
-release's notes name the versions used. `tests/` holds the rules that need no game (`dotnet run` there), and
-`tools/unit-mutants.ps1` plants defects in those rules, one at a time in a copy under `build/`, and checks that
-the tests fail on each. `tools/log-harness/` proves how `MobTracker.log` is opened, kept, written and shut, and how
-the cfg is saved, outside the game: `dotnet build tools/log-harness/log-harness.csproj -c Release`, then
+`MobTracker.csproj`). Since 0.9.0 the assembly is named `DoomMachine.MobTracker`, after the plugin id; the file stays
+`MobTracker.dll`. `tools/preflight.ps1` checks a build against the installed game - run it after every Valheim update -
+and `tools/deploy.ps1` installs one, moving the DLL it replaces into `retired/` in this folder (`-KeepDir` to choose
+another). The tools find the game the way the build does: `-ValheimDir`, else the `VALHEIM` environment variable; they
+take named arguments only, and reject a misspelt one. When a tool is started with `powershell -File ...`, write a quoted
+game path without a trailing backslash: `"...\Valheim\"` can end in an escaped quote there (always from `cmd.exe` or a
+shortcut; from Windows PowerShell when the path has a space). `tools/mutants.ps1` plants the defects preflight is there
+to catch, one at a time in a copy under `build/`, and checks that each one fails it. `tools/package.ps1` makes a
+release's zip from a clean checkout. Run in Windows PowerShell 5.1, in a plain shell, with the same .NET SDK and against
+the same Valheim and BepInEx files, the same commit gives the same bytes, so a downloaded zip can be checked against its
+tag; each release's notes name the versions used. `tests/` holds the rules that need no game (`dotnet run` there), and
+`tools/unit-mutants.ps1` plants defects in those rules, one at a time in a copy under `build/`, and checks that the
+tests fail on each. `tools/log-harness/` proves how `MobTracker.log` is opened, kept, written and shut, how the cfg is
+saved and how the settings file of 0.8.0 and earlier is copied, outside the game:
+`dotnet build tools/log-harness/log-harness.csproj -c Release`, then
 `build/log-harness/log-harness.exe <an empty folder>`.
 
 ## Credits
@@ -280,15 +309,24 @@ The copyright holder is DoomMachine (see `LICENSE`).
 
 ## History
 
-- **Unreleased** (on `main` after 0.8.0; a build of it still says 0.8.0) - the plugin id is `DoomMachine.MobTracker`
-  (it was `com.mobtracker.plugin`), so the Valheim Configuration Manager heads MobTracker's settings in its Split View
-  with "MobTracker <version> (DoomMachine.MobTracker)", as it does for the other DoomMachine plugins. BepInEx names the
-  settings file after the id: it is now `BepInEx/config/DoomMachine.MobTracker.cfg`, and the two log lines that name the
-  file say so. With the game closed, rename the old `com.mobtracker.plugin.cfg` to that name to keep your settings (if
-  the new build has already started once, delete the file it made first), and remove the older `MobTracker.dll`: with
-  the new id, a copy left anywhere in `BepInEx/plugins/` - under another name or in a subfolder - would load beside it.
-  Since 0.8.0 this README also says how far a server lets the list reach (see **F7**) and has **Multiplayer and
-  dedicated servers**.
+- **0.9.0** - exact star counts, and a new plugin id. Each star row, **List:** and **Alerts:**, ends with a field for
+  exact star counts, for mods that give creatures more stars: whole numbers from 0 to 100, single or as ranges, such as
+  `3-5, 8` (`ListStarCounts`, `AlertStarCounts`). A creature with one of the counts passes as well as the marked
+  categories; with no category marked, only the counts pass. Text a field cannot read is not applied and shows as
+  invalid; a click on *All* empties the row's field; the counts go back to empty with the rows at each session unless
+  `KeepBetweenSessions` is on; and the **Alerts:** row's counts take effect once the row has held still for 1.5 seconds,
+  as its buttons do. Asked for after 0.8.0 and decided in `decisions/` (D-001 to D-004, D-010, D-012 to D-014). The
+  plugin id is now `DoomMachine.MobTracker` (it was `com.mobtracker.plugin`), so the Valheim Configuration Manager heads
+  MobTracker's settings in its Split View with "MobTracker 0.9.0 (DoomMachine.MobTracker)", as it does for the other
+  DoomMachine plugins (D-009). BepInEx names the settings file after the id, so it is now
+  `BepInEx/config/DoomMachine.MobTracker.cfg`: at a start that finds only `com.mobtracker.plugin.cfg`, 0.9.0 copies its
+  settings into the new file, says so in the log and leaves the older file as it was (D-006, D-015); beside an older
+  MobTracker release left in `BepInEx/plugins/` it stays off and says so in the log (D-006, D-011). With `VerboseLog`
+  on, the line for a tamed creature's loss says `; a tamed one`, no longer `; it was tamed`, which read like the message
+  at a taming. New in this README since the 0.8.0 release: how far a server lets the list reach (see **F7**), and
+  **Multiplayer and dedicated servers**. The unit tests, the log harness and the safety checks hold the new rules, with
+  planted defects for each new check. Not yet played in the game; a build with the new id, and none of the rest, ran
+  without a MobTracker warning or error in the sessions read so far.
 - **0.8.0** - Always track nearest watched starts its wait after the loss of any tracked creature while something is
   watched: one of a kind you do not watch, tracked by hand for a while, or a tamed one, too. And taming the creature you
   track - by you or another player, when it was wild as you began tracking it - now ends its tracking as a loss does

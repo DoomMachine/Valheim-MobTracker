@@ -19,3 +19,4 @@
   - 2026-11-02: accepted; to be built in 0.9.0 (D-005).
   - 2026-11-03: refined by D-011 (with an older copy loaded, 0.9.0 warns once and stays off) and D-015 (the copy runs at
     every start that finds no DoomMachine.MobTracker.cfg, and the old file is left in place).
+  - 2026-11-03: built in 0.9.0 (tag `v0.9.0`), as D-011 and D-015 refined it; in force.

@@ -16,3 +16,6 @@
     entry) are left to the design; the docs will state each with its reason.
   - 2026-11-03: the open range was put to the developer instead: D-013, not accepted. The design decides the other
     cases, and `docs/open-items.md` is to state each with its reason (checked before the release).
+  - 2026-11-03: built in 0.9.0 (tag `v0.9.0`); in force. Checked before the release: `docs/open-items.md` states each
+    case the options left to the design with its reason ("How a star-count field reads its text", under "Decided or not
+    planned").

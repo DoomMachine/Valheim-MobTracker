@@ -14,3 +14,4 @@
 - **Reason:** no reason given.
 - **Status:**
   - 2026-11-02: accepted; to be built in 0.9.0 (D-005).
+  - 2026-11-03: built in 0.9.0 (tag `v0.9.0`); in force.

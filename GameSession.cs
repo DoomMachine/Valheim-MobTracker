@@ -3,9 +3,10 @@ using UnityEngine;
 namespace MobTracker
 {
     /// <summary>
-    /// Tells ModConfig and WatchAlerts when a game session ends or begins, so that the watchlist and the star filters
-    /// last one session unless KeepBetweenSessions is on (ModConfig.ResetSession). A session is the life of the world's
-    /// Game object: the game makes one when a world loads and destroys it when the start scene is loaded again - a
+    /// Tells ModConfig and WatchAlerts when a game session ends or begins, so that the watchlist, the star filters and
+    /// their star counts last one session unless KeepBetweenSessions is on (ModConfig.ResetSession). A session is the
+    /// life of the world's Game object: the game makes one when a world loads and destroys it when the start scene is
+    /// loaded again - a
     /// logout, a lost connection - and Game.OnDestroy sets Game.instance to null. So a session ends or begins whenever Game.instance
     /// is another object than at the last look - at a logout, and when a world is entered, also the first one after
     /// the game starts, and after a crash that never logged out. Dying and respawning keep the Game, and the session;

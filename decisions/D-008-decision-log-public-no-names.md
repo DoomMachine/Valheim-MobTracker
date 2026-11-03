@@ -21,3 +21,4 @@
     an edit of earlier text, and a correction is a dated amendment. `decisions/INDEX.md` lists every decision ever
     recorded; `DECISIONS.md` lists the ones open or in force. Private matters go to a separate log outside the
     repository (option 1's words, which option 2 keeps: "The same files"). First published with 0.9.0 (D-005).
+  - 2026-11-03: in force; in 0.9.0's release commit (tag `v0.9.0`).

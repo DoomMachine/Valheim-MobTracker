@@ -15,11 +15,15 @@
      alerts' only as the Alerts: row's mode says), at the start and when that entry changes, and a bad value is warned
      about; the list reads its own; the alerts, Auto-track and Always track nearest watched read the alerts' through
      the settled set WatchAlerts works out every frame, whose wait restarts at every change of the alerts' entry (a
-     count kept only by that entry's change handler), and the build keeps the shipped mode (Settle); the alert poll
+     count kept only in ModConfig.AlertRowChanged, which the two Alerts: entries' change handlers and
+     EntityListWindow.SyncCounts call), and the build keeps the shipped mode (Settle); the alert poll
      hands the alert gate its own star-and-watchlist answer and skips what the gate refuses; each window row shows
      and writes its own entry, button by button and every button, through StarSets.IsMarked, Toggle and Format, and
      writes only on a click; the List: row is greyed out in the all-types view (enabled && !all-types), and the title
-     names the list's categories exactly when one is marked; always-track-nearest-watched gives its tested decisions
+     names the list's row exactly when a category is marked or a count is typed (StarSets.IsAll); since 0.9.0 each row
+     is its categories and its counts (a StarRule), read whole wherever a row is used, each row's count field writes its
+     own count setting from Update, only text it can read, a click on All empties only its own row's field, and a
+     keystroke in the Alerts: field that writes nothing restarts that row's wait; always-track-nearest-watched gives its tested decisions
      (Retrack)
      the right values and branches on them the right way, and is started only from Tracker.LateUpdate - at a loss, or
      at the taming of a creature tracked wild (0.8.0), with the type and tameness written only where a tracking starts
@@ -43,7 +47,7 @@
   7. the game session: GameSession, a component of the plugin's own object, starts a session whenever Game.instance
      is another object (by reference) and resets through ModConfig.ResetSession and WatchAlerts.ResetSession, called
      from nowhere else; unless KeepBetweenSessions (General, default false) is on, the reset writes each of the
-     watchlist and the two star filters back to its own default, the cfg saved once afterwards; the watchlist
+     watchlist, the two star filters and the two star counts back to its own default, the cfg saved once afterwards; the watchlist
      entry's own change handler re-parses it; closing the list (also on every frame with no player) drops a Watch or
      Find area click still waiting
   8. every assembly the plugin references is in the game folder
@@ -55,7 +59,8 @@
      its catch; the listener copies
      MobTracker's own source (by reference) as LogRules.ToFile says and another source's line only as LogRules.Foreign
      and the repeat limit say, and neither throws nor logs; LogRules' levels are BepInEx's; every log line, by method
-     and level, is a 0.6.0 line, a warning of the log's own, a switch note or a verbose line (Info, through ModLog.Event,
+     and level, is a 0.6.0 line, a warning of the log's own, a switch note, a star count's warning, the two lines of
+     OldSettings (what the copy of the settings file did) and the stay-off warning (0.9.0), or a verbose line (Info, through ModLog.Event,
      which writes nothing while VerboseLog is off); the verbose lines come from a fixed list of sites, each returning
      first while VerboseLog is off and catching its own failure, none changing what it describes; Events' once-only,
      on-change and on-press guards and what it hands to EventLines' decisions are held to their exact IL shapes, as are
@@ -63,14 +68,19 @@
      the reached line inside the reached block; and nothing reads a player's, character's or
      world's name, an ID or a save path
  10. the cfg (0.7.1): BepInEx never saves it - Awake turns its SaveOnConfigSet off (ConfigSaver.Take) before the first
-     setting is bound, nothing turns it on again, and every Bind is in LogFile.Start or ModConfig.Bind; ConfigSaver
+     setting is bound, nothing turns it on again, and every Bind is in LogFile.Start or ModConfig.Bind, and the one
+     Reload is OldSettings.Copy's, before the first Bind (0.9.0: the settings file of 0.8.0 and earlier, copied, never
+     over a file, the older file left as it was, every failure caught); ConfigSaver
      saves it once after the last Bind and after every change, from a handler on the whole cfg added last (after
      Events.Watch), except while the session reset writes (ConfigSaver.Each), which saves once after; ConfigSaver.Save
      is the only ConfigFile.Save, catches every failure, says the first by type only and then nothing until a save
      works again, which it says; OnDestroy tries once more, first, if the last save failed
- 11. the plugin id (after 0.8.0): the plugin's one Harmony instance is made in Awake with the BepInPlugin GUID; the
-     two cfg lines (EventLines.CfgNotSaved, CfgSavedAgain) name <GUID>.cfg, the file BepInEx makes from the GUID; and
-     the plugin makes no ConfigFile of its own - BepInEx's Config is the only one it reads or writes
+ 11. the plugin id (after 0.8.0): the one `new Harmony(...)` in the plugin is in Awake and is given the BepInPlugin
+     GUID as a literal; the cfg lines (EventLines.CfgNotSaved, CfgSavedAgain, and since 0.9.0 the settings-file lines)
+     name <GUID>.cfg, the file BepInEx makes from the GUID; no string literal or constant holding com.mobtracker is
+     outside OldSettings.OldId, OldSettings.Copy and OlderVersion and the four lines that name it; the plugin has no
+     `new ConfigFile(...)`; and since 0.9.0 its assembly is named after the GUID, and it stays off with one warning
+     beside an older MobTracker (Awake's start, item 9; Start returns first then)
   Run it after every Valheim update. Exits 1 on any failure. The number of checks depends on how many TomTom or
   Wayfinder DLLs it reads (one check each).
 
@@ -82,7 +92,7 @@
 [CmdletBinding(PositionalBinding = $false)]   # every argument named: a stray one is an error
 param(
     [string]$Plugin = "",
-    [string]$ExpectedVersion = "0.8.0",
+    [string]$ExpectedVersion = "0.9.0",
     [string]$ValheimDir = $(if ($env:VALHEIM) { $env:VALHEIM } else { "E:\SteamLibrary\steamapps\common\Valheim" }),
     [string[]]$Waypointer = @()   # TomTom / Wayfinder DLLs to check the carve-out against; default: the installed ones
 )
@@ -301,12 +311,14 @@ function Get-TouchesWithLambdas($typeName, $methodName) {
     return $out
 }
 $wiring = @(
-    @("MobTracker.WatchAlerts", "Update", @("ModConfig::AlertStars", "ModConfig::AlertStarsRevision", "AlertsRow::Effective", "WatchAlerts::get_EffectiveAlertStars", "StarSets::Accepts", "Character::GetLevel"),
-        @("ModConfig::ListStars", "ModConfig::ListStarsText", "ModConfig::AlertStarsText", "EntityListWindow::_appliedListStars")),
-    @("MobTracker.EntityListWindow", "Refresh", @("EntityListWindow::_appliedListStars", "StarSets::Accepts", "Character::GetLevel"),
-        @("ModConfig::AlertStars", "ModConfig::AlertStarsText", "ModConfig::ListStarsText")),
+    @("MobTracker.WatchAlerts", "Update", @("ModConfig::AlertStars", "ModConfig::AlertStarsRevision", "AlertsRow::Effective", "WatchAlerts::get_EffectiveAlertStars",
+        "StarSets::Accepts(MobTracker.StarRule,System.Int32)", "Character::GetLevel"),
+        @("ModConfig::ListStars", "ModConfig::ListStarsText", "ModConfig::AlertStarsText", "ModConfig::ListCountsText", "ModConfig::AlertCountsText",
+        "EntityListWindow::_appliedListStars")),
+    @("MobTracker.EntityListWindow", "Refresh", @("EntityListWindow::_appliedListStars", "StarSets::Accepts(MobTracker.StarRule,System.Int32)", "Character::GetLevel"),
+        @("ModConfig::AlertStars", "ModConfig::AlertStarsText", "ModConfig::ListStarsText", "ModConfig::ListCountsText", "ModConfig::AlertCountsText")),
     @("MobTracker.EntityListWindow", "Update", @("ModConfig::ListStars", "EntityListWindow::_appliedListStars", "set EntityListWindow::_appliedListStars"),
-        @("ModConfig::AlertStars", "ModConfig::AlertStarsText"))
+        @("ModConfig::AlertStars", "ModConfig::AlertStarsText", "ModConfig::AlertCountsText"))
 )
 function Test-Wiring($table) {
     # Each row: type, method, what it must touch, what it must not touch.
@@ -328,8 +340,55 @@ function Test-Wiring($table) {
     }
 }
 Test-Wiring $wiring
+# Since 0.9.0 a row is a StarRule - its categories and its counts - and StarSets has an overload for each: every call into
+# StarSets outside it, by caller and overload, is the table below, so each test, label, mark and click reads the whole
+# row (the StarSet overloads take the categories alone, and a creature with a typed count would pass or fail on its
+# category); and nothing converts a StarSet to a StarRule (StarRule's implicit conversion, for the tests only, would hand
+# on a row with its counts dropped).
+$overloads = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
+foreach ($t in $plug.GetTypes()) {
+    if ($t.Name -eq "StarSets") { continue }
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($x in $m.Body.Instructions) {
+            $o = $x.Operand
+            if ($o -isnot [Mono.Cecil.MethodReference]) { continue }
+            if ($o.DeclaringType.Name -ne "StarSets" -and -not ($o.DeclaringType.Name -eq "StarRule" -and $o.Name -eq "op_Implicit")) { continue }
+            $k = "{0}.{1} -> {2}::{3}({4})" -f ($t.Name -replace '>d__\d+$', '>d__N'), ($m.Name -replace '>b__\d+(_\d+)?$', '>b__N'), $o.DeclaringType.Name, $o.Name, (@($o.Parameters | ForEach-Object { $_.ParameterType.FullName }) -join ",")
+            if ($overloads.ContainsKey($k)) { $overloads[$k] = $overloads[$k] + 1 } else { $overloads[$k] = 1 }
+        }
+    }
+}
+$checks++
+$olGot = @($overloads.Keys | Sort-Object -CaseSensitive | ForEach-Object { "{0} x{1}" -f $_, $overloads[$_] })
+$olWant = @(
+    "EntityListWindow.DrawWindow -> StarSets::Format(MobTracker.StarSet) x2",
+    "EntityListWindow.DrawWindow -> StarSets::IsMarked(MobTracker.StarRule,MobTracker.StarFilter) x2",
+    "EntityListWindow.DrawWindow -> StarSets::Toggle(MobTracker.StarRule,MobTracker.StarFilter) x1",
+    "EntityListWindow.DrawWindow -> StarSets::Toggle(MobTracker.StarRule,MobTracker.StarFilter,System.Boolean) x1",
+    "EntityListWindow.OnGUI -> StarSets::IsAll(MobTracker.StarRule) x1",
+    "EntityListWindow.OnGUI -> StarSets::Label(MobTracker.StarRule) x1",
+    "EntityListWindow.Refresh -> StarSets::Accepts(MobTracker.StarRule,System.Int32) x1",
+    "Events.AlertStars -> StarSets::Label(MobTracker.StarRule) x1",
+    "Events.EmptyLookEach -> StarSets::Accepts(MobTracker.StarRule,System.Int32) x1",
+    "Events.ListOpened -> StarSets::Label(MobTracker.StarRule) x1",
+    "Events.NotAlertingEach -> StarSets::Accepts(MobTracker.StarRule,System.Int32) x1",
+    "Events.NotAlertingEach -> StarSets::Label(MobTracker.StarRule) x1",
+    "ModConfig.ParseStars -> StarSets::Parse(System.String,System.String&,System.Boolean) x1",
+    "NearestWatched.Update -> StarSets::Accepts(MobTracker.StarRule,System.Int32) x1",
+    "WatchAlerts.Update -> StarSets::Accepts(MobTracker.StarRule,System.Int32) x1"
+)
+# (Test-Table is defined further down, with the log's checks: the same comparison, written out here.)
+if (($olGot -join "; ") -ceq ($olWant -join "; ")) { Ok "every call into StarSets reads a whole row (the StarRule overloads: the alerts, the re-track's look, the list, the verbose looks, the title, the log's labels, each row's marks and clicks), and nothing converts a StarSet to a StarRule" }
+else {
+    $olDiff = if ($olGot.Count -eq 0) { @($olWant | ForEach-Object { "- " + $_ }) }
+              else { @(Compare-Object -CaseSensitive @($olWant) $olGot | ForEach-Object { if ($_.SideIndicator -eq "=>") { "+ " + $_.InputObject } else { "- " + $_.InputObject } }) }
+    Fail ("the calls into StarSets, by caller and overload, differ from the checked ones: " + ($olDiff -join "; "))
+}
 # The two rows of star buttons: from the "List:" label to the "Alerts:" label only the list's filter and entry may be
 # touched, from there to the end of DrawWindow only the alerts'. Swapping the rows compiles and passes everything else.
+# Since 0.9.0 each row also has its count field - the window's _listCounts / _alertCounts, whose names hold no "Stars" -
+# and its count entry (ListCountsText / AlertCountsText): those are the row's own too.
 $checks++
 $dw = Get-Method "MobTracker.EntityListWindow" "DrawWindow"
 $iList = -1; $iAlerts = -1; $dwIns = @()
@@ -341,19 +400,24 @@ if ($dw) {
     }
 }
 function Get-StarSettings($from, $to) {
-    # Which filter the ModConfig star fields touched in a range belong to: ListStars and ListStarsText are "ListStars".
+    # Which row's star fields are touched in a range: ModConfig's ListStars and ListStarsText are "ListStars", its
+    # ListCountsText and the window's _listCounts "ListCounts"; the Alerts: row's the same with "Alert".
     $o = @{}
     for ($k = $from; $k -lt $to; $k++) {
         $op = $dwIns[$k].Operand
-        if ($op -is [Mono.Cecil.FieldReference] -and $op.DeclaringType.Name -eq "ModConfig" -and $op.Name -like "*Stars*") { $o[($op.Name -replace 'Text$', '')] = $true }
+        if ($op -isnot [Mono.Cecil.FieldReference]) { continue }
+        if ($op.DeclaringType.Name -eq "ModConfig" -and ($op.Name -like "*Stars*" -or $op.Name -like "*Counts*")) { $o[($op.Name -replace 'Text$', '')] = $true }
+        elseif ($op.DeclaringType.Name -eq "EntityListWindow" -and $op.Name -ceq "_listCounts") { $o["ListCounts"] = $true }
+        elseif ($op.DeclaringType.Name -eq "EntityListWindow" -and $op.Name -ceq "_alertCounts") { $o["AlertCounts"] = $true }
     }
     return $o
 }
 if ($iList -ge 0 -and $iAlerts -gt $iList) {
     $listRow = Get-StarSettings $iList $iAlerts
     $alertRow = Get-StarSettings $iAlerts $dwIns.Count
-    if ($listRow.ContainsKey("ListStars") -and -not $listRow.ContainsKey("AlertStars") -and $alertRow.ContainsKey("AlertStars") -and -not $alertRow.ContainsKey("ListStars")) {
-        Ok "EntityListWindow.DrawWindow: the List: row uses ModConfig::ListStars(Text) only, the Alerts: row ModConfig::AlertStars(Text) only"
+    if ($listRow.ContainsKey("ListStars") -and $listRow.ContainsKey("ListCounts") -and -not $listRow.ContainsKey("AlertStars") -and -not $listRow.ContainsKey("AlertCounts") -and
+        $alertRow.ContainsKey("AlertStars") -and $alertRow.ContainsKey("AlertCounts") -and -not $alertRow.ContainsKey("ListStars") -and -not $alertRow.ContainsKey("ListCounts")) {
+        Ok "EntityListWindow.DrawWindow: the List: row uses its own only - ModConfig::ListStars(Text) and its count field - the Alerts: row its own only - ModConfig::AlertStars(Text) and its count field"
     } else {
         Fail ("EntityListWindow.DrawWindow: the List: row uses {0}; the Alerts: row uses {1}" -f (($listRow.Keys | Sort-Object) -join ", "), (($alertRow.Keys | Sort-Object) -join ", "))
     }
@@ -411,7 +475,7 @@ function Test-LiteralZero($ins, [int]$at) {
     if ($n -eq "ldc.i4.s" -or $n -eq "ldc.i4" -or $n -eq "ldc.i8") { return ([long]"$($p.Operand)" -eq 0) }
     return $false
 }
-function Get-ArgumentSources($ins, [int]$callAt, $handlers = $null, [int]$from = 0) {
+function Get-ArgumentSources($ins, [int]$callAt, $handlers = $null, [int]$from = 0, [bool]$ctorArgsOnly = $false) {
     # Replays the evaluation stack over the code before a call and returns, for each value the call consumes (the
     # instance first), the index of the instruction that pushed it; $null if it does not add up. A branch or return
     # starts a new statement (compiled C# has an empty stack there); a branch INSIDE the argument list (a ?:
@@ -419,6 +483,8 @@ function Get-ArgumentSources($ins, [int]$callAt, $handlers = $null, [int]$from =
     # with the exception object on an otherwise empty stack, which the straight replay never pushed. $from starts the
     # replay at a later instruction, which must start a statement: a ?: in an earlier statement's argument list
     # (GuideMode's toggle in DrawWindow, a cached lambda in Bind) leaves too few values for the rest of the method.
+    # For a newobj at $callAt the constructor's "this" is counted too, unless $ctorArgsOnly (0.9.0, the StarRule stores):
+    # then only its arguments, which a newobj whose value starts a statement leaves alone on the stack.
     $stack = New-Object System.Collections.ArrayList
     for ($k = $from; $k -lt $callAt; $k++) {
         $i = $ins[$k]
@@ -445,7 +511,7 @@ function Get-ArgumentSources($ins, [int]$callAt, $handlers = $null, [int]$from =
         elseif ($push -eq "Varpush" -and $i.Operand.ReturnType.FullName -eq "System.Void") { $nPush = 0 }
         for ($j = 0; $j -lt $nPush; $j++) { [void]$stack.Add($src) }
     }
-    $c = $ins[$callAt].Operand; $n = $c.Parameters.Count; if ($c.HasThis) { $n++ }
+    $c = $ins[$callAt].Operand; $n = $c.Parameters.Count; if ($c.HasThis -and -not ($ctorArgsOnly -and $ins[$callAt].OpCode.Name -eq "newobj")) { $n++ }
     if ($stack.Count -lt $n) { return $null }
     return ,@($stack.GetRange($stack.Count - $n, $n))
 }
@@ -563,6 +629,29 @@ function Get-Shape($m) {
         elseif ($null -ne $o) { "{0} {1}" -f $n, $o }
         else { $n }
     })
+}
+function Get-ShapeText($m) {
+    # Get-Shape, with a CR or LF in a string written as \r or \n, and a description (an ldstr of more than 100
+    # characters) as 'ldstr <text>': the cfg's wording is not this check's to hold.
+    @(Get-Shape $m | ForEach-Object { if ($_ -clike "ldstr *" -and $_.Length -gt 106) { "ldstr <text>" } else { $_.Replace("`r", "\r").Replace("`n", "\n") } })
+}
+function Get-HandlerText($m) {
+    $ins = @($m.Body.Instructions)
+    @($m.Body.ExceptionHandlers | ForEach-Object { "{0} {1} {2}..{3} {4}..{5}" -f $_.HandlerType, $(if ($_.CatchType) { $_.CatchType.FullName } else { "-" }),
+        [array]::IndexOf($ins, $_.TryStart), [array]::IndexOf($ins, $_.TryEnd), [array]::IndexOf($ins, $_.HandlerStart), [array]::IndexOf($ins, $_.HandlerEnd) })
+}
+function Test-ExactShape($typeName, $methodName, $want, $what, $handlers = @()) {
+    # The whole method, instruction by instruction, and its exception handlers (none unless listed).
+    $script:checks++
+    $where = "{0}.{1}" -f $typeName.Split('.')[-1], $methodName
+    $m = Get-Method $typeName $methodName
+    if (-not $m) { Fail "$where not found"; return }
+    $why = @()
+    $got = @(Get-ShapeText $m)
+    if (($got -join "`n") -cne (@($want) -join "`n")) { $why += ("it is not: {0} - it is: {1}" -f (@($want) -join "; "), ($got -join "; ")) }
+    $hGot = @(Get-HandlerText $m)
+    if (($hGot -join "; ") -cne (@($handlers) -join "; ")) { $why += ("its exception handlers are [{0}], not [{1}]" -f ($hGot -join "; "), (@($handlers) -join "; ")) }
+    if ($why.Count -eq 0) { Ok "${where}: $what" } else { Fail ("${where}: " + ($why -join "; ")) }
 }
 function Test-Calls($table) {
     # Each row: type, method, the call ("Type::Member", exactly one in the method; "Type::Member(ParamType,...)" names
@@ -1304,8 +1393,8 @@ foreach ($component in @("NearestWatched", "GameSession", "LogObserver")) {
 }
 
 Write-Output "== the game session =="
-# With KeepBetweenSessions off (the default), the watchlist and both star filters last one game session: the life of
-# the world's Game object.
+# With KeepBetweenSessions off (the default), the watchlist, both star filters and both star counts last one game
+# session: the life of the world's Game object.
 # GameSession.Update sees a session end or begin: Game.instance compared by reference with the Game of the last look
 # (bne.un - Unity's == would be a call of op_Equality, to which the destroyed Game of the world just left equals null,
 # so a logout would go unseen), and on a difference the new one stored, then ModConfig.ResetSession and
@@ -1348,10 +1437,12 @@ foreach ($pair in @(@("ModConfig::ResetSession", "GameSession.Update"), @("Watch
 Test-Calls @(,
     @("MobTracker.WatchAlerts", "ResetSession", "StarSetSettler::Reset", @("WatchAlerts::AlertStarsSettler"), $null)
 )
-# ModConfig.ResetSession: KeepBetweenSessions on returns before anything is written; otherwise each of the three
-# entries - Watchlist, ListStarFilter, AlertStarFilter - is written once, with its own default, while ConfigSaver.Each
-# is false (set false before the first write, put back in a finally around the writes, from the value read before),
-# and the file is saved once after them, through ConfigSaver.Save, which catches a failure (its own shape, below).
+# ModConfig.ResetSession: KeepBetweenSessions on returns before anything is written; otherwise each of the five
+# entries - Watchlist, ListStarFilter, ListStarCounts, AlertStarFilter, AlertStarCounts (the counts since 0.9.0) - is
+# written once, with its own default, while ConfigSaver.Each is false (set false before the first write, put back in a
+# finally around the writes, from the value read before), and the file is saved once after them, through
+# ConfigSaver.Save, which catches a failure (its own shape, below). The five Held texts are joined by one
+# String.Concat of an array (there is no five-string overload), in the order the reset's line names them.
 $checks++
 $why = @()
 $rs = Get-Method "MobTracker.ModConfig" "ResetSession"
@@ -1371,7 +1462,7 @@ else {
         $written += $field
         $writes += $k
     }
-    $expected = @("ModConfig::AlertStarsText", "ModConfig::ListStarsText", "ModConfig::WatchlistEntry")
+    $expected = @("ModConfig::AlertCountsText", "ModConfig::AlertStarsText", "ModConfig::ListCountsText", "ModConfig::ListStarsText", "ModConfig::WatchlistEntry")
     if ((@($written | Sort-Object -CaseSensitive) -join ",") -cne ($expected -join ",")) { $why += ("it writes {0}, not each of {1} once" -f ($written -join ", "), ($expected -join ", ")) }
     # The single save around the writes.
     $rsIns = @($rs.Body.Instructions)
@@ -1386,11 +1477,16 @@ else {
     if ($off.Count -ne 1 -or $first -lt 0 -or $off[0] -gt $first) { $why += "ConfigSaver.Each is not set false once, before the first write" }
     if ($fin.Count -ne 1) { $why += "ConfigSaver.Each is not put back (from a local) in a finally around the writes" }
     # SC-5: what decides whether the writes happen, and that the value put back is the one read before - exact.
-    $gate = @("ldsfld ModConfig::WatchlistEntry", "call ModConfig::Held", "ldsfld ModConfig::ListStarsText", "call ModConfig::Held",
-        "ldsfld ModConfig::AlertStarsText", "call ModConfig::Held", "call String::Concat", "stloc V0", "ldloc V0", "callvirt String::get_Length",
-        "brtrue ->16", "ret", "ldsfld ConfigSaver::Each", "stloc V1", "ldc.i4.0", "stsfld ConfigSaver::Each")
-    if ($shape.Count -lt 20 -or (($shape[4..19]) -join "`n") -cne ($gate -join "`n")) {
-        $why += ("after KeepBetweenSessions it is not: {0} - it is: {1}" -f ($gate -join "; "), (($shape | Select-Object -Skip 4 -First 16) -join "; "))
+    $gate = @("ldc.i4.5", "newarr System.String",
+        "dup", "ldc.i4.0", "ldsfld ModConfig::WatchlistEntry", "call ModConfig::Held", "stelem.ref",
+        "dup", "ldc.i4.1", "ldsfld ModConfig::ListStarsText", "call ModConfig::Held", "stelem.ref",
+        "dup", "ldc.i4.2", "ldsfld ModConfig::ListCountsText", "call ModConfig::Held", "stelem.ref",
+        "dup", "ldc.i4.3", "ldsfld ModConfig::AlertStarsText", "call ModConfig::Held", "stelem.ref",
+        "dup", "ldc.i4.4", "ldsfld ModConfig::AlertCountsText", "call ModConfig::Held", "stelem.ref",
+        "call String::Concat", "stloc V0", "ldloc V0", "callvirt String::get_Length",
+        "brtrue ->37", "ret", "ldsfld ConfigSaver::Each", "stloc V1", "ldc.i4.0", "stsfld ConfigSaver::Each")
+    if ($shape.Count -lt 41 -or (($shape[4..40]) -join "`n") -cne ($gate -join "`n")) {
+        $why += ("after KeepBetweenSessions it is not: {0} - it is: {1}" -f ($gate -join "; "), (($shape | Select-Object -Skip 4 -First 37) -join "; "))
     }
     if ($back.Count -ne 1 -or $shape[$back[0] - 1] -cne "ldloc V1") { $why += "the finally does not put back the ConfigSaver.Each value read before (ldloc V1)" }
     $held = Get-Method "MobTracker.ModConfig" "Held"
@@ -1405,7 +1501,7 @@ else {
         if ($x.OpCode.Name -eq "stsfld" -and $o -is [Mono.Cecil.FieldReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -ceq "ConfigSaver::Each") { $eachStores += ("{0}.{1}" -f $t.Name, $m.Name) } } } }
     if ((@($eachStores | Sort-Object -CaseSensitive) -join ", ") -cne "ConfigSaver..cctor, ModConfig.ResetSession, ModConfig.ResetSession") { $why += ("ConfigSaver.Each is stored by: " + ($eachStores -join ", ")) }
 }
-if ($why.Count -eq 0) { Ok "ModConfig.ResetSession: returns first when KeepBetweenSessions is on, and when Held finds every entry at its default; else writes Watchlist, ListStarFilter and AlertStarFilter each once, with its own default, with ConfigSaver.Each off (the value read before put back in a finally; Each stored nowhere else), then saves once through ConfigSaver.Save(""after the session reset"")" }
+if ($why.Count -eq 0) { Ok "ModConfig.ResetSession: returns first when KeepBetweenSessions is on, and when Held finds every entry at its default; else writes Watchlist, ListStarFilter, ListStarCounts, AlertStarFilter and AlertStarCounts each once, with its own default, with ConfigSaver.Each off (the value read before put back in a finally; Each stored nowhere else), then saves once through ConfigSaver.Save(""after the session reset"")" }
 else { Fail ("ModConfig.ResetSession: " + ($why -join "; ")) }
 # KeepBetweenSessions is General.KeepBetweenSessions, off unless the player turns it on.
 $checks++
@@ -1435,6 +1531,33 @@ else {
 }
 if ($why.Count -eq 0) { Ok "ModConfig.Bind: General.KeepBetweenSessions, default false - the choices last one game session unless the player keeps them" }
 else { Fail ("KeepBetweenSessions: " + ($why -join "; ")) }
+# The star counts (0.9.0) have settings of their own - a bare number in a filter is a category - each bound in its row's
+# section with an empty default (no count), right after its row's filter (the cfg lists them side by side), and
+# stored in its own field once.
+$checks++
+$why = @()
+if (-not $bind) { $why += "ModConfig.Bind not found" }
+else {
+    $ins = @($bind.Body.Instructions)
+    foreach ($c in @(@("ListCountsText", "General", "ListStarCounts", "ListStarsText"), @("AlertCountsText", "Alerts", "AlertStarCounts", "AlertStarsText"))) {
+        $st = @(for ($k = 0; $k -lt $ins.Count; $k++) { $o = $ins[$k].Operand; if ($ins[$k].OpCode.Name -eq "stsfld" -and $o -is [Mono.Cecil.FieldReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -ceq ("ModConfig::" + $c[0])) { $k } })
+        if ($st.Count -ne 1) { $why += ("ModConfig.{0} is stored {1} time(s) in Bind, expected once" -f $c[0], $st.Count); continue }
+        $call = $st[0] - 1
+        $op = $ins[$call].Operand
+        if (-not ($op -is [Mono.Cecil.MethodReference] -and $op.Name -eq "Bind" -and $op.DeclaringType.Name -eq "ConfigFile")) { $why += ("ModConfig.{0} is not stored straight from ConfigFile.Bind" -f $c[0]); continue }
+        $from = 0
+        for ($s = $call - 1; $s -ge 0; $s--) { if ($ins[$s].OpCode.Name -eq "stsfld") { $from = $s + 1; break } }
+        $before = if ($from -gt 0) { $ins[$from - 1].Operand } else { $null }
+        if (-not ($before -is [Mono.Cecil.FieldReference] -and ($before.DeclaringType.Name + "::" + $before.Name) -ceq ("ModConfig::" + $c[3]))) { $why += ("{0} is not bound right after {1}" -f $c[2], $c[3]) }
+        $src = Get-ArgumentSources $ins $call $bind.Body.ExceptionHandlers $from
+        if ($null -eq $src -or $src.Count -ne 5) { $why += ("{0}'s Bind call's values could not be traced" -f $c[2]); continue }
+        if ($ins[$src[1]].OpCode.Name -ne "ldstr" -or $ins[$src[1]].Operand -cne $c[1]) { $why += ("{0}'s section is not {1}" -f $c[2], $c[1]) }
+        if ($ins[$src[2]].OpCode.Name -ne "ldstr" -or $ins[$src[2]].Operand -cne $c[2]) { $why += ("ModConfig.{0}'s key is not {1}" -f $c[0], $c[2]) }
+        if ($ins[$src[3]].OpCode.Name -ne "ldstr" -or $ins[$src[3]].Operand -cne "") { $why += ("{0}'s default is not empty" -f $c[2]) }
+    }
+}
+if ($why.Count -eq 0) { Ok "ModConfig.Bind: General.ListStarCounts right after ListStarFilter and Alerts.AlertStarCounts right after AlertStarFilter, each with an empty default, each stored once in its own field" }
+else { Fail ("the star counts' settings: " + ($why -join "; ")) }
 # A Watch or Find area click is applied in the next Update while the list is open. Close drops both first (ldnull;
 # stsfld _pendingWatchToggle; ldarg.0; ldflda _pendingFind; initobj, before its IsOpen test), so neither runs at a later
 # opening, possibly in another world; and with no local player Update calls Close at once (the true branch of
@@ -1462,6 +1585,16 @@ else {
         if ($shape[$close - 1] -cne "ldarg.0" -or $shape[$close + 1] -cne "ret") { $why += "the first Close is not 'ldarg.0; call Close; ret'" }
         $keys = [array]::IndexOf($shape, "call EntityListWindow::HandleKeys")
         if ($keys -lt 0 -or $keys -lt $close) { $why += "the list's keys are read before the no-player test closes the list" }
+        # The star rows' count fields (0.9.0) are synced right after the no-player test and before the keys, inside
+        # 'if (IsOpen)': text typed in the last OnGUI is written even when this frame's key closes the list.
+        $syncs = @(for ($k = 0; $k -lt $shape.Count; $k++) { if ($shape[$k] -ceq "call EntityListWindow::SyncCounts") { $k } })
+        if ($syncs.Count -ne 1) { $why += ("SyncCounts is called {0} time(s) in Update, expected once" -f $syncs.Count) }
+        else {
+            $sy = $syncs[0]
+            $guard = @("call EntityListWindow::get_IsOpen", ("brfalse ->{0}" -f ($sy + 1)), "ldarg.0", "call EntityListWindow::SyncCounts")
+            if ($sy -ne $close + 5 -or (($shape[($sy - 3)..$sy]) -join "`n") -cne ($guard -join "`n")) { $why += ("the count fields are not synced right after the no-player test, as: {0}" -f ($guard -join "; ")) }
+            if ($keys -lt $sy) { $why += "the list's keys are read before the count fields are synced" }
+        }
         $eq = $close - 3
         if ($shape[$close - 2] -cnotlike "brfalse ->*" -or $shape[$eq] -cne "call Object::op_Equality") { $why += "the first Close is not in the branch of a == test" }
         else {
@@ -1470,7 +1603,7 @@ else {
         }
     }
 }
-if ($why.Count -eq 0) { Ok "EntityListWindow: Close drops a Watch and a Find area click still waiting before anything else, and Update closes the list on every frame with no local player, before it reads the list's keys" }
+if ($why.Count -eq 0) { Ok "EntityListWindow: Close drops a Watch and a Find area click still waiting before anything else, and Update closes the list on every frame with no local player, then, while the list is open, syncs the count fields, before it reads the list's keys" }
 else { Fail ("EntityListWindow: " + ($why -join "; ")) }
 # The parsed watchlist follows its entry: Bind adds exactly one SettingChanged handler to WatchlistEntry, and it is
 # Watchlist = Rules.ParseWatchlist(WatchlistEntry.Value), nothing else. Without it, the reset (and every Watch click)
@@ -1567,11 +1700,23 @@ foreach ($t in $plug.GetTypes()) {
 }
 if ($why.Count -eq 0) { Ok "AlertsRow.AlertsChangeMode is Settle (0) and static readonly: the Alerts: row's changes wait, and it empties to All" }
 else { Fail ("the Alerts: row's mode: " + ($why -join "; ")) }
-# Every store to ModConfig.ListStars or AlertStars is in ModConfig.Bind or a lambda written in it, and stores
-# ParseStars(<the field's own entry>, <whether None may be read>): the list's never (a literal false), the alerts' as the
-# Alerts: row's mode says (AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode)); each field is stored in Bind and in a
-# lambda. The replay starts after the store before, a statement start: Bind's cached lambdas leave a replay from the
-# method's start too few values.
+# Every store to ModConfig.ListStars or AlertStars is in ModConfig.Bind or a lambda written in it, and stores a new
+# StarRule(set, counts) - since 0.9.0 a row is its categories and its counts - in one of three forms, each where it
+# belongs: in Bind, set = ParseStars(<the field's own filter entry>, <whether None may be read>) and counts =
+# ParseCounts(<its own count entry>, default(StarCounts)); in its filter entry's handler, that set and the field's own
+# Counts as they are; in its count entry's handler, the field's own Set as it is and counts = ParseCounts(<its own
+# count entry>, the field's own Counts) - so a click keeps the counts, a count text that cannot be read keeps the counts
+# read before it, and neither row reads the other's entries. Each field is stored in each form once. None: the list's
+# never (a literal false), the alerts' as the Alerts: row's mode says (AlertsRow.EmptyIsNothing(AlertsRow.
+# AlertsChangeMode)). The replay starts after the store before, a statement start: Bind's cached lambdas leave a
+# replay from the method's start too few values.
+function Test-OwnPart($ins, [int]$at, $field, $part) {
+    # True when $ins[$at] pushes ModConfig.<field>.<part>: ldsflda ModConfig::<field>; ldfld StarRule::<part>.
+    if ($at -lt 1) { return $false }
+    $f = $ins[$at].Operand; $a = $ins[$at - 1].Operand
+    return $ins[$at].OpCode.Name -eq "ldfld" -and $f -is [Mono.Cecil.FieldReference] -and ($f.DeclaringType.Name + "::" + $f.Name) -eq "StarRule::$part" -and
+        $ins[$at - 1].OpCode.Name -eq "ldsflda" -and $a -is [Mono.Cecil.FieldReference] -and ($a.DeclaringType.Name + "::" + $a.Name) -eq "ModConfig::$field"
+}
 $checks++
 $why = @()
 $starStores = @{ "ListStars" = @(); "AlertStars" = @() }
@@ -1583,34 +1728,68 @@ foreach ($t in $plug.GetTypes()) {
             $op = $ins[$k].Operand
             if ($ins[$k].OpCode.Name -ne "stsfld" -or $op -isnot [Mono.Cecil.FieldReference] -or $op.DeclaringType.Name -ne "ModConfig" -or -not $starStores.ContainsKey($op.Name)) { continue }
             $where = "{0}.{1}" -f $t.Name, $m.Name
+            $field = $op.Name
             $inBind = ($t.FullName -eq "MobTracker.ModConfig" -and $m.Name -eq "Bind") -or ($t.FullName -like "MobTracker.ModConfig/*" -and $m.Name -like "<Bind>*")
-            if (-not $inBind) { $why += "$where stores ModConfig.$($op.Name), outside ModConfig.Bind"; continue }
+            if (-not $inBind) { $why += "$where stores ModConfig.$field, outside ModConfig.Bind"; continue }
             $prev = $ins[$k - 1].Operand
-            if ($ins[$k - 1].OpCode.Name -ne "call" -or $prev -isnot [Mono.Cecil.MethodReference] -or ($prev.DeclaringType.Name + "::" + $prev.Name) -ne "ModConfig::ParseStars") {
-                $why += "$where stores ModConfig.$($op.Name) from something other than ModConfig.ParseStars"; continue
+            if ($ins[$k - 1].OpCode.Name -ne "newobj" -or $prev -isnot [Mono.Cecil.MethodReference] -or ($prev.DeclaringType.Name + "::" + $prev.Name) -ne "StarRule::.ctor") {
+                $why += "$where stores ModConfig.$field from something other than new StarRule(set, counts)"; continue
             }
             $start = 0
             for ($s = $k - 2; $s -ge 0; $s--) { if ($ins[$s].OpCode.Name -eq "stsfld") { $start = $s + 1; break } }
-            $pa = Get-ArgumentSources $ins ($k - 1) $m.Body.ExceptionHandlers $start
-            if ($null -eq $pa -or $pa.Count -ne 2) { $why += "$where - ParseStars' values could not be traced"; continue }
-            $from = Get-SourceKey $m $ins $pa[0]
-            if ($from -ne ("ModConfig::" + $op.Name + "Text")) { $why += "$where parses ModConfig.$($op.Name) from $from"; continue }
-            if ($op.Name -eq "ListStars") {
-                if (-not (Test-LiteralZero $ins $pa[1])) { $why += ("{0} lets ModConfig.ListStars read None ({1}, not a literal false)" -f $where, $ins[$pa[1]].OpCode.Name); continue }
+            $ra = Get-ArgumentSources $ins ($k - 1) $m.Body.ExceptionHandlers $start $true
+            if ($null -eq $ra -or $ra.Count -ne 2) { $why += "$where - the StarRule's values could not be traced"; continue }
+            # The categories: ParseStars(the field's own filter entry, None as the row may), or the field's own Set.
+            $setKind = $null
+            if ((Get-SourceKey $m $ins $ra[0]) -eq "ModConfig::ParseStars") {
+                $pa = Get-ArgumentSources $ins $ra[0] $m.Body.ExceptionHandlers $start
+                if ($null -eq $pa -or $pa.Count -ne 2) { $why += "$where - ParseStars' values could not be traced"; continue }
+                $from = Get-SourceKey $m $ins $pa[0]
+                if ($from -ne ("ModConfig::" + $field + "Text")) { $why += "$where parses ModConfig.$field from $from"; continue }
+                if ($field -eq "ListStars") {
+                    if (-not (Test-LiteralZero $ins $pa[1])) { $why += ("{0} lets ModConfig.ListStars read None ({1}, not a literal false)" -f $where, $ins[$pa[1]].OpCode.Name); continue }
+                }
+                else {
+                    $allow = Get-SourceKey $m $ins $pa[1]
+                    $ma = if ($allow -eq "AlertsRow::EmptyIsNothing") { Get-ArgumentSources $ins $pa[1] $m.Body.ExceptionHandlers $start } else { $null }
+                    if ($null -eq $ma -or (Get-SourceKey $m $ins $ma[0]) -ne "AlertsRow::AlertsChangeMode") { $why += "$where lets ModConfig.AlertStars read None by $allow, not by AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode)"; continue }
+                }
+                $setKind = "parsed"
             }
-            else {
-                $allow = Get-SourceKey $m $ins $pa[1]
-                $ma = if ($allow -eq "AlertsRow::EmptyIsNothing") { Get-ArgumentSources $ins $pa[1] $m.Body.ExceptionHandlers $start } else { $null }
-                if ($null -eq $ma -or (Get-SourceKey $m $ins $ma[0]) -ne "AlertsRow::AlertsChangeMode") { $why += "$where lets ModConfig.AlertStars read None by $allow, not by AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode)"; continue }
+            elseif (Test-OwnPart $ins $ra[0] $field "Set") { $setKind = "kept" }
+            else { $why += ("{0} stores ModConfig.{1} with the categories of {2}" -f $where, $field, (Get-SourceKey $m $ins $ra[0])); continue }
+            # The counts: ParseCounts(the field's own count entry, what it keeps: none, or the field's own Counts), or the
+            # field's own Counts.
+            $countsEntry = $field -replace 'Stars$', 'CountsText'
+            $countsKind = $null
+            if ((Get-SourceKey $m $ins $ra[1]) -eq "ModConfig::ParseCounts") {
+                $ca = Get-ArgumentSources $ins $ra[1] $m.Body.ExceptionHandlers $start
+                if ($null -eq $ca -or $ca.Count -ne 2) { $why += "$where - ParseCounts' values could not be traced"; continue }
+                $from = Get-SourceKey $m $ins $ca[0]
+                if ($from -ne ("ModConfig::" + $countsEntry)) { $why += "$where reads ModConfig.$field's counts from $from"; continue }
+                $kt = $ca[1]
+                $none = $kt -ge 2 -and $ins[$kt].OpCode.Name -like "ldloc*" -and $ins[$kt].OpCode.Name -notlike "ldloca*" -and $ins[$kt - 1].OpCode.Name -eq "initobj" -and
+                    "$($ins[$kt - 1].Operand)" -eq "MobTracker.StarCounts" -and $ins[$kt - 2].OpCode.Name -like "ldloca*" -and (Get-VarIndex $ins[$kt - 2]) -eq (Get-VarIndex $ins[$kt])
+                if ($none) { $countsKind = "parsed, none kept" }
+                elseif (Test-OwnPart $ins $kt $field "Counts") { $countsKind = "parsed, own kept" }
+                else { $why += ("{0} keeps, for ModConfig.{1}'s counts it cannot read, {2}" -f $where, $field, (Get-SourceKey $m $ins $kt)); continue }
             }
-            $starStores[$op.Name] += $(if ($m.Name -eq "Bind") { "Bind" } else { "lambda" })
+            elseif (Test-OwnPart $ins $ra[1] $field "Counts") { $countsKind = "kept" }
+            else { $why += ("{0} stores ModConfig.{1} with the counts of {2}" -f $where, $field, (Get-SourceKey $m $ins $ra[1])); continue }
+            $form = switch ("$setKind/$countsKind") { "parsed/parsed, none kept" { "Bind" } "parsed/kept" { "filter handler" } "kept/parsed, own kept" { "count handler" } default { $null } }
+            if ($null -eq $form) { $why += ("{0} stores ModConfig.{1} with categories {2} and counts {3}" -f $where, $field, $setKind, $countsKind); continue }
+            if (($form -eq "Bind") -ne ($m.Name -eq "Bind")) { $why += "$where stores ModConfig.$field in the $form form"; continue }
+            $starStores[$field] += $form
         }
     }
 }
 foreach ($f in @("ListStars", "AlertStars")) {
-    if (@($starStores[$f]) -notcontains "Bind" -or @($starStores[$f]) -notcontains "lambda") { $why += ("ModConfig.{0} is parsed from {0}Text in: {1} - expected Bind and a lambda in it" -f $f, $(if ($starStores[$f].Count) { $starStores[$f] -join ", " } else { "nowhere" })) }
+    foreach ($form in @("Bind", "filter handler", "count handler")) {
+        $n = @($starStores[$f] | Where-Object { $_ -eq $form }).Count
+        if ($n -ne 1) { $why += ("ModConfig.{0} is stored in the {1} form {2} time(s), expected once" -f $f, $form, $n) }
+    }
 }
-if ($why.Count -eq 0) { Ok "ModConfig.ListStars and AlertStars are each stored only as ParseStars(their own *Text entry, None: never / as the mode says), in Bind and in a lambda written in it" }
+if ($why.Count -eq 0) { Ok "ModConfig.ListStars and AlertStars are each stored only as new StarRule(set, counts): in Bind ParseStars(own filter entry, None: never / as the mode says) and ParseCounts(own count entry, none kept); in a lambda that set and its own Counts; in a lambda its own Set and ParseCounts(own count entry, its own Counts kept)" }
 else { Fail ("the star filters' parsing: " + ($why -join "; ")) }
 # ParseStars returns what StarSets.Parse made of the entry's own value (not its default), with the caller's leave to read
 # None, as it is - stored once and returned - and warns exactly when Parse reported a problem: one LogWarning, jumped
@@ -1642,15 +1821,26 @@ if (-not $ps) { $why += "not found" } else {
 }
 if ($why.Count -eq 0) { Ok "ModConfig.ParseStars: StarSets.Parse(entry.Value, out problem, allowNone), returned as it is, and a warning only when problem is not null" }
 else { Fail ("ModConfig.ParseStars: " + ($why -join "; ")) }
-# The lambda that re-parses a filter is the SettingChanged handler of that filter's own entry, and each entry has one:
-# for each add_SettingChanged in Bind, the handler (the ldftn before it) and the entry (the ConfigEntry field loaded
-# before that), read backwards so that the delegate-caching IL of one C# version or another does not matter.
+# ParseCounts (0.9.0): StarCounts.TryParse(entry.Value, out counts, out problem); read, the counts it read; not read, one
+# warning - the setting, its value and StarCounts.Problem(problem, kept) - and kept returned: the counts read before it
+# (none at the start), never no count, which with no category marked would let every star level through.
+Test-ExactShape "MobTracker.ModConfig" "ParseCounts" @('ldarg.0', 'callvirt ConfigEntry`1::get_Value', 'ldloca V_0', 'ldloca V_1', 'call StarCounts::TryParse',
+    'brfalse ->8', 'ldloc V0', 'ret', 'ldsfld MobTrackerPlugin::Log', 'ldc.i4.7', 'newarr System.String', 'dup', 'ldc.i4.0', 'ldarg.0',
+    'callvirt ConfigEntryBase::get_Definition', 'callvirt ConfigDefinition::get_Section', 'stelem.ref', 'dup', 'ldc.i4.1', 'ldstr .', 'stelem.ref',
+    'dup', 'ldc.i4.2', 'ldarg.0', 'callvirt ConfigEntryBase::get_Definition', 'callvirt ConfigDefinition::get_Key', 'stelem.ref', 'dup', 'ldc.i4.3',
+    'ldstr  is ''', 'stelem.ref', 'dup', 'ldc.i4.4', 'ldarg.0', 'callvirt ConfigEntry`1::get_Value', 'stelem.ref', 'dup', 'ldc.i4.5', 'ldstr '': ',
+    'stelem.ref', 'dup', 'ldc.i4.6', 'ldloc V1', 'ldarg.1', 'call StarCounts::Problem', 'stelem.ref', 'call String::Concat',
+    'callvirt ManualLogSource::LogWarning', 'ldarg.1', 'ret') "StarCounts.TryParse(entry.Value, out counts, out problem): the counts it read, or one warning - the setting, its value, StarCounts.Problem(problem, kept) - and kept returned"
+# The lambda that re-reads a row is the SettingChanged handler of one of that row's own two entries, and each of the
+# four entries - the filters' and, since 0.9.0, the counts' - has one: for each add_SettingChanged in Bind, the handler
+# (the ldftn before it) and the entry (the ConfigEntry field loaded before that), read backwards so that the
+# delegate-caching IL of one C# version or another does not matter.
 $checks++
 $why = @()
 $bm = Get-Method "MobTracker.ModConfig" "Bind"
 $bi = if ($bm) { @($bm.Body.Instructions) } else { @() }
-$reparsed = @{ "ListStarsText" = 0; "AlertStarsText" = 0 }
-$alertHandler = $null   # the handler that re-parses AlertStars, for the revision check below
+$reparsed = @{ "ListStarsText" = 0; "ListCountsText" = 0; "AlertStarsText" = 0; "AlertCountsText" = 0 }
+$alertHandlers = @{}   # the Alerts: row's two handlers, for the revision check below
 foreach ($q in @(Get-CallAt $bi 'ConfigEntry`1::add_SettingChanged')) {
     $fn = -1; for ($k = $q - 1; $k -ge 0; $k--) { if ($bi[$k].OpCode.Name -eq "ldftn") { $fn = $k; break } }
     $en = -1; for ($k = $fn - 1; $k -ge 0; $k--) { $o = $bi[$k].Operand; if ($bi[$k].OpCode.Name -eq "ldsfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.DeclaringType.Name -eq "ModConfig" -and $o.FieldType.Name -eq 'ConfigEntry`1') { $en = $k; break } }
@@ -1660,19 +1850,21 @@ foreach ($q in @(Get-CallAt $bi 'ConfigEntry`1::add_SettingChanged')) {
     $ht = if ($hd -and $hd.HasBody) { Get-Touches $hd } else { @{} }
     $sets = @(@("ListStars", "AlertStars") | Where-Object { $ht.ContainsKey("store ModConfig::$_") })
     if ($reparsed.ContainsKey($entry)) {
-        $want = $entry -replace 'Text$', ''
-        if (($sets -join ",") -ne $want) { $why += ("{0}'s SettingChanged handler stores {1}, not {2} alone" -f $entry, $(if ($sets.Count) { $sets -join ", " } else { "neither filter" }), $want) }
-        else { $reparsed[$entry]++; if ($entry -eq "AlertStarsText") { $alertHandler = $hd.FullName } }
+        $want = if ($entry -clike "List*") { "ListStars" } else { "AlertStars" }
+        if (($sets -join ",") -ne $want) { $why += ("{0}'s SettingChanged handler stores {1}, not {2} alone" -f $entry, $(if ($sets.Count) { $sets -join ", " } else { "neither row" }), $want) }
+        else { $reparsed[$entry]++; if ($want -eq "AlertStars") { $alertHandlers[$entry] = $hd.FullName } }
     }
     elseif ($sets.Count -gt 0) { $why += ("{0}'s SettingChanged handler stores {1}" -f $entry, ($sets -join ", ")) }
 }
-foreach ($e in @("ListStarsText", "AlertStarsText")) { if ($reparsed[$e] -ne 1) { $why += ("{0} has {1} handler(s) re-parsing its filter, expected 1" -f $e, $reparsed[$e]) } }
-if ($why.Count -eq 0) { Ok "ModConfig.Bind: ListStarsText's SettingChanged re-parses ListStars, AlertStarsText's AlertStars, one handler each" }
+foreach ($e in @("ListStarsText", "ListCountsText", "AlertStarsText", "AlertCountsText")) { if ($reparsed[$e] -ne 1) { $why += ("{0} has {1} handler(s) re-reading its row, expected 1" -f $e, $reparsed[$e]) } }
+if ($why.Count -eq 0) { Ok "ModConfig.Bind: ListStarsText's and ListCountsText's SettingChanged re-read ListStars, AlertStarsText's and AlertCountsText's AlertStars, one handler each" }
 else { Fail ("ModConfig.Bind: " + ($why -join "; ")) }
-# The settled set's wait restarts at every change of AlertStarsText, also one that leaves AlertStars as it was
-# (ConfigurationManager writes at every keystroke, and a text with no word it knows yet reads as All): ModConfig.AlertStarsRevision
-# counts the changes, and is stored exactly once in the plugin, as AlertStarsRevision++ (ldsfld; ldc.i4.1; add;
-# stsfld), in the handler found above to re-parse AlertStars. (What reads it: the AlertsRow.Effective row above.)
+# The settled row's wait restarts at every change of the Alerts: row, also one that leaves AlertStars as it was
+# (ConfigurationManager writes at every keystroke, and a text with no word it knows yet marks no category; since 0.9.0
+# a keystroke in the row's field that writes nothing): ModConfig.AlertStarsRevision counts the changes, and is stored
+# exactly once in the plugin, as AlertStarsRevision++ (ldsfld; ldc.i4.1; add; stsfld), in ModConfig.AlertRowChanged,
+# which is called exactly from the two handlers found above to re-read AlertStars and from EntityListWindow.SyncCounts
+# (the field's keystroke that wrote nothing), once each. (What reads it: the AlertsRow.Effective row above.)
 $checks++
 $why = @()
 $revStores = @()
@@ -1692,13 +1884,47 @@ foreach ($t in $plug.GetTypes()) {
 }
 if ($revStores.Count -ne 1) { $why += ("ModConfig.AlertStarsRevision is stored {0} time(s) in the plugin, expected once" -f $revStores.Count) }
 elseif (-not $revStores[0].Shape) { $why += "ModConfig.AlertStarsRevision is not stored as AlertStarsRevision++" }
-elseif ($null -eq $alertHandler -or $revStores[0].Method -ne $alertHandler) { $why += ("ModConfig.AlertStarsRevision is counted in {0}, not in AlertStarsText's SettingChanged handler" -f $revStores[0].Method) }
-if ($why.Count -eq 0) { Ok "ModConfig.AlertStarsRevision++ only in AlertStarsText's SettingChanged handler: every change of the text restarts the Alerts: wait" }
-else { Fail ("the Alerts: text's revision: " + ($why -join "; ")) }
+elseif ($revStores[0].Method -cne "System.Void MobTracker.ModConfig::AlertRowChanged()") { $why += ("ModConfig.AlertStarsRevision is counted in {0}, not in ModConfig.AlertRowChanged" -f $revStores[0].Method) }
+$rowCalls = @()
+foreach ($t in $plug.GetTypes()) {
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($x in $m.Body.Instructions) {
+            $o = $x.Operand
+            if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "ModConfig::AlertRowChanged") {
+                $rowCalls += $(if ($alertHandlers["AlertStarsText"] -ceq $m.FullName) { "AlertStarsText's handler" } elseif ($alertHandlers["AlertCountsText"] -ceq $m.FullName) { "AlertCountsText's handler" } else { "{0}.{1}" -f $t.Name, $m.Name })
+            }
+        }
+    }
+}
+$wantRowCalls = @("AlertCountsText's handler", "AlertStarsText's handler", "EntityListWindow.SyncCounts")
+if ((@($rowCalls | Sort-Object -CaseSensitive) -join ", ") -cne ($wantRowCalls -join ", ")) { $why += ("ModConfig.AlertRowChanged is called from: {0}; expected {1}, once each" -f $(if ($rowCalls.Count) { @($rowCalls | Sort-Object -CaseSensitive) -join ", " } else { "nowhere" }), ($wantRowCalls -join ", ")) }
+if ($why.Count -eq 0) { Ok "ModConfig.AlertStarsRevision++ only in ModConfig.AlertRowChanged, called once each by AlertStarsText's and AlertCountsText's SettingChanged handlers and EntityListWindow.SyncCounts: every change of the Alerts: row restarts its wait" }
+else { Fail ("the Alerts: row's revision: " + ($why -join "; ")) }
+# Each Alerts: handler (0.9.0) is exactly its store, then ModConfig.AlertRowChanged() with no test in between: a write
+# that leaves the row as it was restarts the wait too - ConfigurationManager writes at every keystroke, and a word half
+# typed, or a count text that cannot be read yet, leaves the row as it was.
+$checks++
+$why = @()
+$hShapes = @{
+    "AlertStarsText" = @('ldsfld ModConfig::AlertStarsText', 'ldsfld AlertsRow::AlertsChangeMode', 'call AlertsRow::EmptyIsNothing', 'call ModConfig::ParseStars',
+        'ldsflda ModConfig::AlertStars', 'ldfld StarRule::Counts', 'newobj StarRule::.ctor', 'stsfld ModConfig::AlertStars', 'call ModConfig::AlertRowChanged', 'ret');
+    "AlertCountsText" = @('ldsflda ModConfig::AlertStars', 'ldfld StarRule::Set', 'ldsfld ModConfig::AlertCountsText', 'ldsflda ModConfig::AlertStars',
+        'ldfld StarRule::Counts', 'call ModConfig::ParseCounts', 'newobj StarRule::.ctor', 'stsfld ModConfig::AlertStars', 'call ModConfig::AlertRowChanged', 'ret') }
+foreach ($e in @("AlertStarsText", "AlertCountsText")) {
+    $hm = $null
+    foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if ($m.FullName -ceq $alertHandlers[$e]) { $hm = $m } } }
+    if (-not $hm) { $why += "$e's handler was not found"; continue }
+    $got = @(Get-ShapeText $hm)
+    if (($got -join "`n") -cne ($hShapes[$e] -join "`n")) { $why += ("{0}'s handler is not: {1} - it is: {2}" -f $e, ($hShapes[$e] -join "; "), ($got -join "; ")) }
+    if (@(Get-HandlerText $hm).Count -gt 0) { $why += "$e's handler has a try block" }
+}
+if ($why.Count -eq 0) { Ok "ModConfig.Bind: each Alerts: handler stores its row, then calls ModConfig.AlertRowChanged with no test in between - every write restarts the wait" }
+else { Fail ("the Alerts: handlers: " + ($why -join "; ")) }
 # Each window row, button by button (the loop counter i): shows StarSets.IsMarked(<its own filter>, StarButtons[i]) as
 # GUILayout.Toggle(marked, StarChoices[i], ...), writes only when the toggle's answer differs from marked (beq skips the
 # write), and writes its own entry, once, as StarSets.Format(StarSets.Toggle(<its own filter>, StarButtons[i]...)):
-# the List: row with the two-value Toggle (taking off the last category gives All), the Alerts: row with the mode's
+# the List: row with the two-value Toggle (taking off the last category leaves the set All), the Alerts: row with the mode's
 # leave to empty to None (AlertsRow.EmptyIsNothing(AlertsRow.AlertsChangeMode), kept in a local). The rows' ranges are
 # the ones found above; each replay starts at the row's label, a statement start.
 function Get-ElementVar($ins, $at, $arrayKey) {
@@ -1778,6 +2004,76 @@ if ($iList -lt 0 -or $iAlerts -le $iList) { $why += "the row labels were not fou
 }
 if ($why.Count -eq 0) { Ok "EntityListWindow.DrawWindow: the List: row is enabled only as GUI.enabled && !_allTypes, and GUI.enabled is put back after it" }
 else { Fail ("EntityListWindow.DrawWindow: " + ($why -join "; ")) }
+# Each star row's count field (0.9.0): after the row's buttons, one DrawCounts(<its own field>, <whether it takes
+# typing>, <its control name>) - the List: row's after its last button and before GUI.enabled is put back, taking typing
+# only as !_allTypes (ldfld _allTypes; ldc.i4.0; ceq), named MobTracker_ListCounts; the Alerts: row's taking typing
+# always (a literal true), named MobTracker_AlertCounts. And each row's Clear, once, on its own field, inside the click
+# branch after the write, under StarButtons[i] == StarFilter.All (4): only a click on All empties the field.
+$checks++
+$why = @()
+if ($iList -lt 0 -or $iAlerts -le $iList) { $why += "the row labels were not found" } else {
+    foreach ($row in @(@("List:", "_listCounts", $iList, $iAlerts, "MobTracker_ListCounts"), @("Alerts:", "_alertCounts", $iAlerts, $dwIns.Count, "MobTracker_AlertCounts"))) {
+        $lo = $row[2]; $hi = $row[3]
+        $draws = @(for ($k = $lo; $k -lt $hi; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "EntityListWindow::DrawCounts") { $k } })
+        $clears = @(for ($k = $lo; $k -lt $hi; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "CountsField::Clear") { $k } })
+        $toggles = @(for ($k = $lo; $k -lt $hi; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "GUILayout::Toggle" -and $o.Parameters.Count -ge 2 -and $o.Parameters[1].ParameterType.Name -eq "GUIContent") { $k } })
+        $writes = @(for ($k = $lo; $k -lt $hi; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq 'ConfigEntry`1::set_Value') { $k } })
+        if ($draws.Count -ne 1 -or $clears.Count -ne 1 -or $toggles.Count -ne 1 -or $writes.Count -ne 1) { $why += ("the {0} row has {1} DrawCounts, {2} Clear, {3} toggle(s), {4} write(s), not one each" -f $row[0], $draws.Count, $clears.Count, $toggles.Count, $writes.Count); continue }
+        $d = $draws[0]
+        $a = Get-ArgumentSources $dwIns $d $dw.Body.ExceptionHandlers $lo
+        if ($null -eq $a -or $a.Count -ne 3) { $why += "the $($row[0]) row's DrawCounts could not be traced"; continue }
+        if ((Get-SourceKey $dw $dwIns $a[0]) -ne ("EntityListWindow::" + $row[1])) { $why += ("the {0} row draws {1}, not its own {2}" -f $row[0], (Get-SourceKey $dw $dwIns $a[0]), $row[1]) }
+        if ($dwIns[$a[2]].OpCode.Name -ne "ldstr" -or "$($dwIns[$a[2]].Operand)" -cne $row[4]) { $why += ("the {0} row's field is not named {1}" -f $row[0], $row[4]) }
+        if ($d -lt $toggles[0]) { $why += "the $($row[0]) row's field is drawn before its buttons" }
+        if ($row[0] -eq "List:") {
+            $tk = $a[1]
+            $ok = $tk -ge 2 -and $dwIns[$tk].OpCode.Name -eq "ceq" -and $dwIns[$tk - 1].OpCode.Name -eq "ldc.i4.0" -and $dwIns[$tk - 2].OpCode.Name -eq "ldfld" -and "$($dwIns[$tk - 2].Operand.Name)" -ceq "_allTypes"
+            if (-not $ok) { $why += "the List: row's field takes typing other than as !_allTypes" }
+            $en = @(for ($k = $lo; $k -lt $hi; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "GUI::set_enabled") { $k } })
+            if ($en.Count -ne 2 -or $d -gt $en[1]) { $why += "the List: row's field is not drawn before GUI.enabled is put back" }
+        }
+        elseif ($dwIns[$a[1]].OpCode.Name -ne "ldc.i4.1") { $why += "the Alerts: row's field does not always take typing (a literal true)" }
+        # The Clear: on its own field, after the write, inside the toggle's click branch, under StarButtons[i] == All, i
+        # the row's button (the index its IsMarked is given).
+        $c = $clears[0]
+        $skip = if ($dwIns[$toggles[0] + 2].OpCode.Name -like "beq*") { [array]::IndexOf($dwIns, $dwIns[$toggles[0] + 2].Operand) } else { -1 }
+        if ($c -lt $writes[0] -or $skip -le $c) { $why += "the $($row[0]) row's Clear is not inside its click branch, after the write" }
+        if ($dwIns[$c - 1].OpCode.Name -ne "ldfld" -or "$($dwIns[$c - 1].Operand.Name)" -cne $row[1] -or $dwIns[$c - 2].OpCode.Name -ne "ldarg.0") { $why += ("the {0} row's Clear is not on its own {1}" -f $row[0], $row[1]) }
+        $marksAt = @(for ($k = $lo; $k -lt $hi; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "StarSets::IsMarked") { $k } })
+        $ma = if ($marksAt.Count -eq 1) { Get-ArgumentSources $dwIns $marksAt[0] $dw.Body.ExceptionHandlers $lo } else { $null }
+        $iv = if ($null -ne $ma -and $ma.Count -eq 2) { Get-ElementVar $dwIns $ma[1] "EntityListWindow::StarButtons" } else { -1 }
+        $g = $c - 3
+        $guard = $iv -ge 0 -and $g -ge 4 -and $dwIns[$g].OpCode.Name -like "bne.un*" -and [array]::IndexOf($dwIns, $dwIns[$g].Operand) -eq ($c + 1) -and
+            $dwIns[$g - 1].OpCode.Name -eq "ldc.i4.4" -and (Get-ElementVar $dwIns ($g - 2) "EntityListWindow::StarButtons") -eq $iv
+        if (-not $guard) { $why += "the $($row[0]) row's Clear is not under 'StarButtons[i] == StarFilter.All', i the row's button" }
+    }
+}
+if ($why.Count -eq 0) { Ok "EntityListWindow.DrawWindow: each row draws its own count field once after its buttons - the List: row's taking typing only as !_allTypes, inside its GUI.enabled span, the Alerts: row's always - each named for the focus test; a click on a row's All, and only that, empties its own field" }
+else { Fail ("EntityListWindow.DrawWindow, the count fields: " + ($why -join "; ")) }
+# Switching to the all-types view with the List: row's field in use gives the keyboard to the search box (0.9.0):
+# after both rows are drawn - so the field's name is known to IMGUI in this event - 'if (_allTypes &&
+# GUI.GetNameOfFocusedControl() == "MobTracker_ListCounts") _focusSearch = true;', exactly, right before the search box's
+# focus block; and nowhere else.
+$checks++
+$why = @()
+$fc = @(for ($k = 0; $k -lt $dwIns.Count; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "GUI::GetNameOfFocusedControl") { $k } })
+$lastDraw = @(for ($k = 0; $k -lt $dwIns.Count; $k++) { $o = $dwIns[$k].Operand; if ($o -is [Mono.Cecil.MethodReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -eq "EntityListWindow::DrawCounts") { $k } }) | Select-Object -Last 1
+if ($fc.Count -ne 1) { $why += ("GUI.GetNameOfFocusedControl is asked {0} time(s) in DrawWindow, expected once" -f $fc.Count) }
+else {
+    $g = $fc[0]
+    $dwShape = @(Get-Shape $dw)
+    $after = $g + 7
+    $want = @("ldarg.0", "ldfld EntityListWindow::_allTypes", "brfalse ->$after", "call GUI::GetNameOfFocusedControl", "ldstr MobTracker_ListCounts",
+        "call String::op_Equality", "brfalse ->$after", "ldarg.0", "ldc.i4.1", "stfld EntityListWindow::_focusSearch", "ldarg.0", "ldfld EntityListWindow::_focusSearch")
+    if ($g -lt 3 -or $g + 9 -ge $dwShape.Count -or (($dwShape[($g - 3)..($g + 8)]) -join "`n") -cne ($want -join "`n")) {
+        $why += ("it is not: {0} - it is: {1}" -f ($want -join "; "), (($dwShape | Select-Object -Skip ([Math]::Max(0, $g - 3)) -First 12) -join "; "))
+    }
+    if ($null -eq $lastDraw -or $g -lt $lastDraw) { $why += "the test comes before the count fields are drawn" }
+    $trues = @(for ($k = 1; $k -lt $dwShape.Count; $k++) { if ($dwShape[$k] -ceq "stfld EntityListWindow::_focusSearch" -and $dwShape[$k - 1] -ceq "ldc.i4.1") { $k } })
+    if ($trues.Count -ne 1) { $why += ("DrawWindow sets _focusSearch true {0} time(s), expected once" -f $trues.Count) }
+}
+if ($why.Count -eq 0) { Ok "EntityListWindow.DrawWindow: after the count fields are drawn, the search box takes the keyboard when the all-types view is on and the List: row's field has it - nothing else sets _focusSearch there" }
+else { Fail ("EntityListWindow.DrawWindow, the focus move: " + ($why -join "; ")) }
 
 Write-Output "== failure isolation =="
 # A creature with no ZNetView (its Awake failed after it went on the game's list) throws on every network read, ending the
@@ -1841,6 +2137,23 @@ Test-Wiring @(
         "EntityListWindow::_allTypes", "EntityListWindow::_appliedAllTypes", "ModConfig::ListStars", "EntityListWindow::_appliedListStars"), @("ModConfig::AlertStars", "ModConfig::AlertStarsText")),
     @("MobTracker.EntityListWindow", "OnGUI", @("Mathf::Clamp", "Rect::set_x", "Rect::set_y", "Screen::get_width", "Screen::get_height"), @())
 )
+# The list's row as last applied is compared whole (0.9.0): PlayerChanged's last test is ModConfig.ListStars !=
+# _appliedListStars through StarRule's operator, so a change of the counts alone refreshes the list at once, also with
+# the pointer on the window (a test of the categories or the counts alone would leave the list stale until the pointer
+# leaves); and Update stores the row as a plain copy (ldarg.0; ldsfld ModConfig::ListStars; stfld _appliedListStars),
+# its only store.
+Test-ExactShape "MobTracker.EntityListWindow" "PlayerChanged" @('ldarg.0', 'ldfld EntityListWindow::_refreshNow', 'brtrue ->19', 'ldarg.0',
+    'ldfld EntityListWindow::_query', 'ldarg.0', 'ldfld EntityListWindow::_appliedQuery', 'call String::op_Inequality', 'brtrue ->19', 'ldarg.0',
+    'ldfld EntityListWindow::_allTypes', 'ldarg.0', 'ldfld EntityListWindow::_appliedAllTypes', 'bne.un ->19', 'ldsfld ModConfig::ListStars',
+    'ldarg.0', 'ldfld EntityListWindow::_appliedListStars', 'call StarRule::op_Inequality', 'ret', 'ldc.i4.1', 'ret') "_refreshNow, the search, the view, then ModConfig.ListStars != _appliedListStars - the whole row, categories and counts"
+$checks++
+$applied = @()
+foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }; $ins = @($m.Body.Instructions); for ($k = 0; $k -lt $ins.Count; $k++) { $o = $ins[$k].Operand
+    if (($ins[$k].OpCode.Name -eq "stfld" -or $ins[$k].OpCode.Name -eq "ldflda") -and $o -is [Mono.Cecil.FieldReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -ceq "EntityListWindow::_appliedListStars") {
+        $plain = $ins[$k].OpCode.Name -eq "stfld" -and $k -ge 2 -and $ins[$k - 1].OpCode.Name -eq "ldsfld" -and ($ins[$k - 1].Operand.DeclaringType.Name + "::" + $ins[$k - 1].Operand.Name) -ceq "ModConfig::ListStars" -and $ins[$k - 2].OpCode.Name -eq "ldarg.0"
+        $applied += ("{0}.{1} {2}" -f $t.Name, $m.Name, $(if ($plain) { "plain copy" } else { $ins[$k].OpCode.Name })) } } } }
+if ((@($applied) -join ", ") -ceq "EntityListWindow.Update plain copy") { Ok "EntityListWindow._appliedListStars is stored only in Update, as a plain copy of ModConfig.ListStars" }
+else { Fail ("EntityListWindow._appliedListStars is written by: {0}; expected one plain copy of ModConfig.ListStars in Update" -f $(if ($applied.Count) { $applied -join ", " } else { "nothing" })) }
 # GUI.matrix is IMGUI's global state: each OnGUI that scales puts back the matrix it found - the window's in a finally around
 # GUILayout.Window, the HUD label's after its last Label.
 $checks++
@@ -2204,7 +2517,8 @@ if (-not $cAt) { $why += "WaypointerCompat.ApplyTo not found" } else {
 if ($why.Count -eq 0) { Ok "WaypointerCompat.ApplyTo patches public static IsTypingElsewhere() with prefix Prefix and finalizer Finalizer, nothing else" }
 else { Fail ("WaypointerCompat.ApplyTo: " + ($why -join "; ")) }
 # (4) Where it looks: both editions' GUIDs, in Chainloader.PluginInfos; applied once, from Start (in Awake TomTom's
-#     assembly is not loaded yet: BepInEx creates the plugins in GUID order, com.mobtracker before DoomMachine).
+#     assembly is not loaded yet: BepInEx creates the plugins in case-insensitive GUID order, DoomMachine.MobTracker
+#     before DoomMachine.TomTom and DoomMachine.Wayfinder).
 $checks++
 $cc = Get-Method "MobTracker.WaypointerCompat" ".cctor"
 $gl = if ($cc) { @($cc.Body.Instructions | Where-Object { $_.OpCode.Name -eq "ldstr" } | ForEach-Object { "$($_.Operand)" }) } else { @() }
@@ -2361,16 +2675,21 @@ $shape = $e -ge 8 -and $dwIns[$e - 1].OpCode.Name -eq "ldc.i4.0" -and @("br", "b
 if ($shape) { Ok "EntityListWindow.DrawWindow: the List: row's GUI.enabled is 'enabled && !_allTypes' (false when either is)" }
 else { Fail "EntityListWindow.DrawWindow: the List: row's GUI.enabled is not exactly 'enabled && !_allTypes'" }
 
-# The title names the list's categories exactly when a category is marked: _appliedListStars == All (0) branches
-# (brfalse) to " creatures loaded", and StarSets.Label sits on the other path [S32].
+# The title names the list's row exactly when a category is marked or a count is typed: StarSets.IsAll(
+# _appliedListStars) - no category, no None and, since 0.9.0, no count - branches (brtrue) to " creatures loaded", and
+# StarSets.Label sits on the other path [S32]; a test of the categories alone would call a row of counts only
+# "creatures loaded".
 $checks++
 $pgm = Get-Method "MobTracker.EntityListWindow" "OnGUI"; $pgi = @($pgm.Body.Instructions)
 $ld = @(for ($k = 0; $k -lt $pgi.Count; $k++) { if ($pgi[$k].OpCode.Name -eq "ldstr" -and "$($pgi[$k].Operand)" -eq " creatures loaded") { $k } })
 $lb = @(Get-CallAt $pgi "StarSets::Label")
-$tt = @(for ($k = 0; $k -lt $pgi.Count - 1; $k++) { $o = $pgi[$k].Operand; if ($pgi[$k].OpCode.Name -eq "ldfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.Name -eq "_appliedListStars" -and $pgi[$k + 1].OpCode.Name -like "br*") { $k } })
-if ($ld.Count -eq 1 -and $tt.Count -eq 1 -and $lb.Count -eq 1 -and $pgi[$tt[0] + 1].OpCode.Name -like "brfalse*" -and [array]::IndexOf($pgi, $pgi[$tt[0] + 1].Operand) -eq $ld[0] -and $lb[0] -gt $tt[0] -and $lb[0] -lt $ld[0]) {
-    Ok "EntityListWindow.OnGUI: the title says 'creatures loaded' only for _appliedListStars == All, and names the categories otherwise" }
-else { Fail "EntityListWindow.OnGUI: the title's test is not '_appliedListStars == All ? creatures loaded : Label(...)'" }
+$tt = @(for ($k = 0; $k -lt $pgi.Count - 2; $k++) { $o = $pgi[$k].Operand; $c = $pgi[$k + 1].Operand
+    if ($pgi[$k].OpCode.Name -eq "ldfld" -and $o -is [Mono.Cecil.FieldReference] -and $o.Name -eq "_appliedListStars" -and $c -is [Mono.Cecil.MethodReference] -and
+        ($c.DeclaringType.Name + "::" + $c.Name) -eq "StarSets::IsAll" -and $c.Parameters.Count -eq 1 -and $c.Parameters[0].ParameterType.FullName -eq "MobTracker.StarRule" -and
+        $pgi[$k + 2].OpCode.Name -like "br*") { $k } })
+if ($ld.Count -eq 1 -and $tt.Count -eq 1 -and $lb.Count -eq 1 -and $pgi[$tt[0] + 2].OpCode.Name -like "brtrue*" -and [array]::IndexOf($pgi, $pgi[$tt[0] + 2].Operand) -eq $ld[0] -and $lb[0] -gt $tt[0] -and $lb[0] -lt $ld[0]) {
+    Ok "EntityListWindow.OnGUI: the title says 'creatures loaded' only when StarSets.IsAll(_appliedListStars) - no category and no count - and names the row otherwise" }
+else { Fail "EntityListWindow.OnGUI: the title's test is not 'StarSets.IsAll(_appliedListStars) ? creatures loaded : Label(...)'" }
 
 # Each star row's loop runs i from 0 while i < StarButtons.Length, so it draws every button [S33, S34].
 $checks++
@@ -2416,30 +2735,8 @@ Write-Output "== the log (0.7.0) =="
 # are written by Events, through ModLog.Event, at Info. The listener runs inside every plugin's log call, on its thread,
 # with nothing round it: what it may do is pinned here as exact IL shapes, like the ones above - a legitimate rewrite
 # fails them and must be re-read against the method's IL (ILSpy or Mono.Cecil), not loosened until they pass.
-# Each shape below was read against the C# it compiles from (0.7.0 design, 2026-10-02).
-function Get-ShapeText($m) {
-    # Get-Shape, with a CR or LF in a string written as \r or \n, and a description (an ldstr of more than 100
-    # characters) as 'ldstr <text>': the cfg's wording is not this check's to hold.
-    @(Get-Shape $m | ForEach-Object { if ($_ -clike "ldstr *" -and $_.Length -gt 106) { "ldstr <text>" } else { $_.Replace("`r", "\r").Replace("`n", "\n") } })
-}
-function Get-HandlerText($m) {
-    $ins = @($m.Body.Instructions)
-    @($m.Body.ExceptionHandlers | ForEach-Object { "{0} {1} {2}..{3} {4}..{5}" -f $_.HandlerType, $(if ($_.CatchType) { $_.CatchType.FullName } else { "-" }),
-        [array]::IndexOf($ins, $_.TryStart), [array]::IndexOf($ins, $_.TryEnd), [array]::IndexOf($ins, $_.HandlerStart), [array]::IndexOf($ins, $_.HandlerEnd) })
-}
-function Test-ExactShape($typeName, $methodName, $want, $what, $handlers = @()) {
-    # The whole method, instruction by instruction, and its exception handlers (none unless listed).
-    $script:checks++
-    $where = "{0}.{1}" -f $typeName.Split('.')[-1], $methodName
-    $m = Get-Method $typeName $methodName
-    if (-not $m) { Fail "$where not found"; return }
-    $why = @()
-    $got = @(Get-ShapeText $m)
-    if (($got -join "`n") -cne (@($want) -join "`n")) { $why += ("it is not: {0} - it is: {1}" -f (@($want) -join "; "), ($got -join "; ")) }
-    $hGot = @(Get-HandlerText $m)
-    if (($hGot -join "; ") -cne (@($handlers) -join "; ")) { $why += ("its exception handlers are [{0}], not [{1}]" -f ($hGot -join "; "), (@($handlers) -join "; ")) }
-    if ($why.Count -eq 0) { Ok "${where}: $what" } else { Fail ("${where}: " + ($why -join "; ")) }
-}
+# Each shape below was read against the C# it compiles from (0.7.0 design, 2026-10-02). (Get-ShapeText, Get-HandlerText
+# and Test-ExactShape stand after Get-Shape, near the top: since 0.9.0 the star filters' checks use them too.)
 function Get-CallTable($match) {
     # "Caller.Method -> Type::Member xN" for every call (or newobj) of a member whose "Type::Name" matches; a compiler-made
     # nested type is named without its number (<Search>d__N), which changes with unrelated edits.
@@ -2540,21 +2837,22 @@ $Shape_LogFile_Ours = @('ldarg.1', 'call LogRules::NamesMobTracker', 'brtrue ->5
     'ldloc V1', 'ret')
 $Handlers_LogFile_Ours = @('Finally - 10..26 26..31')
 $Shape_ModLog_Event = @('ldsfld ModLog::Verbose', 'brfalse ->5', 'ldsfld MobTrackerPlugin::Log', 'ldarg.0', 'callvirt ManualLogSource::LogInfo', 'ret')
-$Shape_LogObserver_Update = @('call LogFile::ReportNotice', 'ldsfld ModLog::Verbose', 'brtrue ->10', 'ldarg.0', 'ldc.i4.0', 'stfld LogObserver::_known', 'ldarg.0',
-    'ldc.i4.m1', 'stfld LogObserver::_generation', 'ret', 'call Events::FlushSettings', 'ldsfld Player::m_localPlayer', 'ldnull',
-    'call Object::op_Inequality', 'stloc V0', 'call WatchAlerts::get_EffectiveAlertStars', 'stloc V1', 'ldarg.0', 'ldfld LogObserver::_known',
-    'brfalse ->26', 'ldloc V0', 'ldarg.0', 'ldfld LogObserver::_player', 'beq ->26', 'ldloc V0', 'call Events::PlayerPresence', 'ldarg.0',
-    'ldfld LogObserver::_known', 'brfalse ->35', 'ldloc V1', 'ldarg.0', 'ldfld LogObserver::_stars', 'beq ->35', 'ldloc V1',
-    'call Events::AlertStars', 'ldarg.0', 'ldloc V0', 'stfld LogObserver::_player', 'ldarg.0', 'ldloc V1', 'stfld LogObserver::_stars', 'ldarg.0',
-    'ldc.i4.1', 'stfld LogObserver::_known', 'call Tracker::get_IsTracking', 'brtrue ->50', 'ldarg.0', 'ldc.i4.m1',
-    'stfld LogObserver::_generation', 'ret', 'call Tracker::get_Generation', 'ldarg.0', 'ldfld LogObserver::_generation', 'beq ->61', 'ldarg.0',
-    'call Tracker::get_Generation', 'stfld LogObserver::_generation', 'ldarg.0', 'ldc.i4.2', 'stfld LogObserver::_wait', 'ret', 'ldarg.0',
-    'ldfld LogObserver::_wait', 'ldc.i4.0', 'ble ->78', 'ldarg.0', 'ldarg.0', 'ldfld LogObserver::_wait', 'ldc.i4.1', 'sub',
-    'stfld LogObserver::_wait', 'ldarg.0', 'ldfld LogObserver::_wait', 'brtrue ->77', 'ldarg.0', 'call Tracker::get_GuideHiddenNow',
-    'stfld LogObserver::_guideHidden', 'ret',
-    'call Tracker::get_GuideHiddenNow', 'ldarg.0', 'ldfld LogObserver::_guideHidden', 'beq ->88', 'ldarg.0', 'call Tracker::get_GuideHiddenNow',
-    'stfld LogObserver::_guideHidden', 'ldarg.0', 'ldfld LogObserver::_guideHidden', 'call Events::Guide',
-    'ret')
+# (0.9.0: the Alerts: row in effect is a StarRule, compared whole - categories and counts - through its operator, so a
+# change of the counts alone is said too.)
+$Shape_LogObserver_Update = @('call LogFile::ReportNotice', 'ldsfld ModLog::Verbose', 'brtrue ->10', 'ldarg.0', 'ldc.i4.0',
+    'stfld LogObserver::_known', 'ldarg.0', 'ldc.i4.m1', 'stfld LogObserver::_generation', 'ret', 'call Events::FlushSettings',
+    'ldsfld Player::m_localPlayer', 'ldnull', 'call Object::op_Inequality', 'stloc V0', 'call WatchAlerts::get_EffectiveAlertStars', 'stloc V1',
+    'ldarg.0', 'ldfld LogObserver::_known', 'brfalse ->26', 'ldloc V0', 'ldarg.0', 'ldfld LogObserver::_player', 'beq ->26', 'ldloc V0',
+    'call Events::PlayerPresence', 'ldarg.0', 'ldfld LogObserver::_known', 'brfalse ->36', 'ldloc V1', 'ldarg.0', 'ldfld LogObserver::_stars',
+    'call StarRule::op_Inequality', 'brfalse ->36', 'ldloc V1', 'call Events::AlertStars', 'ldarg.0', 'ldloc V0', 'stfld LogObserver::_player',
+    'ldarg.0', 'ldloc V1', 'stfld LogObserver::_stars', 'ldarg.0', 'ldc.i4.1', 'stfld LogObserver::_known', 'call Tracker::get_IsTracking',
+    'brtrue ->51', 'ldarg.0', 'ldc.i4.m1', 'stfld LogObserver::_generation', 'ret', 'call Tracker::get_Generation', 'ldarg.0',
+    'ldfld LogObserver::_generation', 'beq ->62', 'ldarg.0', 'call Tracker::get_Generation', 'stfld LogObserver::_generation', 'ldarg.0', 'ldc.i4.2',
+    'stfld LogObserver::_wait', 'ret', 'ldarg.0', 'ldfld LogObserver::_wait', 'ldc.i4.0', 'ble ->79', 'ldarg.0', 'ldarg.0',
+    'ldfld LogObserver::_wait', 'ldc.i4.1', 'sub', 'stfld LogObserver::_wait', 'ldarg.0', 'ldfld LogObserver::_wait', 'brtrue ->78', 'ldarg.0',
+    'call Tracker::get_GuideHiddenNow', 'stfld LogObserver::_guideHidden', 'ret', 'call Tracker::get_GuideHiddenNow', 'ldarg.0',
+    'ldfld LogObserver::_guideHidden', 'beq ->89', 'ldarg.0', 'call Tracker::get_GuideHiddenNow', 'stfld LogObserver::_guideHidden', 'ldarg.0',
+    'ldfld LogObserver::_guideHidden', 'call Events::Guide', 'ret')
 # Tracker.TamedNow's line (0.8.0): what is tracked and whether Always track nearest watched is on, as the lost line has
 # it, and the empty-look memory cleared for the wait that may follow - inside the catch every verbose site has.
 $Shape_Events_Tamed = @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'ldnull', 'stsfld Events::_lastEmptyLook', 'call Tracker::get_Tracked',
@@ -2671,18 +2969,23 @@ Test-ExactShape "MobTracker.LogFile" "Switched" $Shape_LogFile_Switched "only a 
 Test-ExactShape "MobTracker.LogFile" "Bound" $Shape_LogFile_Bound "ends the binding window, then writes the settings line inside a catch that only hands the failure to Broke" $Handlers_LogFile_Bound
 
 # Who starts and stops it: Awake begins with the log source, then ConfigSaver.Take (0.7.1: BepInEx saves nothing from
-# here on - before the first setting is bound, so a read-only cfg cannot throw out of a Bind), LogFile.Start (the folder
-# beside LogOutput.log and the game's folder), ModConfig.Bind, LogFile.Bound - so ModConfig.Bind's warnings reach the
-# file - then ConfigSaver.Watch (after the last Bind: the first save, and the last handler on the whole cfg); OnDestroy
-# starts with ConfigSaver.Stop and ends with LogFile.Stop; the file is opened only by Start and Switched, and only
-# those two places touch BepInEx's listeners.
+# here on - before the first setting is bound, so a read-only cfg cannot throw out of a Bind); then (0.9.0) with an older
+# MobTracker loaded beside it - OldSettings.OlderVersion(Chainloader.PluginInfos) not null - one warning
+# (EventLines.OlderCopyLoaded) and a return, so it stays off: no setting, no file, no component, no patch; else
+# OldSettings.Copy (the settings of 0.8.0 and earlier, before the first Bind), LogFile.Start (the folder beside
+# LogOutput.log and the game's folder), OldSettings.Report (once the file may be open), ModConfig.Bind, LogFile.Bound - so
+# ModConfig.Bind's warnings reach the file - then ConfigSaver.Watch (after the last Bind: the first save, and the last
+# handler on the whole cfg); OnDestroy starts with ConfigSaver.Stop and ends with LogFile.Stop; the file is opened only
+# by Start and Switched, and only those two places touch BepInEx's listeners.
 $checks++
 $why = @()
 $awWant = @("ldarg.0", "call BaseUnityPlugin::get_Logger", "stsfld MobTrackerPlugin::Log", "ldarg.0", "call BaseUnityPlugin::get_Config",
-    "call ConfigSaver::Take", "ldarg.0", "call BaseUnityPlugin::get_Config",
-    "call Paths::get_BepInExRootPath", "call Paths::get_GameRootPath", "call LogFile::Start", "ldarg.0", "call BaseUnityPlugin::get_Config",
-    "call ModConfig::Bind", "ldarg.0", "call BaseUnityPlugin::get_Config", "call LogFile::Bound", "ldarg.0", "call BaseUnityPlugin::get_Config",
-    "call ConfigSaver::Watch")
+    "call ConfigSaver::Take", "call Chainloader::get_PluginInfos", "call OldSettings::OlderVersion", "stloc V0", "ldloc V0", "brfalse ->16",
+    "ldsfld MobTrackerPlugin::Log", "ldloc V0", "call EventLines::OlderCopyLoaded", "callvirt ManualLogSource::LogWarning", "ret",
+    "ldarg.0", "call BaseUnityPlugin::get_Config", "call OldSettings::Copy", "ldarg.0", "call BaseUnityPlugin::get_Config",
+    "call Paths::get_BepInExRootPath", "call Paths::get_GameRootPath", "call LogFile::Start", "call OldSettings::Report", "ldarg.0",
+    "call BaseUnityPlugin::get_Config", "call ModConfig::Bind", "ldarg.0", "call BaseUnityPlugin::get_Config", "call LogFile::Bound", "ldarg.0",
+    "call BaseUnityPlugin::get_Config", "call ConfigSaver::Watch")
 $awGot = if ($awake) { @(Get-Shape $awake | Select-Object -First $awWant.Count) } else { @() }
 if (($awGot -join "`n") -cne ($awWant -join "`n")) { $why += ("Awake does not start with: {0} - it starts with: {1}" -f ($awWant -join "; "), ($awGot -join "; ")) }
 $odm = Get-Method "MobTracker.MobTrackerPlugin" "OnDestroy"
@@ -2694,8 +2997,16 @@ $lifeWant = @("LogFile.Open -> Logger::get_Listeners x1", "LogFile.Start -> LogF
     "MobTrackerPlugin.OnDestroy -> LogFile::Stop x1")
 $lifeGot = Get-CallTable '^(LogFile::(Start|Bound|Stop|Open)|Logger::get_Listeners)$'
 if (($lifeGot -join "; ") -cne ($lifeWant -join "; ")) { $why += ("the calls that start, open and stop the file are [{0}], not [{1}]" -f ($lifeGot -join "; "), ($lifeWant -join "; ")) }
-if ($why.Count -eq 0) { Ok "MobTrackerPlugin: Awake turns BepInEx's saving off first (ConfigSaver.Take), then starts the log (LogFile.Start, ModConfig.Bind, LogFile.Bound), then ConfigSaver.Watch; OnDestroy tries a failed save once more first and stops the log last; only Start and Switched open the file" }
+if ($why.Count -eq 0) { Ok "MobTrackerPlugin: Awake turns BepInEx's saving off first (ConfigSaver.Take), then stays off with one warning beside an older MobTracker, else copies the settings of 0.8.0 and earlier (OldSettings.Copy), starts the log (LogFile.Start), says what the copy did (OldSettings.Report), ModConfig.Bind, LogFile.Bound, then ConfigSaver.Watch; OnDestroy tries a failed save once more first and stops the log last; only Start and Switched open the file" }
 else { Fail ("the log's start and stop: " + ($why -join "; ")) }
+# Start (0.9.0) returns first when Awake stayed off - _harmony is made only past the stay-off return - so nothing of
+# TomTom's or Wayfinder's is patched for a plugin that is off.
+$checks++
+$stm = Get-Method "MobTracker.MobTrackerPlugin" "Start"
+$stGot = if ($stm) { @(Get-Shape $stm | Select-Object -First 4) } else { @() }
+$stWant = @("ldarg.0", "ldfld MobTrackerPlugin::_harmony", "brtrue ->4", "ret")
+if (($stGot -join "`n") -ceq ($stWant -join "`n")) { Ok "MobTrackerPlugin.Start: returns first when _harmony is null (Awake stayed off beside an older MobTracker)" }
+else { Fail ("MobTrackerPlugin.Start does not start with: {0} - it starts with: {1}" -f ($stWant -join "; "), ($stGot -join "; ")) }
 
 # Opening the file: MobTracker.log taken first (OpenOrCreate, ReadWrite, sharing Read only - a second copy of the game
 # fails here and touches nothing), never again in this game start (_opened right after), its lines copied to
@@ -2704,9 +3015,13 @@ else { Fail ("the log's start and stop: " + ($why -join "; ")) }
 # - one thrown out of Awake would drop the plugin - and said with its type only (an IOException's message holds the
 # path). What the catch calls to let the file go has a catch of its own, held below (Shut, Dispose, CloseQuietly).
 Test-ExactShape "MobTracker.LogFile" "Open" $Shape_LogFile_Open "takes MobTracker.log first (OpenOrCreate, ReadWrite, FileShare.Read), copies it to MobTracker-prev.log and only then empties it, writes UTF-8 without a BOM, flushed per line, adds the listener last, and catches every failure of the open, said by type only (what its catch calls to let the file go - Dispose, Shut, CloseQuietly - is held to its own shape and catch below)" $Handlers_LogFile_Open
-# The file and folder calls are Open's alone, and LogFile never writes an exception's message or stack.
+# The file and folder calls are Open's alone - and, since 0.9.0, the copy of the settings file of 0.8.0 and earlier, in
+# OldSettings.Copy: two File.Exists, one File.Copy, and the copy's read-only attribute read and cleared (File.Copy keeps
+# it), nothing else, so the older file is never moved, deleted or written - and LogFile never writes an exception's
+# message or stack.
 $checks++
 $io = @()
+$copyCalls = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
 foreach ($t in $plug.GetTypes()) {
     foreach ($m in $t.Methods) {
         if (-not $m.HasBody) { continue }
@@ -2716,13 +3031,50 @@ foreach ($t in $plug.GetTypes()) {
             $dt = $o.DeclaringType.FullName
             $isFile = @("System.IO.File", "System.IO.Directory", "System.IO.FileInfo", "System.IO.DirectoryInfo", "System.IO.FileStream", "System.IO.StreamWriter") -ccontains $dt -or
                 ($dt -ceq "System.IO.Stream" -and @("SetLength", "CopyTo") -ccontains $o.Name) -or ($dt -ceq "System.Environment" -and $o.Name -ceq "GetFolderPath")
-            if ($isFile -and -not ($t.Name -ceq "LogFile" -and $m.Name -ceq "Open")) { $io += ("{0}.{1} -> {2}::{3}" -f $t.Name, $m.Name, $o.DeclaringType.Name, $o.Name) }
+            if ($isFile -and $t.Name -ceq "OldSettings" -and $m.Name -ceq "Copy") {
+                $k = "OldSettings.Copy -> {0}::{1}" -f $o.DeclaringType.Name, $o.Name
+                if ($copyCalls.ContainsKey($k)) { $copyCalls[$k] = $copyCalls[$k] + 1 } else { $copyCalls[$k] = 1 }
+            }
+            elseif ($isFile -and -not ($t.Name -ceq "LogFile" -and $m.Name -ceq "Open")) { $io += ("{0}.{1} -> {2}::{3}" -f $t.Name, $m.Name, $o.DeclaringType.Name, $o.Name) }
             if ($t.Name -ceq "LogFile" -and $dt -ceq "System.Exception" -and @("get_Message", "ToString", "get_StackTrace") -ccontains $o.Name) { $io += ("LogFile.{0} -> Exception::{1}" -f $m.Name, $o.Name) }
         }
     }
 }
-if ($io.Count -eq 0) { Ok "only LogFile.Open opens, copies or empties a file or reads a folder; LogFile names an exception by its type only" }
-else { Fail ("file calls outside LogFile.Open, or an exception's message in LogFile: " + ($io -join "; ")) }
+$copyGot = @($copyCalls.Keys | Sort-Object -CaseSensitive | ForEach-Object { "{0} x{1}" -f $_, $copyCalls[$_] })
+$copyWant = @("OldSettings.Copy -> File::Copy x1", "OldSettings.Copy -> File::Exists x2", "OldSettings.Copy -> File::GetAttributes x1", "OldSettings.Copy -> File::SetAttributes x1")
+if (($copyGot -join "; ") -cne ($copyWant -join "; ")) { $io += ("OldSettings.Copy's file calls are [{0}], not [{1}]" -f ($copyGot -join "; "), ($copyWant -join "; ")) }
+if ($io.Count -eq 0) { Ok "only LogFile.Open opens, copies or empties a file or reads a folder, and OldSettings.Copy tests both cfgs, copies the older one and clears the copy's read-only attribute; LogFile names an exception by its type only" }
+else { Fail ("file calls outside LogFile.Open and OldSettings.Copy's own, or an exception's message in LogFile: " + ($io -join "; ")) }
+
+# The settings file of 0.8.0 and earlier (0.9.0, OldSettings; D-006). Copy: the line to report reset first; target =
+# config.ConfigFilePath, old = <its folder>\com.mobtracker.plugin.cfg; a target that exists, or no old file, returns
+# with nothing to say; File.Copy(old, target, false) - never over a file - then the copy's read-only attribute cleared,
+# in a try whose catch (any exception) keeps SettingsNotCopied(<the exception's type>) as a warning and returns; then
+# config.Reload() in a second try whose catch keeps SettingsNotAllRead(<type>), else SettingsCopied as Info. A throw out
+# of either would leave Awake, and MobTracker would not load; an exception's message holds a full path.
+Test-ExactShape "MobTracker.OldSettings" "Copy" @('ldnull', 'stsfld OldSettings::_line', 'ldc.i4.0', 'stsfld OldSettings::_warning', 'ldarg.0',
+    'callvirt ConfigFile::get_ConfigFilePath', 'stloc V0', 'ldloc V0', 'call Path::GetDirectoryName', 'ldstr com.mobtracker.plugin.cfg',
+    'call Path::Combine', 'stloc V1', 'ldloc V0', 'call File::Exists', 'brtrue ->18', 'ldloc V1', 'call File::Exists', 'brtrue ->19', 'leave ->56',
+    'ldloc V1', 'ldloc V0', 'ldc.i4.0', 'call File::Copy', 'ldloc V0', 'call File::GetAttributes', 'stloc V2', 'ldloc V2', 'ldc.i4.1', 'and',
+    'brfalse ->35', 'ldloc V0', 'ldloc V2', 'ldc.i4 -2', 'and', 'call File::SetAttributes', 'leave ->43', 'ldc.i4.1', 'stsfld OldSettings::_warning',
+    'callvirt Exception::GetType', 'callvirt MemberInfo::get_Name', 'call EventLines::SettingsNotCopied', 'stsfld OldSettings::_line', 'leave ->56',
+    'nop', 'ldarg.0', 'callvirt ConfigFile::Reload', 'call EventLines::SettingsCopied', 'stsfld OldSettings::_line', 'leave ->56', 'ldc.i4.1',
+    'stsfld OldSettings::_warning', 'callvirt Exception::GetType', 'callvirt MemberInfo::get_Name', 'call EventLines::SettingsNotAllRead',
+    'stsfld OldSettings::_line', 'leave ->56', 'ret') "with no DoomMachine.MobTracker.cfg and a com.mobtracker.plugin.cfg beside it, copies the older file, never over a file, clears the copy's read-only attribute and has BepInEx read it, each step in a catch that keeps one line by the exception's type only" @('Catch System.Exception 4..36 36..43', 'Catch System.Exception 44..49 49..56')
+# Report: the line Copy kept, once - cleared as it is said - as a warning when Copy failed, else as Info; nothing when
+# Copy had nothing to say.
+Test-ExactShape "MobTracker.OldSettings" "Report" @('ldsfld OldSettings::_line', 'stloc V0', 'ldloc V0', 'brtrue ->5', 'ret', 'ldnull', 'stsfld OldSettings::_line',
+    'ldsfld OldSettings::_warning', 'brfalse ->13', 'ldsfld MobTrackerPlugin::Log', 'ldloc V0', 'callvirt ManualLogSource::LogWarning', 'ret',
+    'ldsfld MobTrackerPlugin::Log', 'ldloc V0', 'callvirt ManualLogSource::LogInfo', 'ret') "says Copy's line once, a warning when Copy failed, else Info, and nothing when there is none"
+# OlderVersion: the loaded plugin under the old id exactly (TryGetValue with the literal com.mobtracker.plugin, as BepInEx
+# keys Chainloader.PluginInfos) - its version, or "version unknown" - else null; in a catch that returns null, so the
+# test can never stop MobTracker loading. (Awake hands it Chainloader.PluginInfos: Awake's start, above.)
+Test-ExactShape "MobTracker.OldSettings" "OlderVersion" @('ldarg.0', 'brfalse ->9', 'ldarg.0', 'ldstr com.mobtracker.plugin', 'ldloca V_0',
+    'callvirt IDictionary`2::TryGetValue', 'brfalse ->9', 'ldloc V0', 'brtrue ->12', 'ldnull', 'stloc V1', 'leave ->33', 'ldloc V0',
+    'callvirt PluginInfo::get_Metadata', 'brfalse ->21', 'ldloc V0', 'callvirt PluginInfo::get_Metadata', 'callvirt BepInPlugin::get_Version',
+    'ldnull', 'call Version::op_Inequality', 'brtrue ->23', 'ldstr version unknown', 'br ->27', 'ldloc V0', 'callvirt PluginInfo::get_Metadata',
+    'callvirt BepInPlugin::get_Version', 'callvirt Object::ToString', 'stloc V1', 'leave ->33', 'pop', 'ldnull', 'stloc V1', 'leave ->33', 'ldloc V1',
+    'ret') "the version of a plugin loaded under the old id com.mobtracker.plugin, exactly, or null - in a catch that returns null" @('Catch System.Exception 0..29 29..33')
 
 # The listener: returns at once while the file is shut; MobTracker's own source - by reference, not by name - goes
 # through LogRules.ToFile with ErrorLog and the verbose flag; another source only through LogRules.Foreign, and an
@@ -2794,13 +3146,16 @@ Test-ExactShape "MobTracker.ModLog" "Event" $Shape_ModLog_Event "a verbose line 
 $mlWant = @("ConfigSaver.Save -> ManualLogSource::LogInfo x1", "ConfigSaver.Save -> ManualLogSource::LogWarning x1",
     "Ding.Routed -> ManualLogSource::LogInfo x1", "Ding.Routed -> ManualLogSource::LogWarning x1", "Events.Failed -> ManualLogSource::LogWarning x1",
     "Hotkeys.Refuse -> ManualLogSource::LogWarning x1", "LogFile.Open -> ManualLogSource::LogWarning x1", "LogFile.ReportNotice -> ManualLogSource::LogWarning x1",
-    "LogFile.Switched -> ManualLogSource::LogMessage x1", "MobTrackerPlugin.Awake -> ManualLogSource::LogInfo x1", "MobTrackerPlugin.Patch -> ManualLogSource::LogError x1",
-    "MobTrackerPlugin.Start -> ManualLogSource::LogError x1", "ModConfig.ParseStars -> ManualLogSource::LogWarning x1", "ModConfig.ResetSession -> ManualLogSource::LogInfo x1",
+    "LogFile.Switched -> ManualLogSource::LogMessage x1", "MobTrackerPlugin.Awake -> ManualLogSource::LogInfo x1",
+    "MobTrackerPlugin.Awake -> ManualLogSource::LogWarning x1", "MobTrackerPlugin.Patch -> ManualLogSource::LogError x1",
+    "MobTrackerPlugin.Start -> ManualLogSource::LogError x1", "ModConfig.ParseCounts -> ManualLogSource::LogWarning x1",
+    "ModConfig.ParseStars -> ManualLogSource::LogWarning x1", "ModConfig.ResetSession -> ManualLogSource::LogInfo x1",
     "ModLog.Event -> ManualLogSource::LogInfo x1", "NearestWatched.Cancel -> ManualLogSource::LogInfo x1",
-    "NearestWatched.Lost -> ManualLogSource::LogInfo x1", "NearestWatched.Update -> ManualLogSource::LogInfo x2", "SpawnFinder.Report -> ManualLogSource::LogInfo x3",
+    "NearestWatched.Lost -> ManualLogSource::LogInfo x1", "NearestWatched.Update -> ManualLogSource::LogInfo x2",
+    "OldSettings.Report -> ManualLogSource::LogInfo x1", "OldSettings.Report -> ManualLogSource::LogWarning x1", "SpawnFinder.Report -> ManualLogSource::LogInfo x3",
     "Tracker.Awake -> ManualLogSource::LogError x1", "WatchAlerts.Update -> ManualLogSource::LogWarning x1", "WaypointerCompat.ApplyTo -> ManualLogSource::LogError x1",
     "WaypointerCompat.ApplyTo -> ManualLogSource::LogInfo x1", "WaypointerCompat.ApplyTo -> ManualLogSource::LogWarning x1")
-Test-Table (Get-CallTable '^ManualLogSource::Log') $mlWant "every log line is a 0.6.0 line, a warning of the log's own, a switch note (Message), the cfg's save lines (0.7.1) or a verbose line through ModLog.Event (Info); no Debug line" "the log lines by method and level"
+Test-Table (Get-CallTable '^ManualLogSource::Log') $mlWant "every log line is a 0.6.0 line, a warning of the log's own, a switch note (Message), the cfg's save lines (0.7.1), a star count's warning, the settings-file copy's two lines and the stay-off warning (0.9.0) or a verbose line through ModLog.Event (Info); no Debug line" "the log lines by method and level"
 $evWant = @(Get-CallTable '^ModLog::Event$' | Where-Object { $_ -cnotlike "Events.*" })
 $checks++
 if ($evWant.Count -eq 0 -and @(Get-CallTable '^ModLog::Event$').Count -gt 0) { Ok "ModLog.Event is called only from Events" } else { Fail ("ModLog.Event is called from outside Events: " + ($evWant -join "; ")) }
@@ -2809,7 +3164,8 @@ if ($evWant.Count -eq 0 -and @(Get-CallTable '^ModLog::Event$').Count -gt 0) { O
 # creature helper or anywhere that runs per frame beyond the ones listed (LogObserver writes changes only, and
 # HandleKeys' ListKeyCheck writes only on a refused press). With VerboseLog off each returns at once (below).
 $siteWant = @("<Search>d__N.MoveNext -> Events::FindDone x1", "Ding.FindGuiGroup -> Events::DingGroupSearchFailed x1", "Ding.Play -> Events::DingNotPlayed x1",
-    "Ding.Play -> Events::DingPlayed x1", "EntityListWindow.Close -> Events::ListClosed x1", "EntityListWindow.DrawWindow -> Events::Clicked x2",
+    "Ding.Play -> Events::DingPlayed x1", "EntityListWindow.ApplyCounts -> Events::CountsUnreadable x1",
+    "EntityListWindow.Close -> Events::ListClosed x1", "EntityListWindow.DrawWindow -> Events::Clicked x2",
     "EntityListWindow.DrawWindow -> Events::RowClicked x3", "EntityListWindow.DrawWindow -> Events::ViewSwitched x1", "EntityListWindow.HandleKeys -> Events::ListKeyCheck x1",
     "EntityListWindow.Open -> Events::ListOpened x1", "LogObserver.Update -> Events::AlertStars x1", "LogObserver.Update -> Events::FlushSettings x1",
     "LogObserver.Update -> Events::Guide x1", "LogObserver.Update -> Events::PlayerPresence x1",
@@ -2972,11 +3328,15 @@ if ($why.Count -eq 0) { Ok "ModConfig.Bind ends with Events.Watch" } else { Fail
 # changed setting before it tells anyone, uncaught, so a read-only cfg threw out of the setter and no handler ran: its
 # SaveOnConfigSet is turned off once, by ConfigSaver.Take (first in Awake), and the file is saved by ConfigSaver.Save
 # alone. Every Bind sits in LogFile.Start or ModConfig.Bind - after Take, before Watch, by Awake's exact start above -
-# and the cfg-wide handlers are Events.Watch's and ConfigSaver.Watch's, the saver last. ConfigSaver's own calls: Take
-# and Watch from Awake, Stop from OnDestroy, Save from its own three and from the session reset.
+# and the cfg-wide handlers are Events.Watch's and ConfigSaver.Watch's, the saver last. The one Reload is
+# OldSettings.Copy's (0.9.0): it reads the copied settings file of 0.8.0 and earlier before the first Bind, which
+# changes no setting and writes nothing; without it the start's save would write the defaults over the copy.
+# ConfigSaver's own calls: Take and Watch from Awake, Stop from OnDestroy, Save from its own three and from the session
+# reset.
 $cfgWant = @("ConfigSaver.Save -> ConfigFile::Save x1", "ConfigSaver.Take -> ConfigFile::set_SaveOnConfigSet x1", "ConfigSaver.Watch -> ConfigFile::add_SettingChanged x1",
-    "Events.Watch -> ConfigFile::add_SettingChanged x1", "LogFile.Start -> ConfigFile::Bind x2", "ModConfig.Bind -> ConfigFile::Bind x12")
-Test-Table (Get-CallTable '^ConfigFile::(Save|Reload|Bind|set_SaveOnConfigSet|add_SettingChanged|remove_SettingChanged)$') $cfgWant "the cfg is bound only in LogFile.Start and ModConfig.Bind, saved only by ConfigSaver.Save, its SaveOnConfigSet set only by ConfigSaver.Take, and listened to by Events.Watch and ConfigSaver.Watch only" "the cfg's calls"
+    "Events.Watch -> ConfigFile::add_SettingChanged x1", "LogFile.Start -> ConfigFile::Bind x2", "ModConfig.Bind -> ConfigFile::Bind x14",
+    "OldSettings.Copy -> ConfigFile::Reload x1")
+Test-Table (Get-CallTable '^ConfigFile::(Save|Reload|Bind|set_SaveOnConfigSet|add_SettingChanged|remove_SettingChanged)$') $cfgWant "the cfg is bound only in LogFile.Start and ModConfig.Bind, read again only by OldSettings.Copy (before the first Bind), saved only by ConfigSaver.Save, its SaveOnConfigSet set only by ConfigSaver.Take, and listened to by Events.Watch and ConfigSaver.Watch only" "the cfg's calls"
 $csWant = @("ConfigSaver.SettingChanged -> ConfigSaver::Save x1", "ConfigSaver.Stop -> ConfigSaver::Save x1", "ConfigSaver.Watch -> ConfigSaver::Save x1",
     "MobTrackerPlugin.Awake -> ConfigSaver::Take x1", "MobTrackerPlugin.Awake -> ConfigSaver::Watch x1", "MobTrackerPlugin.OnDestroy -> ConfigSaver::Stop x1",
     "ModConfig.ResetSession -> ConfigSaver::Save x1")
@@ -3013,6 +3373,13 @@ Test-ExactShape "MobTracker.Events" "AlertMemoryClearing" $Shape_Events_AlertMem
 Test-ExactShape "MobTracker.Events" "AutoTrack" $Shape_Events_AutoTrack "hands EventLines.AutoTrackOutcome the generation now and at the alert, the creature tracked, whether it is the alerted one, AutoTrack and the dungeon side Auto-track's test read (its second parameter)" $Handlers_Events_AutoTrack
 Test-ExactShape "MobTracker.Events" "NotAlertingEach" $Shape_Events_NotAlertingEach "each watched creature without its alert, not told before, once (ToldNotAlerting), with the first reason EventLines.TurnedAway names - the dungeon side never asked - each in its own catch" $Handlers_Events_NotAlertingEach
 Test-ExactShape "MobTracker.Events" "EmptyLookEach" $Shape_Events_EmptyLookEach "counts each watched creature by EventLines.TurnedAway's answer, each in its own catch, and writes the line only when it differs from the last look's" $Handlers_Events_EmptyLookEach
+# The list's opened line and the Alerts: row's in-effect line (0.9.0) name the whole row - ModConfig.ListStars as it is,
+# and the row LogObserver hands over - so a change of the counts alone is named too.
+Test-ExactShape "MobTracker.Events" "ListOpened" @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'ldarg.0', 'ldsfld ModConfig::ListStars', 'call StarSets::Label',
+    'call EventLines::ListOpened', 'call ModLog::Event', 'leave ->15', 'stloc V0', 'ldstr Open', 'ldloc V0', 'call Events::Failed', 'leave ->15',
+    'ret') "the view and the List: row's words, the whole row as it is (categories and counts), inside its catch" @('Catch System.Exception 4..10 10..15')
+Test-ExactShape "MobTracker.Events" "AlertStars" @('ldsfld ModLog::Verbose', 'brtrue ->3', 'ret', 'nop', 'ldarg.0', 'call StarSets::Label', 'call EventLines::AlertStars',
+    'call ModLog::Event', 'leave ->14', 'stloc V0', 'ldstr AlertStars', 'ldloc V0', 'call Events::Failed', 'leave ->14', 'ret') "the words of the row it is handed, whole, inside its catch" @('Catch System.Exception 4..9 9..14')
 Test-ExactShape "MobTracker.Events" "ListClosed" $Shape_Events_ListClosed "a cause no caller named is EventLines.ClosedUnseen's, from the inventory and the local player" $Handlers_Events_ListClosed
 Test-ExactShape "MobTracker.Events" "ListKeyCheck" $Shape_Events_ListKeyCheck "says nothing while the list may toggle, and nothing unless ListKey was pressed (Hotkeys.Pressed), then the reasons HandleKeys reads" $Handlers_Events_ListKeyCheck
 Test-ExactShape "MobTracker.Events" "SettingChanged" $Shape_Events_SettingChanged "the Logging switches as no Setting line (VerboseLog turned on: the settings and the once-only lines afresh); every other change through the settler, which merges a burst" $Handlers_Events_SettingChanged
@@ -3045,6 +3412,92 @@ $Handlers_LogFile_Broke = @('Catch System.Exception 0..10 10..12')
 $Shape_LogFile_CloseQuietly = @('ldarg.0', 'callvirt Stream::Dispose', 'leave ->5', 'pop', 'leave ->5', 'ret')
 $Handlers_LogFile_CloseQuietly = @('Catch System.Exception 0..3 3..5')
 Test-ExactShape "MobTracker.EntityListWindow" "Close" $Shape_EntityListWindow_Close "drops a waiting click first, and writes the close line only past its IsOpen test - at a real close, not on every frame with no local player"
+# The star-count fields (0.9.0), whose verbose line's guard sits in the caller too. SyncCounts: each field with its own
+# entry and row name - the List: field's answer dropped, the Alerts: field's true answer (a keystroke that wrote
+# nothing) restarting that row's wait through ModConfig.AlertRowChanged. ApplyCounts: what CountsField.Sync hands back
+# is written to the entry as it is; else the line only when typing turned the field unreadable (TurnedUnreadable, once
+# per turn - not Unreadable, which would say it every frame while the field is red), and the answer is TypedNotWritten.
+# Open: each field shows its own entry as it is now, so text left unreadable at a close is gone.
+Test-ExactShape "MobTracker.EntityListWindow" "SyncCounts" @('ldarg.0', 'ldfld EntityListWindow::_listCounts', 'ldsfld ModConfig::ListCountsText', 'ldstr List:',
+    'call EntityListWindow::ApplyCounts', 'pop', 'ldarg.0', 'ldfld EntityListWindow::_alertCounts', 'ldsfld ModConfig::AlertCountsText',
+    'ldstr Alerts:', 'call EntityListWindow::ApplyCounts', 'brfalse ->13', 'call ModConfig::AlertRowChanged', 'ret') "the List: field with ListCountsText, its answer dropped; the Alerts: field with AlertCountsText, a true answer restarting the Alerts: wait"
+Test-ExactShape "MobTracker.EntityListWindow" "ApplyCounts" @('ldarg.0', 'ldarg.1', 'callvirt ConfigEntry`1::get_Value', 'callvirt CountsField::Sync', 'stloc V0',
+    'ldloc V0', 'brfalse ->12', 'ldarg.1', 'ldloc V0', 'callvirt ConfigEntry`1::set_Value', 'ldc.i4.0', 'ret', 'ldarg.0',
+    'callvirt CountsField::get_TurnedUnreadable', 'brfalse ->19', 'ldarg.2', 'ldarg.0', 'callvirt CountsField::get_Text',
+    'call Events::CountsUnreadable', 'ldarg.0', 'callvirt CountsField::get_TypedNotWritten', 'ret') "writes what the field's Sync hands back to its own entry; else says once that typing turned it unreadable, and answers TypedNotWritten"
+Test-ExactShape "MobTracker.EntityListWindow" "Open" @('call EntityListWindow::get_IsOpen', 'brfalse ->3', 'ret', 'ldc.i4.1', 'call EntityListWindow::set_IsOpen',
+    'ldarg.0', 'ldc.i4.1', 'stfld EntityListWindow::_focusSearch', 'ldarg.0', 'ldc.i4.1', 'stfld EntityListWindow::_refreshNow', 'ldarg.0', 'ldnull',
+    'stfld EntityListWindow::_closeCause', 'ldarg.0', 'ldfld EntityListWindow::_listCounts', 'ldsfld ModConfig::ListCountsText',
+    'callvirt ConfigEntry`1::get_Value', 'callvirt CountsField::Show', 'ldarg.0', 'ldfld EntityListWindow::_alertCounts',
+    'ldsfld ModConfig::AlertCountsText', 'callvirt ConfigEntry`1::get_Value', 'callvirt CountsField::Show', 'ldarg.0',
+    'ldfld EntityListWindow::_allTypes', 'call Events::ListOpened', 'ret') "opens once, the search box focused and the rows refreshed at once, each count field showing its own entry as it is now, then the opened line"
+# The count field's helpers (0.9.0), whose arguments each row's call in DrawWindow is held to above: DrawCounts draws the
+# label, then the field, named for its row (the focus move asks for that name) and with no length cap, and hands what
+# was typed to the field only when it takes typing (the List: row's, in the all-types view, takes nothing); CountsLabel
+# says "Invalid:" exactly while the field's text cannot be read, else "Exactly:"; CountsStyle is the skin's text field,
+# and the same with red text only while the field's text cannot be read.
+Test-ExactShape "MobTracker.EntityListWindow" "DrawCounts" @('ldarg.0', 'call EntityListWindow::CountsLabel', 'ldsfld EntityListWindow::CountsLabelWidth',
+    'call GUILayout::Label', 'ldarg.2', 'call GUI::SetNextControlName', 'ldarg.0', 'callvirt CountsField::get_Text', 'ldarg.0',
+    'call EntityListWindow::CountsStyle', 'ldsfld EntityListWindow::CountsFieldWidth', 'call GUILayout::TextField', 'stloc V0', 'ldarg.1',
+    'brfalse ->18', 'ldarg.0', 'ldloc V0', 'callvirt CountsField::Typed', 'ret') "the label, then the field named for its row, with no length cap, and what was typed handed to the field only when it takes typing"
+Test-ExactShape "MobTracker.EntityListWindow" "CountsLabel" @('ldarg.0', 'callvirt CountsField::get_Unreadable', 'brtrue ->5', 'ldstr Exactly:', 'ret', 'ldstr Invalid:',
+    'ret') "Invalid: exactly while the field's text cannot be read, else Exactly:"
+Test-ExactShape "MobTracker.EntityListWindow" "CountsStyle" @('ldarg.0', 'callvirt CountsField::get_Unreadable', 'brtrue ->6', 'call GUI::get_skin',
+    'callvirt GUISkin::get_textField', 'ret', 'ldsfld EntityListWindow::_unreadable', 'brtrue ->33', 'call GUI::get_skin',
+    'callvirt GUISkin::get_textField', 'newobj GUIStyle::.ctor', 'stsfld EntityListWindow::_unreadable', 'ldloca V_0', 'ldc.r4 1', 'ldc.r4 0.45',
+    'ldc.r4 0.4', 'call Color::.ctor', 'ldsfld EntityListWindow::_unreadable', 'callvirt GUIStyle::get_normal', 'ldloc V0',
+    'callvirt GUIStyleState::set_textColor', 'ldsfld EntityListWindow::_unreadable', 'callvirt GUIStyle::get_hover', 'ldloc V0',
+    'callvirt GUIStyleState::set_textColor', 'ldsfld EntityListWindow::_unreadable', 'callvirt GUIStyle::get_focused', 'ldloc V0',
+    'callvirt GUIStyleState::set_textColor', 'ldsfld EntityListWindow::_unreadable', 'callvirt GUIStyle::get_active', 'ldloc V0',
+    'callvirt GUIStyleState::set_textColor', 'ldsfld EntityListWindow::_unreadable', 'ret') "the skin's text field, and the same with red text only while the field's text cannot be read"
+# Who drives the count fields and the keyboard (0.9.0), by caller: Open shows both fields, CountsField.Sync shows a
+# setting changed elsewhere, ApplyCounts syncs each field (from SyncCounts, once a frame in Update, before the keys),
+# DrawCounts names its field and hands it what was typed, a click on a row's All empties that row's field, and DrawWindow
+# alone names the search box, asks which control has the keyboard and gives the keyboard to the search box. So nothing
+# else, run every frame or at every GUI event, shows, empties, fills or syncs a field, or takes the keyboard from it.
+Test-Table (Get-CallTable '^(CountsField::(Show|Typed|Clear|Sync)|EntityListWindow::(SyncCounts|ApplyCounts|DrawCounts)|GUI::(FocusControl|SetNextControlName|GetNameOfFocusedControl)|GUIUtility::set_keyboardControl)$') @(
+    "CountsField.Sync -> CountsField::Show x1", "EntityListWindow.ApplyCounts -> CountsField::Sync x1", "EntityListWindow.DrawCounts -> CountsField::Typed x1",
+    "EntityListWindow.DrawCounts -> GUI::SetNextControlName x1", "EntityListWindow.DrawWindow -> CountsField::Clear x2",
+    "EntityListWindow.DrawWindow -> EntityListWindow::DrawCounts x2", "EntityListWindow.DrawWindow -> GUI::FocusControl x1",
+    "EntityListWindow.DrawWindow -> GUI::GetNameOfFocusedControl x1", "EntityListWindow.DrawWindow -> GUI::SetNextControlName x1",
+    "EntityListWindow.Open -> CountsField::Show x2", "EntityListWindow.SyncCounts -> EntityListWindow::ApplyCounts x2",
+    "EntityListWindow.Update -> EntityListWindow::SyncCounts x1") "the count fields are shown, filled, emptied, synced and drawn, and the keyboard's control named, asked for and moved, only where they should be" "the calls that drive the count fields and the keyboard"
+# ... and the search box is asked to take the keyboard (_focusSearch = true) only at an opening and by the focus move;
+# every other store of _focusSearch puts it back to false (Close, and the search box's own focus block once done).
+$checks++
+$fsAt = @()
+foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }; $ins = @($m.Body.Instructions); for ($k = 0; $k -lt $ins.Count; $k++) { $o = $ins[$k].Operand
+    if (($ins[$k].OpCode.Name -eq "stfld" -or $ins[$k].OpCode.Name -eq "ldflda") -and $o -is [Mono.Cecil.FieldReference] -and ($o.DeclaringType.Name + "::" + $o.Name) -ceq "EntityListWindow::_focusSearch") {
+        $how = if ($ins[$k].OpCode.Name -eq "stfld" -and $k -ge 1 -and @("ldc.i4.0", "ldc.i4.1") -ccontains $ins[$k - 1].OpCode.Name) { $ins[$k - 1].OpCode.Name } else { $ins[$k].OpCode.Name }
+        $fsAt += ("{0}.{1} {2}" -f $t.Name, $m.Name, $how) } } } }
+$fsGot = @($fsAt | Sort-Object -CaseSensitive) -join ", "
+$fsWant = "EntityListWindow.Close ldc.i4.0, EntityListWindow.DrawWindow ldc.i4.0, EntityListWindow.DrawWindow ldc.i4.1, EntityListWindow.Open ldc.i4.1"
+if ($fsGot -ceq $fsWant) { Ok "EntityListWindow._focusSearch is set true only by Open and DrawWindow's focus move, and false only by Close and the search box's focus block" }
+else { Fail ("EntityListWindow._focusSearch is stored as: {0}; expected {1}" -f $fsGot, $fsWant) }
+# The two count entries are read and written only where a row's counts belong: ModConfig.Bind and its handlers, the
+# session reset, the window's sync and its opening - not from OnGUI, nor anywhere else every frame.
+$checks++
+$ceAt = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
+foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }; foreach ($x in $m.Body.Instructions) { $o = $x.Operand
+    if ($o -is [Mono.Cecil.FieldReference] -and $o.DeclaringType.Name -ceq "ModConfig" -and @("ListCountsText", "AlertCountsText") -ccontains $o.Name) {
+        $k = "{0}.{1} {2} {3}" -f $t.Name, ($m.Name -replace '>b__\d+(_\d+)?$', '>b__N'), $x.OpCode.Name, $o.Name
+        if ($ceAt.ContainsKey($k)) { $ceAt[$k] = $ceAt[$k] + 1 } else { $ceAt[$k] = 1 } } } } }
+$ceGot = @($ceAt.Keys | Sort-Object -CaseSensitive | ForEach-Object { "{0} x{1}" -f $_, $ceAt[$_] }) -join "; "
+$ceWant = @("<>c.<Bind>b__N ldsfld AlertCountsText x1", "<>c.<Bind>b__N ldsfld ListCountsText x1", "EntityListWindow.Open ldsfld AlertCountsText x1",
+    "EntityListWindow.Open ldsfld ListCountsText x1", "EntityListWindow.SyncCounts ldsfld AlertCountsText x1", "EntityListWindow.SyncCounts ldsfld ListCountsText x1",
+    "ModConfig.Bind ldsfld AlertCountsText x2", "ModConfig.Bind ldsfld ListCountsText x2", "ModConfig.Bind stsfld AlertCountsText x1",
+    "ModConfig.Bind stsfld ListCountsText x1", "ModConfig.ResetSession ldsfld AlertCountsText x3", "ModConfig.ResetSession ldsfld ListCountsText x3") -join "; "
+if ($ceGot -ceq $ceWant) { Ok "ModConfig.ListCountsText and AlertCountsText are used only by ModConfig.Bind and their handlers, the session reset, and the window's SyncCounts and Open" }
+else { Fail ("the count entries are used by: {0}; expected {1}" -f $ceGot, $ceWant) }
+# The list's row is copied (above) after the refresh test lets the refresh through and before the rows are rebuilt:
+# before the test, PlayerChanged would never see a change of the row; after the rebuild, the rows would be the row's
+# before the change - either way, with the pointer on the window, the list would stay as it was until the pointer leaves.
+$checks++
+$ush = @(Get-Shape (Get-Method "MobTracker.EntityListWindow" "Update"))
+$usr = [array]::IndexOf($ush, "call Rules::ShouldRefresh"); $ust = @(for ($k = 0; $k -lt $ush.Count; $k++) { if ($ush[$k] -ceq "stfld EntityListWindow::_appliedListStars") { $k } })
+$urf = @(for ($k = 0; $k -lt $ush.Count; $k++) { if ($ush[$k] -ceq "call EntityListWindow::Refresh" -or $ush[$k] -ceq "call EntityListWindow::RefreshTypes") { $k } })
+if ($usr -ge 0 -and $ust.Count -eq 1 -and $ust[0] -gt $usr -and $urf.Count -eq 2 -and $ust[0] -lt $urf[0]) { Ok "EntityListWindow.Update copies the list's row after the refresh test lets the refresh through and before the rows are rebuilt" }
+else { Fail ("EntityListWindow.Update copies the list's row at {0}, the refresh test at {1}, the rows rebuilt at {2}: not between them" -f ($ust -join ","), $usr, ($urf -join ",")) }
 Test-ExactShape "MobTracker.LogFile" "Shut" $Shape_LogFile_Shut "lets the writer go, then disposes it inside a catch - Open's catch (in Awake), Broke and Stop reach it" $Handlers_LogFile_Shut
 Test-ExactShape "MobTracker.LogFile" "Stop" $Shape_LogFile_Stop "takes the listener off and writes the closing line inside a catch, then shuts the file" $Handlers_LogFile_Stop
 Test-ExactShape "MobTracker.LogFile" "ReportNotice" $Shape_LogFile_ReportNotice "the stop notice is cleared before its warning: said once"
@@ -3130,7 +3583,8 @@ foreach ($ar in $plug.AssemblyReferences) {
 }
 
 # 11. The plugin id (after 0.8.0, DoomMachine.MobTracker): what else must follow the BepInPlugin GUID. Each check fails
-# on a defect tools\mutants.ps1 plants: P11 (the Harmony id), PE1-PE6 (the cfg lines), P12 and P21 (a ConfigFile).
+# on a defect tools\mutants.ps1 plants: P11 (the Harmony id), PE1-PE6 (the cfg lines), P12 and P21 (a ConfigFile); since
+# 0.9.0 also P16 and P40 (the old id named elsewhere), PE7 and PE8 (the copy's lines) and P41 (the assembly's name).
 Write-Output "== the plugin id's other uses =="
 # The Harmony id is the plugin's id: one Harmony instance, made in Awake from the BepInPlugin GUID's own string.
 $checks++
@@ -3140,7 +3594,7 @@ foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasB
         $arg = if ($k -gt 0 -and $ins[$k - 1].OpCode.Name -eq "ldstr") { "'" + $ins[$k - 1].Operand + "'" } else { "not a literal" }
         $hx += ("{0}.{1} {2}" -f $t.Name, $m.Name, $arg) } } } }
 $guid = if ($bep) { $bep[0] } else { "?" }
-if (($hx -join "; ") -ceq ("MobTrackerPlugin.Awake '" + $guid + "'")) { Ok ("one Harmony instance, made in Awake with the plugin's id {0}" -f $guid) }
+if (($hx -join "; ") -ceq ("MobTrackerPlugin.Awake '" + $guid + "'")) { Ok ("one new Harmony, in Awake, given the plugin's id {0}" -f $guid) }
 else { Fail ("the Harmony ids are [{0}]; expected one, made in MobTrackerPlugin.Awake, equal to the BepInPlugin GUID '{1}'" -f ($hx -join "; "), $guid) }
 # The two cfg lines name the file BepInEx writes: <GUID>.cfg (BaseUnityPlugin's constructor: Paths.ConfigPath, GUID + ".cfg").
 $checks++
@@ -3154,12 +3608,60 @@ foreach ($mn in @("CfgNotSaved", "CfgSavedAgain")) {
 }
 if ($why.Count -eq 0) { Ok ("EventLines.CfgNotSaved and CfgSavedAgain name {0}, the file BepInEx makes from the GUID" -f $cfgName) }
 else { Fail ("the cfg lines: " + ($why -join "; ")) }
-# The plugin makes no ConfigFile of its own: BepInEx's Config is the only one it reads or writes.
+# The lines about the settings file of 0.8.0 and earlier (0.9.0) name both files - <GUID>.cfg and
+# com.mobtracker.plugin.cfg - and every name of a MobTracker cfg in them is one of those two exactly, in its case; the
+# stay-off warning names the old id.
+$checks++
+$why = @()
+foreach ($mn in @("SettingsCopied", "SettingsNotCopied", "SettingsNotAllRead", "OlderCopyLoaded")) {
+    $em = Get-Method "MobTracker.EventLines" $mn
+    $text = if ($em) { @($em.Body.Instructions | Where-Object { $_.OpCode.Name -eq "ldstr" } | ForEach-Object { "$($_.Operand)" }) -join " | " } else { "" }
+    if (-not $em) { $why += "EventLines.$mn not found"; continue }
+    if ($mn -eq "OlderCopyLoaded") {
+        if (-not $text.Contains("plugin id com.mobtracker.plugin")) { $why += "EventLines.OlderCopyLoaded does not name the old id com.mobtracker.plugin" }
+    }
+    else {
+        $names = @([regex]::Matches($text, '(?i)[\w.]*mobtracker[\w.]*\.cfg') | ForEach-Object { $_.Value })
+        $odd = @($names | Where-Object { $_ -cne $cfgName -and $_ -cne "com.mobtracker.plugin.cfg" })
+        if ($odd.Count -gt 0) { $why += ("EventLines.{0} names {1}" -f $mn, ($odd -join ", ")) }
+        if ($names -cnotcontains $cfgName) { $why += ("EventLines.{0} does not name {1}" -f $mn, $cfgName) }
+        if ($names -cnotcontains "com.mobtracker.plugin.cfg") { $why += ("EventLines.{0} does not name com.mobtracker.plugin.cfg" -f $mn) }
+    }
+}
+if ($why.Count -eq 0) { Ok ("EventLines.SettingsCopied, SettingsNotCopied and SettingsNotAllRead name {0} and com.mobtracker.plugin.cfg; OlderCopyLoaded names the old id" -f $cfgName) }
+else { Fail ("the settings-file lines: " + ($why -join "; ")) }
+# The old id (0.9.0): no string literal or constant holding com.mobtracker (in any case) outside OldSettings.OldId,
+# OldSettings.Copy and OlderVersion, and the four lines that name it - so nothing else reads, writes or keys on the
+# settings file or the plugin of 0.8.0 and earlier. (A text put together at run time is not seen by this scan.)
+$checks++
+$oldUse = @()
+$oldOk = @("OldSettings.Copy", "OldSettings.OlderVersion", "EventLines.SettingsCopied", "EventLines.SettingsNotCopied", "EventLines.SettingsNotAllRead", "EventLines.OlderCopyLoaded")
+foreach ($t in $plug.GetTypes()) {
+    foreach ($f in $t.Fields) {
+        if ($f.HasConstant -and "$($f.Constant)" -match '(?i)com\.mobtracker' -and -not ($t.Name -ceq "OldSettings" -and $f.Name -ceq "OldId")) { $oldUse += ("the constant {0}.{1}" -f $t.Name, $f.Name) }
+    }
+    foreach ($m in $t.Methods) {
+        if (-not $m.HasBody) { continue }
+        foreach ($x in $m.Body.Instructions) {
+            if ($x.OpCode.Name -eq "ldstr" -and "$($x.Operand)" -match '(?i)com\.mobtracker' -and $oldOk -cnotcontains ("{0}.{1}" -f $t.Name, $m.Name)) { $oldUse += ("{0}.{1}" -f $t.Name, $m.Name) }
+        }
+    }
+}
+if ($oldUse.Count -eq 0) { Ok "the old id com.mobtracker.plugin is named only by OldSettings.OldId, OldSettings.Copy and OlderVersion, and the four lines that say what they did" }
+else { Fail ("the old id is named elsewhere: " + ($oldUse -join "; ")) }
+# The assembly is named after the plugin id (0.9.0): Unity tells two plugins' MonoBehaviours apart only by assembly name,
+# namespace and class name, so with the name "MobTracker" of 0.8.0 and earlier an older copy's classes would be made in
+# this one's place, and this one's code would never run. (The file keeps its name: MobTracker.csproj's KeepFileName.)
+$checks++
+$asmName = "$($plug.Assembly.Name.Name)"
+if ($asmName -ceq $guid) { Ok ("the assembly is named {0}, after the plugin id" -f $asmName) }
+else { Fail ("the assembly is named '{0}', not after the plugin id '{1}'" -f $asmName, $guid) }
+# The plugin makes no ConfigFile of its own: no `new ConfigFile(...)` anywhere in it.
 $checks++
 $cf = @()
 foreach ($t in $plug.GetTypes()) { foreach ($m in $t.Methods) { if (-not $m.HasBody) { continue }; foreach ($x in $m.Body.Instructions) { $o = $x.Operand
     if ($x.OpCode.Name -eq "newobj" -and $o -is [Mono.Cecil.MethodReference] -and $o.DeclaringType.FullName -ceq "BepInEx.Configuration.ConfigFile") { $cf += ("{0}.{1}" -f $t.Name, $m.Name) } } } }
-if ($cf.Count -eq 0) { Ok "no ConfigFile but BepInEx's own" } else { Fail ("a ConfigFile of its own, made in: " + ($cf -join ", ")) }
+if ($cf.Count -eq 0) { Ok "no new ConfigFile in the plugin" } else { Fail ("a ConfigFile of its own, made in: " + ($cf -join ", ")) }
 Close-Cecil
 
 Write-Output ""

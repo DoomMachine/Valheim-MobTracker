@@ -17,13 +17,13 @@ namespace MobTracker
         private bool _failureLogged;
 
         /// <summary>
-        /// The Alerts: row's set as the alerts, Auto-track and Always track nearest watched use it: under the shipped
-        /// AlertsChange.Settle, ModConfig.AlertStars once its cfg text has stayed the same for
+        /// The Alerts: row - its categories and its counts - as the alerts, Auto-track and Always track nearest watched use
+        /// it: under the shipped AlertsChange.Settle, ModConfig.AlertStars once its cfg texts have stayed the same for
         /// StarSetSettler.SettleSeconds (the first value at once; ModConfig.AlertStarsRevision counts the writes), so
-        /// the states the row passes through while it is clicked, and a value half-typed in ConfigurationManager, never
-        /// alert.
+        /// the states the row passes through while it is clicked or typed in, and a value half-typed in
+        /// ConfigurationManager, never alert.
         /// </summary>
-        internal static StarSet EffectiveAlertStars { get; private set; }
+        internal static StarRule EffectiveAlertStars { get; private set; }
 
         /// <summary>
         /// A game session ended or began (GameSession): the Alerts: row as it then stands is taken at once, not 1.5 s
