@@ -13,3 +13,6 @@
 - **Reason:** no reason given.
 - **Status:**
   - 2026-11-02: accepted, for 0.9.0 (D-005).
+  - 2026-11-03: completed. After every check passed, `main` and the tag `v0.9.0` were pushed and the release was
+    published on GitHub (MobTracker 0.9.0, its zip's SHA-256 b194d991...e3ad); then the zip downloaded back from the
+    release page was installed, with the game closed.

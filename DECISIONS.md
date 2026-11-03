@@ -11,10 +11,8 @@ status, is in [`decisions/INDEX.md`](decisions/INDEX.md). The log names roles, n
   [entry](decisions/D-003-star-count-both-rows.md)
 - D-004 (2026-11-02) FW-11: counts from 0 to 100; anything else is not applied and shown as invalid -
   [entry](decisions/D-004-star-count-0-to-100.md)
-- D-006 (2026-11-02) OI-7: at the first start, move the old settings file's settings over; warn once about an older
-  copy - [entry](decisions/D-006-old-settings-file-move-and-warn.md)
-- D-007 (2026-11-02) After every check passes: release on GitHub, then install the downloaded release -
-  [entry](decisions/D-007-release-and-deploy.md)
+- D-006 (2026-11-02) OI-7: copy the old settings file's settings over and warn about an older copy (refined by D-011
+  and D-015) - [entry](decisions/D-006-old-settings-file-move-and-warn.md)
 - D-008 (2026-11-02) This decision log is public and names roles, not people -
   [entry](decisions/D-008-decision-log-public-no-names.md)
 - D-009 (2026-10-12) Plugin id `DoomMachine.MobTracker`, as a text fix with no new version (done on `main`; released in

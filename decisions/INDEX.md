@@ -20,8 +20,8 @@ The log was started on 2026-11-02. Decisions taken before it (behaviour choices 
   star-count field.
 - [D-006](D-006-old-settings-file-move-and-warn.md) (2026-11-02; built in 0.9.0, in force): OI-7, move the old settings
   over and warn once about an older copy.
-- [D-007](D-007-release-and-deploy.md) (2026-11-02; accepted): after every check, release on GitHub, then install the
-  release.
+- [D-007](D-007-release-and-deploy.md) (2026-11-02; completed with 0.9.0): after every check, release on GitHub, then
+  install the release.
 - [D-008](D-008-decision-log-public-no-names.md) (2026-11-02; in force): this log is public and names roles, not people.
 - [D-009](D-009-plugin-id-as-a-text-fix.md) (2026-10-12; completed in 0.9.0): plugin id `DoomMachine.MobTracker`, a text
   fix with no new version.
