@@ -29,3 +29,5 @@ status, is in [`decisions/INDEX.md`](decisions/INDEX.md). The log names roles, n
   [entry](decisions/D-015-copy-whenever-new-file-missing.md)
 - D-016 (2026-11-03) The 0.9.0 release audit's minor items are worked through now, not left for the next change -
   [entry](decisions/D-016-minor-items-now.md)
+- D-017 (2026-11-03) The minor fixes go to main with no release; the version stays 0.9.0 -
+  [entry](decisions/D-017-minor-fixes-to-main.md)

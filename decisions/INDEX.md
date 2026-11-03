@@ -39,3 +39,5 @@ The log was started on 2026-11-02. Decisions taken before it (behaviour choices 
   copied at every start that finds no new settings file.
 - [D-016](D-016-minor-items-now.md) (2026-11-03; accepted): the 0.9.0 release audit's minor items are worked through
   now.
+- [D-017](D-017-minor-fixes-to-main.md) (2026-11-03; accepted): the minor fixes go to main with no release; the
+  version stays 0.9.0.
